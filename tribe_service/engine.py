@@ -77,18 +77,25 @@ def _load_model() -> Any:
             return _model
         # Real model loading
         try:
-            from tribev2 import TRIBEv2
+            from tribe_service.patch_tribev2_whisperx import patch_tribe_whisperx_runtime
+            patch_tribe_whisperx_runtime()
+            from tribev2.demo_utils import TribeModel
 
             device = TRIBE_DEVICE
             if device == "auto":
                 import torch
-
                 device = "cuda" if torch.cuda.is_available() else "cpu"
             LOGGER.info("Loading TRIBE model %s on %s", TRIBE_MODEL_ID, device)
-            _model = TRIBEv2.from_pretrained(
+            _model = TribeModel.from_pretrained(
                 TRIBE_MODEL_ID,
-                cache_dir=str(TRIBE_CACHE_DIR),
+                cache_folder=str(TRIBE_CACHE_DIR),
                 device=device,
+                config_update={
+                    "data.text_feature.device": device,
+                    "data.audio_feature.device": device,
+                    "data.image_feature.image.device": device,
+                    "data.video_feature.image.device": device,
+                },
             )
             LOGGER.info("TRIBE model loaded successfully")
             return _model
@@ -122,7 +129,9 @@ def score_text(message: str) -> np.ndarray:
     text_path = write_text_asset(message)
     try:
         events = model.get_events_dataframe(text_path=str(text_path))
-        predictions = model.predict(events)
+        result = model.predict(events)
+        # model.predict returns (predictions, segments) tuple for real model
+        predictions = result[0] if isinstance(result, tuple) else result
         return np.asarray(predictions, dtype=np.float32)
     finally:
         try:

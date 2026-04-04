@@ -47,6 +47,10 @@ services:
       HF_HOME: /models/huggingface
       HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
       XDG_CACHE_HOME: /models/.cache
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      TRIBE_TEXT_MODEL: NousResearch/Hermes-3-Llama-3.2-3B
     env_file:
       - .env
     volumes:

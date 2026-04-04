@@ -165,25 +165,68 @@ def _generate_fallback(
     risks = [
         r
         for r in [
-            "Low emotional engagement" if ee < 40 else None,
-            "High cognitive friction" if cf >= 60 else None,
-            "Weak attention capture" if ac < 40 else None,
-            "Low memorability" if mem < 40 else None,
-            "Weak personal relevance" if pr < 40 else None,
+            "Low emotional engagement — pitch may feel flat to this persona" if ee < 40 else None,
+            "High cognitive friction — message may be hard to follow or overly complex" if cf >= 60 else None,
+            "Weak attention capture — opener may not grab this persona's interest" if ac < 40 else None,
+            "Low memorability — key points may not stick after reading" if mem < 40 else None,
+            "Weak personal relevance — pitch may feel generic to this audience" if pr < 40 else None,
+            "Social proof could be stronger — add concrete results or references" if sp < 50 else None,
+            "Personalization gap — consider tailoring language to persona's role/industry" if pr < 55 and sp < 55 else None,
         ]
         if r
-    ][:3] or ["No major risks detected from neural signals"]
+    ][:3] or ["Neural signals look balanced — consider A/B testing variations"]
 
+    # Extract first sentence for rewrite suggestion
+    first_sentence = message.split(".")[0].strip() if "." in message else message[:60]
+    word_count = len(message.split())
     snippet = message[:50] + "..." if len(message) > 50 else message
+
+    # Build smarter rewrite suggestions
+    rewrite_suggestions = []
+    if ac < 70:
+        rewrite_suggestions.append({
+            "title": "Strengthen the opening hook",
+            "before": first_sentence[:80],
+            "after": f"Lead with a specific pain point or surprising stat relevant to your persona",
+            "why": f"Attention capture scored {ac:.0f}/100 — a stronger hook could improve first-impression engagement.",
+        })
+    if pr < 60:
+        rewrite_suggestions.append({
+            "title": "Increase persona specificity",
+            "before": snippet,
+            "after": "Reference their specific role, company stage, or recent achievement",
+            "why": f"Personal relevance scored {pr:.0f}/100 — more targeted language would resonate better.",
+        })
+    if mem < 60:
+        rewrite_suggestions.append({
+            "title": "Add a memorable anchor",
+            "before": "General value proposition",
+            "after": "Include a concrete number, analogy, or visual comparison",
+            "why": f"Memorability scored {mem:.0f}/100 — a vivid anchor helps the pitch stick.",
+        })
+    if not rewrite_suggestions:
+        rewrite_suggestions.append({
+            "title": "Test a variation",
+            "before": first_sentence[:80],
+            "after": "Try rephrasing with more urgency or a different angle",
+            "why": "Scores are solid — A/B testing could reveal further optimization opportunities.",
+        })
+
+    # Build persona summary (don't just echo input)
+    persona_lower = persona.lower()
+    role_hint = "decision-maker" if any(w in persona_lower for w in ["cto", "ceo", "vp", "director", "head", "founder"]) else "stakeholder"
+    tech_hint = "technical" if any(w in persona_lower for w in ["engineer", "developer", "technical", "tech"]) else "business-oriented"
 
     return {
         "persuasion_score": persuasion_score,
         "verdict": verdict,
         "narrative": (
             f"Neural analysis indicates {strength_word} engagement patterns "
-            f"for the described persona. The pitch {attention_note}."
+            f"for the described persona. The pitch {attention_note}. "
+            f"{'Emotional resonance is a key strength.' if ee >= 60 else 'Consider adding more emotional hooks.'} "
+            f"Message clarity {'is high' if cf <= 40 else 'could be improved'} ({word_count} words)."
         ),
-        "persona_summary": f"Target persona: {persona}",
+        "persona_summary": f"{role_hint.title()}, {tech_hint} profile — {persona[:120]}",
         "breakdown": [
             {
                 "key": "emotional_resonance",
@@ -225,16 +268,7 @@ def _generate_fallback(
         ],
         "strengths": strengths,
         "risks": risks,
-        "rewrite_suggestions": [
-            {
-                "title": "Enhance opener",
-                "before": snippet,
-                "after": "[Consider a more attention-grabbing opener]",
-                "why": (
-                    "Neural attention capture signals suggest room for improvement."
-                ),
-            }
-        ],
+        "rewrite_suggestions": rewrite_suggestions,
     }
 
 

@@ -33,14 +33,22 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
         <div className="panel p-6">
           <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-3">Neural Signals</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {report.neural_signals.map((s) => (
-              <div key={s.key} className="rounded-lg border border-[var(--color-line)] p-3 text-center">
-                <p className="text-2xl font-bold" style={{ color: s.score >= 60 ? 'var(--color-success)' : s.score < 40 ? 'var(--color-danger)' : 'var(--color-warning)' }}>
-                  {Math.round(s.score)}
-                </p>
-                <p className="mt-1 text-xs text-[var(--color-muted)]">{s.label}</p>
-              </div>
-            ))}
+            {report.neural_signals.map((s) => {
+              // Cognitive friction is inverted: low = good (green), high = bad (red)
+              const isInverted = s.key === "cognitive_friction";
+              const displayScore = Math.round(s.score);
+              const effectiveScore = isInverted ? 100 - s.score : s.score;
+              const color = effectiveScore >= 60 ? 'var(--color-success)' : effectiveScore < 40 ? 'var(--color-danger)' : 'var(--color-warning)';
+              return (
+                <div key={s.key} className="rounded-lg border border-[var(--color-line)] p-3 text-center">
+                  <p className="text-2xl font-bold" style={{ color }}>
+                    {displayScore}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">{s.label}</p>
+                  {isInverted && <p className="text-[9px] text-[var(--color-faint)]">low = clear</p>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

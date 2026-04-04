@@ -29,6 +29,12 @@ export default function ScoreForm({ onScore, loading }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="panel p-6 space-y-5">
+      <div className="space-y-1 pb-2 border-b border-[var(--color-line)]">
+        <h2 className="text-base font-bold text-[var(--color-ink)]">Pitch Analyzer</h2>
+        <p className="text-xs text-[var(--color-muted)]">
+          Describe your target audience and paste your pitch. TRIBE neural analysis + AI interpretation will score your message for persuasion effectiveness.
+        </p>
+      </div>
       <div>
         <label className="block text-sm font-semibold text-[var(--color-ink)] mb-1.5">
           Who are you pitching to?

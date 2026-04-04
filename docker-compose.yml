@@ -47,10 +47,8 @@ services:
       HF_HOME: /models/huggingface
       HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
       XDG_CACHE_HOME: /models/.cache
-      TRANSFORMERS_OFFLINE: "1"
     env_file:
       - .env
-      - ../../landing/.env
     volumes:
       - /home/dkmserver/Desktop/Machinity/aytug/isthisviral/data/tribe_cache:/models
     deploy:

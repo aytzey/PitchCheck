@@ -47,6 +47,7 @@ services:
       HF_HOME: /models/huggingface
     env_file:
       - .env
+      - ../../landing/.env
     volumes:
       - /home/dkmserver/Desktop/Machinity/aytug/isthisviral/data/tribe_cache:/models
     deploy:

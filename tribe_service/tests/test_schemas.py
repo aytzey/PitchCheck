@@ -1,0 +1,71 @@
+import pytest
+from tribe_service.schemas import (
+    PitchScoreRequest,
+    PitchScoreReport,
+    BreakdownSection,
+    NeuralSignal,
+    RewriteSuggestion,
+    PLATFORM_VALUES,
+)
+
+def test_valid_request():
+    req = PitchScoreRequest(message="Hello world, this is a pitch", persona="CTO at startup")
+    assert req.platform == "general"
+
+def test_request_short_message():
+    with pytest.raises(Exception):
+        PitchScoreRequest(message="Hi", persona="CTO at startup")
+
+def test_request_short_persona():
+    with pytest.raises(Exception):
+        PitchScoreRequest(message="This is a valid pitch message", persona="CTO")
+
+def test_request_invalid_platform_defaults():
+    req = PitchScoreRequest(message="Valid message here", persona="Valid persona", platform="invalid")
+    assert req.platform == "general"
+
+def test_valid_report():
+    report = PitchScoreReport(
+        persuasion_score=75.0,
+        verdict="Strong pitch for technical audience",
+        narrative="The pitch effectively addresses pain points.",
+        breakdown=[
+            BreakdownSection(key="clarity", label="Clarity", score=80.0, explanation="Clear messaging")
+        ],
+        neural_signals=[
+            NeuralSignal(key="attention_capture", label="Attention Capture", score=70.0, direction="up")
+        ],
+        strengths=["Clear value proposition"],
+        risks=["Missing social proof"],
+        rewrite_suggestions=[
+            RewriteSuggestion(title="Opener", before="Hi", after="Hi [Name]", why="Personalization")
+        ],
+        persona_summary="Technical CTO at early-stage startup",
+    )
+    assert report.persuasion_score == 75.0
+    assert len(report.breakdown) == 1
+
+def test_report_score_out_of_range():
+    with pytest.raises(Exception):
+        PitchScoreReport(
+            persuasion_score=150.0,
+            verdict="x", narrative="x",
+            breakdown=[], neural_signals=[],
+            strengths=[], risks=[], rewrite_suggestions=[],
+            persona_summary="x",
+        )
+
+def test_report_roundtrip():
+    report = PitchScoreReport(
+        persuasion_score=50.0,
+        verdict="Average", narrative="Needs work.",
+        breakdown=[BreakdownSection(key="clarity", label="Clarity", score=50.0, explanation="OK")],
+        neural_signals=[NeuralSignal(key="memorability", label="Memorability", score=60.0)],
+        strengths=["Good opener"], risks=["Weak close"],
+        rewrite_suggestions=[RewriteSuggestion(title="Close", before="Thanks", after="Let's schedule a call", why="CTA")],
+        persona_summary="Marketing manager",
+    )
+    data = report.model_dump()
+    restored = PitchScoreReport(**data)
+    assert restored.persuasion_score == 50.0
+    assert restored.breakdown[0].key == "clarity"

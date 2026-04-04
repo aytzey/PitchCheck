@@ -48,7 +48,7 @@ services:
     env_file:
       - .env
     volumes:
-      - pitchscore_models:/models
+      - /home/dkmserver/Desktop/Machinity/aytug/isthisviral/data/tribe_cache:/models
     deploy:
       resources:
         reservations:
@@ -75,5 +75,3 @@ networks:
     name: pitchscore_internal
     driver: bridge
 
-volumes:
-  pitchscore_models:

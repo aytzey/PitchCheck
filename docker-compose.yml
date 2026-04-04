@@ -1,0 +1,79 @@
+name: pitchscore
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pitchscore_web
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TRIBE_SERVICE_URL: http://tribe-service:8090
+    depends_on:
+      tribe-service:
+        condition: service_healthy
+    expose:
+      - "3000"
+    restart: unless-stopped
+    networks:
+      - pitchscore_net
+      - machinity_proxy_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=machinity_proxy_net
+      - traefik.http.routers.pitchscore.rule=Host(`pitch.machinity.ai`) || Host(`www.pitch.machinity.ai`)
+      - traefik.http.routers.pitchscore.entrypoints=websecure
+      - traefik.http.routers.pitchscore.tls=true
+      - traefik.http.routers.pitchscore.tls.certresolver=le
+      - traefik.http.services.pitchscore.loadbalancer.server.port=3000
+      - traefik.http.routers.pitchscore-http.rule=Host(`pitch.machinity.ai`) || Host(`www.pitch.machinity.ai`)
+      - traefik.http.routers.pitchscore-http.entrypoints=web
+      - traefik.http.routers.pitchscore-http.middlewares=pitchscore-redirect
+      - traefik.http.middlewares.pitchscore-redirect.redirectscheme.scheme=https
+
+  tribe-service:
+    build:
+      context: .
+      dockerfile: tribe_service/Dockerfile
+    container_name: pitchscore_tribe
+    environment:
+      TRIBE_MODEL_ID: facebook/tribev2
+      TRIBE_DEVICE: cuda
+      TRIBE_CACHE_DIR: /models
+      TRIBE_ALLOW_MOCK: "0"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      HF_HOME: /models/huggingface
+    env_file:
+      - .env
+    volumes:
+      - pitchscore_models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    expose:
+      - "8090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - pitchscore_net
+
+networks:
+  machinity_proxy_net:
+    external: true
+  pitchscore_net:
+    name: pitchscore_internal
+    driver: bridge
+
+volumes:
+  pitchscore_models:

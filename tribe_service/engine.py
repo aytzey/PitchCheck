@@ -77,8 +77,7 @@ def _load_model() -> Any:
             return _model
         # Real model loading
         try:
-            from tribe_service.patch_tribev2_whisperx import patch_tribe_whisperx_runtime
-            patch_tribe_whisperx_runtime()
+            # Build-time patch already applied via Dockerfile RUN
             from tribev2.demo_utils import TribeModel
 
             device = TRIBE_DEVICE

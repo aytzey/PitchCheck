@@ -16,6 +16,7 @@ import numpy as np
 TRIBE_MODEL_ID = os.getenv("TRIBE_MODEL_ID", "facebook/tribev2")
 TRIBE_DEVICE = os.getenv("TRIBE_DEVICE", "auto")
 TRIBE_CACHE_DIR = Path(os.getenv("TRIBE_CACHE_DIR", "/models")).resolve()
+TRIBE_TEXT_MODEL = os.getenv("TRIBE_TEXT_MODEL", "NousResearch/Hermes-3-Llama-3.2-3B")
 TRIBE_ALLOW_MOCK = os.getenv("TRIBE_ALLOW_MOCK", "0") == "1"
 LOGGER = logging.getLogger(__name__)
 
@@ -182,6 +183,7 @@ def _load_model() -> Any:
                 cache_folder=str(TRIBE_CACHE_DIR),
                 device=device,
                 config_update={
+                    "data.text_feature.model_name": TRIBE_TEXT_MODEL,
                     "data.text_feature.device": device,
                     "data.audio_feature.device": device,
                     "data.image_feature.image.device": device,

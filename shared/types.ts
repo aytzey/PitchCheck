@@ -52,8 +52,21 @@ export interface PitchScoreReport {
   risks: string[];                  // 3 risks
   rewrite_suggestions: RewriteSuggestion[]; // 2-3 suggestions
   persona_summary: string;          // LLM's understanding of the persona
+  fmri_output?: FmriOutput | null;  // fMRI summary from TRIBE
   platform: Platform;
   scored_at: string;                // ISO timestamp
+}
+
+// fMRI output from TRIBE neural model
+export interface FmriOutput {
+  segments: number;
+  voxel_count: number;
+  global_mean_abs: number;
+  global_peak_abs: number;
+  temporal_trace: number[];     // per-segment mean activation
+  temporal_peaks: number[];     // per-segment peak activation
+  top_voxel_indices: number[];  // top 6 most-activated voxel indices
+  top_voxel_values: number[];   // their mean activation values
 }
 
 // Type guard

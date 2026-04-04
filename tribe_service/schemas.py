@@ -35,6 +35,17 @@ class RewriteSuggestion(BaseModel):
     after: str
     why: str
 
+class FmriOutput(BaseModel):
+    """fMRI summary from TRIBE — temporal trace and top voxel data."""
+    segments: int
+    voxel_count: int
+    global_mean_abs: float
+    global_peak_abs: float
+    temporal_trace: list[float]     # per-segment mean activation
+    temporal_peaks: list[float]     # per-segment peak activation
+    top_voxel_indices: list[int]    # top 6 most-activated voxel indices
+    top_voxel_values: list[float]   # their mean activation values
+
 class PitchScoreReport(BaseModel):
     persuasion_score: float = Field(..., ge=0, le=100)
     verdict: str
@@ -45,5 +56,6 @@ class PitchScoreReport(BaseModel):
     risks: list[str]
     rewrite_suggestions: list[RewriteSuggestion]
     persona_summary: str
+    fmri_output: FmriOutput | None = None
     platform: str = "general"
     scored_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

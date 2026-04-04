@@ -38,12 +38,19 @@ def band_score(value: float, lo: float, hi: float) -> float:
     return clamp((value - lo) / (hi - lo) * 100.0)
 
 
-def weighted_signal(scores: list[tuple[float, float]]) -> float:
-    """Weighted average of (score, weight) pairs -> 0-100."""
+def weighted_signal(
+    scores: list[tuple[float, float]],
+    floor: float = 8.0,
+    ceiling: float = 92.0,
+) -> float:
+    """Weighted average of (score, weight) pairs → compressed to [floor, ceiling]."""
     total_weight = sum(w for _, w in scores)
     if total_weight < 1e-9:
         return 50.0
-    return clamp(sum(s * w for s, w in scores) / total_weight)
+    raw = sum(s * w for s, w in scores) / total_weight
+    # Compress to avoid extreme scores that erode trust
+    compressed = floor + (ceiling - floor) * (clamp(raw) / 100.0)
+    return clamp(compressed)
 
 
 # ── Mock model for testing ──
@@ -250,50 +257,54 @@ FEATURE_KEYS = [
 
 
 def extract_features(predictions: np.ndarray) -> dict[str, float]:
-    """Extract 10 raw features from TRIBE prediction matrix."""
-    # predictions shape: (segments, voxels) or (time, features)
+    """Extract 10 raw features from TRIBE prediction matrix.
+
+    Aligned with isthisviral's extract_feature_vector: uses quartile splits,
+    ratio-based focus/spatial/arc, and fraction-based sustain/spread.
+    """
     abs_preds = np.abs(predictions)
+    n_segments = abs_preds.shape[0]
+    n_voxels = abs_preds.shape[1] if abs_preds.ndim > 1 else 1
 
     global_mean_abs = float(abs_preds.mean())
     global_peak_abs = float(abs_preds.max())
 
-    # Temporal analysis (along axis 0 = time/segments)
+    # Temporal analysis — quartile splits (not halves)
     temporal_means = abs_preds.mean(axis=1)
-    temporal_std = float(temporal_means.std()) if len(temporal_means) > 1 else 0.0
+    temporal_std = float(temporal_means.std()) if n_segments > 1 else 0.0
 
-    n_segments = len(temporal_means)
-    half = max(1, n_segments // 2)
-    early_mean = float(temporal_means[:half].mean())
-    late_slice = temporal_means[half:]
-    late_mean = float(late_slice.mean()) if len(late_slice) > 0 else early_mean
+    q1 = max(1, n_segments // 4)
+    early_mean = float(temporal_means[:q1].mean())
+    late_slice = temporal_means[-q1:] if q1 < n_segments else temporal_means
+    late_mean = float(late_slice.mean())
 
-    # Max change between consecutive segments
+    # Max consecutive segment change
     if n_segments > 1:
-        deltas = np.abs(np.diff(temporal_means))
-        max_temporal_delta = float(deltas.max())
+        max_temporal_delta = float(np.abs(np.diff(temporal_means)).max())
     else:
         max_temporal_delta = 0.0
 
-    # Spatial analysis (along axis 1 = voxels/features)
+    # Spatial spread: fraction of voxels above mean (isthisviral formula)
     spatial_means = abs_preds.mean(axis=0)
-    spatial_spread = float(spatial_means.std()) if len(spatial_means) > 1 else 0.0
+    spatial_spread = float((spatial_means > spatial_means.mean()).mean()) if n_voxels > 1 else 0.0
 
-    # Focus: how concentrated is activation in top voxels
+    # Focus ratio: top-10% voxel mean / global mean (isthisviral formula)
     sorted_spatial = np.sort(spatial_means)[::-1]
-    top_k = max(1, len(sorted_spatial) // 5)
-    total = float(spatial_means.sum())
-    focus_ratio = safe_ratio(float(sorted_spatial[:top_k].sum()), total, 0.5)
+    top_k = max(1, n_voxels // 10)
+    focus_ratio = safe_ratio(float(sorted_spatial[:top_k].mean()), global_mean_abs, 1.0)
 
-    # Sustain: ratio of segments above median activation
-    median_val = float(np.median(temporal_means))
-    sustain_ratio = safe_ratio(
-        float(np.sum(temporal_means >= median_val)),
-        float(n_segments),
-        0.5,
-    )
+    # Sustain ratio: fraction of segments above mean activation
+    sustain_ratio = float((temporal_means >= temporal_means.mean()).mean()) if n_segments > 1 else 0.5
 
-    # Arc: late vs early ratio (does engagement build?)
-    arc_ratio = safe_ratio(late_mean, early_mean + 1e-9, 1.0)
+    # Arc ratio: (max - min) / mean of temporal trace (isthisviral formula)
+    if n_segments > 1:
+        arc_ratio = safe_ratio(
+            float(temporal_means.max() - temporal_means.min()),
+            float(temporal_means.mean()),
+            0.0,
+        )
+    else:
+        arc_ratio = 0.0
 
     return {
         "global_mean_abs": global_mean_abs,
@@ -306,6 +317,43 @@ def extract_features(predictions: np.ndarray) -> dict[str, float]:
         "focus_ratio": focus_ratio,
         "sustain_ratio": sustain_ratio,
         "arc_ratio": arc_ratio,
+    }
+
+
+# ── fMRI Summary Output ──
+
+def summarize_fmri_output(predictions: np.ndarray) -> dict[str, Any]:
+    """Extract fMRI summary for frontend visualization.
+
+    Returns temporal trace, peaks, and top voxel data — same pattern
+    as isthisviral's summarize_fmri_output.
+    """
+    abs_preds = np.abs(predictions)
+    n_segments = abs_preds.shape[0]
+    n_voxels = abs_preds.shape[1] if abs_preds.ndim > 1 else 1
+
+    # Per-segment mean activation (temporal engagement trace)
+    temporal_trace = abs_preds.mean(axis=1).tolist()
+
+    # Per-segment peak activation
+    temporal_peaks = abs_preds.max(axis=1).tolist()
+
+    # Top 6 most-activated voxels (by mean across all segments)
+    spatial_means = abs_preds.mean(axis=0)
+    top_n = min(6, n_voxels)
+    top_indices = np.argsort(spatial_means)[::-1][:top_n]
+    top_voxel_indices = top_indices.tolist()
+    top_voxel_values = spatial_means[top_indices].tolist()
+
+    return {
+        "segments": n_segments,
+        "voxel_count": n_voxels,
+        "global_mean_abs": float(abs_preds.mean()),
+        "global_peak_abs": float(abs_preds.max()),
+        "temporal_trace": [round(v, 4) for v in temporal_trace],
+        "temporal_peaks": [round(v, 4) for v in temporal_peaks],
+        "top_voxel_indices": top_voxel_indices,
+        "top_voxel_values": [round(v, 4) for v in top_voxel_values],
     }
 
 
@@ -331,60 +379,82 @@ PERSUASION_SIGNAL_LABELS = {
 
 
 def derive_persuasion_signals(raw_features: dict[str, float]) -> dict[str, float]:
-    """Map raw TRIBE features into 6 persuasion-relevant neural signals (0-100)."""
-    gma = raw_features.get("global_mean_abs", 0.0)
-    gpa = raw_features.get("global_peak_abs", 0.0)
-    ts = raw_features.get("temporal_std", 0.0)
-    em = raw_features.get("early_mean", 0.0)
-    lm = raw_features.get("late_mean", 0.0)
-    mtd = raw_features.get("max_temporal_delta", 0.0)
-    ss = raw_features.get("spatial_spread", 0.0)
-    fr = raw_features.get("focus_ratio", 0.5)
-    sr = raw_features.get("sustain_ratio", 0.5)
-    ar = raw_features.get("arc_ratio", 1.0)
+    """Map raw TRIBE features into 6 persuasion-relevant neural signals (0-100).
 
-    # Emotional Engagement: high overall activation + peak intensity
+    Uses ratio-normalized inputs (divided by global_mean_abs) like isthisviral,
+    making scores robust to overall activation magnitude differences.
+    Band ranges tuned to ratio-normalized values from real TRIBE outputs.
+    """
+    gma = max(raw_features.get("global_mean_abs", 0.01), 1e-9)
+
+    # Ratio-normalize all features (isthisviral pattern)
+    peak_r = raw_features.get("global_peak_abs", 0.0) / gma
+    ts_r = raw_features.get("temporal_std", 0.0) / gma
+    early_r = raw_features.get("early_mean", 0.0) / gma
+    late_r = raw_features.get("late_mean", 0.0) / gma
+    delta_r = raw_features.get("max_temporal_delta", 0.0) / gma
+    ss = raw_features.get("spatial_spread", 0.0)       # already a fraction (0-1)
+    fr = raw_features.get("focus_ratio", 1.0)           # already a ratio
+    sr = raw_features.get("sustain_ratio", 0.5)         # already a fraction (0-1)
+    ar = raw_features.get("arc_ratio", 0.0)             # range/mean ratio
+
+    # Emotional Engagement (MPFC activation analogue):
+    # High peak intensity + temporal variation = emotional processing
     emotional_engagement = weighted_signal([
-        (band_score(gma, 0.05, 0.5), 0.4),
-        (band_score(gpa, 0.1, 1.0), 0.3),
-        (band_score(ts, 0.01, 0.2), 0.3),
+        (band_score(peak_r, 5.0, 12.0), 0.35),    # peak/mean ratio
+        (band_score(ts_r, 0.05, 0.5), 0.25),      # temporal variability
+        (band_score(ar, 0.1, 0.8), 0.20),          # engagement arc
+        (band_score(delta_r, 0.1, 1.0), 0.20),     # max shift (emotional moments)
     ])
 
-    # Personal Relevance: sustained attention + spatial focus
+    # Personal Relevance (self-referential processing analogue):
+    # Sustained activation + focused spatial pattern = deep processing
     personal_relevance = weighted_signal([
-        (band_score(sr, 0.3, 0.8), 0.4),
-        (band_score(fr, 0.15, 0.5), 0.3),
-        (band_score(gma, 0.05, 0.4), 0.3),
+        (band_score(sr, 0.4, 0.75), 0.35),         # sustained above-mean segments
+        (band_score(fr, 2.0, 5.0), 0.30),          # top-voxel focus ratio
+        (band_score(late_r, 0.8, 1.3), 0.20),      # late engagement (reflection)
+        (band_score(peak_r, 6.0, 10.0), 0.15),     # peak depth
     ])
 
-    # Social Proof Potential: emotional peaks + temporal dynamics
+    # Social Proof Potential (TPJ/mentalizing analogue):
+    # Strong peaks + temporal dynamics = social-cognitive engagement
     social_proof_potential = weighted_signal([
-        (band_score(gpa, 0.15, 0.8), 0.4),
-        (band_score(mtd, 0.02, 0.3), 0.3),
-        (band_score(ts, 0.02, 0.15), 0.3),
+        (band_score(peak_r, 6.5, 11.0), 0.35),     # sharp peaks
+        (band_score(delta_r, 0.15, 0.8), 0.25),    # transition moments
+        (band_score(ts_r, 0.08, 0.4), 0.20),       # temporal richness
+        (band_score(ss, 0.25, 0.42), 0.20),         # spatial breadth
     ])
 
-    # Memorability: arc (builds over time) + peak + sustain
+    # Memorability (temporal pole / hippocampal analogue):
+    # Engagement arc + sustained + peak = encoding strength
     memorability = weighted_signal([
-        (band_score(ar, 0.8, 1.5), 0.4),
-        (band_score(gpa, 0.1, 0.8), 0.3),
-        (band_score(sr, 0.4, 0.8), 0.3),
+        (band_score(ar, 0.15, 0.65), 0.30),        # dynamic range of trace
+        (band_score(sr, 0.45, 0.75), 0.25),        # sustained activation
+        (band_score(peak_r, 6.0, 10.0), 0.25),     # peak moments
+        (band_score(fr, 2.5, 4.5), 0.20),          # focused encoding
     ])
 
-    # Attention Capture: early activation + peak + spatial spread
+    # Attention Capture (salience network analogue):
+    # Early activation + peak + broad spatial response = attention grab
     attention_capture = weighted_signal([
-        (band_score(em, 0.05, 0.5), 0.4),
-        (band_score(gpa, 0.1, 0.8), 0.3),
-        (band_score(ss, 0.01, 0.15), 0.3),
+        (band_score(early_r, 0.85, 1.25), 0.35),   # early engagement (opener)
+        (band_score(peak_r, 6.0, 11.0), 0.30),     # peak salience
+        (band_score(ss, 0.25, 0.42), 0.20),         # spatial breadth
+        (band_score(delta_r, 0.1, 0.7), 0.15),     # onset surprise
     ])
 
-    # Cognitive Friction: INVERSE — high is BAD. Low spatial spread + low sustain = confusion
-    friction_raw = weighted_signal([
-        (100 - band_score(sr, 0.3, 0.7), 0.4),
-        (100 - band_score(fr, 0.15, 0.45), 0.3),
-        (band_score(ss, 0.08, 0.2), 0.3),
-    ])
-    cognitive_friction = clamp(friction_raw)
+    # Cognitive Friction (dlPFC load analogue):
+    # INVERSE — high friction = bad. Low sustain + low focus + narrow spread = confusion
+    cognitive_friction = weighted_signal(
+        [
+            (100 - band_score(sr, 0.35, 0.7), 0.35),   # low sustain = lost attention
+            (100 - band_score(fr, 1.8, 4.0), 0.30),    # low focus = scattered processing
+            (100 - band_score(ss, 0.22, 0.40), 0.20),   # narrow spread = shallow
+            (band_score(ts_r, 0.3, 0.6), 0.15),        # high temporal noise = confusion
+        ],
+        floor=4.0,
+        ceiling=84.0,  # friction uses tighter ceiling (isthisviral pattern)
+    )
 
     return {
         "emotional_engagement": emotional_engagement,

@@ -18,11 +18,21 @@ OPENROUTER_ENABLED = bool(OPENROUTER_API_KEY and OPENROUTER_MODEL)
 
 LOGGER = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = (
-    "You are an expert sales psychologist and neuroscience-informed persuasion "
-    "analyst. You analyze neural brain-response signals to assess how persuasive "
-    "a sales message would be for a specific target persona. Always return strict JSON."
-)
+SYSTEM_PROMPT = """You are an expert sales psychologist and neuroscience-informed persuasion analyst inside PitchScore.
+
+You analyze neural brain-response signals from TRIBE v2 — a neuroscience model (facebook/tribev2) that predicts fMRI-like brain responses to stimuli. The model maps text through audio → speech events → predicted cortical vertex activations on a 20,484-vertex brain mesh.
+
+Key neuroscience mappings you use:
+- emotional_engagement → medial prefrontal cortex (MPFC) activation analogue → value signal processing
+- personal_relevance → self-referential processing → sustained focused activation
+- social_proof_potential → temporoparietal junction (TPJ) / mentalizing network → social-cognitive engagement
+- memorability → temporal pole / hippocampal analogue → encoding strength via engagement arc
+- attention_capture → salience network → early onset + peak intensity
+- cognitive_friction → dorsolateral prefrontal cortex (dlPFC) load → inverse of processing fluency
+
+You also receive the temporal engagement trace — a per-second brain activation timeline showing how neural response builds, peaks, or drops across the pitch. Use this to identify which parts of the pitch are strongest and weakest.
+
+Always return ONLY valid JSON — no markdown, no commentary."""
 
 
 def _build_user_prompt(
@@ -30,10 +40,30 @@ def _build_user_prompt(
     persona: str,
     platform: str,
     neural_signals: dict[str, float],
+    fmri_summary: dict | None = None,
 ) -> str:
     signals_text = "\n".join(
         f"  - {k}: {v:.1f}/100" for k, v in neural_signals.items()
     )
+
+    # Build temporal trace section if fMRI data available
+    temporal_section = ""
+    if fmri_summary and fmri_summary.get("temporal_trace"):
+        trace = fmri_summary["temporal_trace"]
+        n = len(trace)
+        peak_idx = trace.index(max(trace)) if trace else 0
+        peak_pct = round(peak_idx / max(n - 1, 1) * 100)
+        temporal_section = f"""
+
+## Temporal Engagement Trace (per-second brain activation)
+{n} segments analyzed on {fmri_summary.get('voxel_count', 0):,} cortical vertices
+Trace: {', '.join(f'{v:.3f}' for v in trace)}
+Peak activation at segment {peak_idx + 1}/{n} ({peak_pct}% through the pitch)
+Global mean: {fmri_summary.get('global_mean_abs', 0):.4f}, Global peak: {fmri_summary.get('global_peak_abs', 0):.4f}
+
+Use this trace to identify which PARTS of the pitch generate the strongest/weakest brain response.
+Early segments = opener, middle = body, late = close/CTA."""
+
     return f"""## Pitch Message
 {message}
 
@@ -43,27 +73,27 @@ def _build_user_prompt(
 ## Platform
 {platform}
 
-## Neural Brain-Response Signals (from TRIBE neuroscience model)
-{signals_text}
+## Neural Brain-Response Signals (from TRIBE v2 neuroscience model)
+{signals_text}{temporal_section}
 
 ## Instructions
-Analyze this pitch for the target persona using the neural signals as evidence. Return JSON:
+Analyze this pitch for the target persona. Use the neural signals AND the temporal engagement trace as evidence. Return JSON:
 {{
   "persuasion_score": <0-100 int>,
-  "verdict": "<one-line verdict>",
-  "narrative": "<2-3 sentence expert analysis>",
-  "persona_summary": "<your understanding of this persona's needs and psychology>",
+  "verdict": "<one-line verdict referencing the persona>",
+  "narrative": "<2-3 sentence expert analysis referencing specific neural evidence and temporal patterns>",
+  "persona_summary": "<your psychological profile of this persona — their decision drivers, biases, and communication preferences>",
   "breakdown": [
-    {{"key": "emotional_resonance", "label": "Emotional Resonance", "score": <0-100>, "explanation": "<for this persona>"}},
-    {{"key": "clarity", "label": "Clarity", "score": <0-100>, "explanation": "<for this persona>"}},
-    {{"key": "urgency", "label": "Urgency", "score": <0-100>, "explanation": "<for this persona>"}},
-    {{"key": "credibility", "label": "Credibility", "score": <0-100>, "explanation": "<for this persona>"}},
-    {{"key": "personalization_fit", "label": "Personalization Fit", "score": <0-100>, "explanation": "<for this persona>"}}
+    {{"key": "emotional_resonance", "label": "Emotional Resonance", "score": <0-100>, "explanation": "<reference neural signals and temporal pattern for this persona>"}},
+    {{"key": "clarity", "label": "Clarity", "score": <0-100>, "explanation": "<reference cognitive friction and temporal consistency>"}},
+    {{"key": "urgency", "label": "Urgency", "score": <0-100>, "explanation": "<reference attention capture and temporal peaks near CTA>"}},
+    {{"key": "credibility", "label": "Credibility", "score": <0-100>, "explanation": "<reference social proof potential and sustained engagement>"}},
+    {{"key": "personalization_fit", "label": "Personalization Fit", "score": <0-100>, "explanation": "<reference personal relevance signal for this specific persona>"}}
   ],
   "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "risks": ["<risk 1>", "<risk 2>", "<risk 3>"],
   "rewrite_suggestions": [
-    {{"title": "<what to improve>", "before": "<original snippet>", "after": "<improved version>", "why": "<reason>"}}
+    {{"title": "<what to improve>", "before": "<original snippet from the pitch>", "after": "<improved version tailored to the persona>", "why": "<reason citing neural evidence>"}}
   ]
 }}"""
 
@@ -278,9 +308,12 @@ def interpret_persuasion(
     platform: str,
     neural_signals: dict[str, float],
     raw_features: dict[str, float] | None = None,
+    fmri_summary: dict | None = None,
 ) -> dict[str, Any]:
     """Interpret TRIBE neural signals into a persuasion report for the target persona."""
-    user_prompt = _build_user_prompt(message, persona, platform, neural_signals)
+    user_prompt = _build_user_prompt(
+        message, persona, platform, neural_signals, fmri_summary=fmri_summary,
+    )
 
     llm_result = _call_openrouter(user_prompt)
 

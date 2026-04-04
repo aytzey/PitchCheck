@@ -2,6 +2,7 @@ import type { PitchScoreReport } from "@/shared/types";
 import ScoreGauge from "./ScoreGauge";
 import BreakdownBar from "./BreakdownBar";
 import RewriteSuggestion from "./RewriteSuggestion";
+import TemporalTrace from "./TemporalTrace";
 
 export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
   return (
@@ -51,6 +52,11 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
             })}
           </div>
         </div>
+      )}
+
+      {/* Temporal Engagement Timeline */}
+      {report.fmri_output && report.fmri_output.temporal_trace.length > 0 && (
+        <TemporalTrace fmri={report.fmri_output} />
       )}
 
       {/* Strengths & Risks */}

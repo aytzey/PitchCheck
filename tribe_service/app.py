@@ -12,6 +12,7 @@ from tribe_service.schemas import (
     PitchScoreRequest,
     PitchScoreReport,
     BreakdownSection,
+    FmriOutput,
     NeuralSignal,
     RewriteSuggestion,
 )
@@ -19,6 +20,7 @@ from tribe_service.engine import (
     score_text,
     extract_features,
     derive_persuasion_signals,
+    summarize_fmri_output,
     is_model_loaded,
     PERSUASION_SIGNAL_LABELS,
     TRIBE_DEVICE,
@@ -66,19 +68,21 @@ async def score_pitch(request: PitchScoreRequest):
         # 1. Run TRIBE text scoring
         predictions = score_text(request.message)
 
-        # 2. Extract raw features
+        # 2. Extract raw features + fMRI summary
         raw_features = extract_features(predictions)
+        fmri_data = summarize_fmri_output(predictions)
 
         # 3. Derive persuasion signals
         neural_signals = derive_persuasion_signals(raw_features)
 
-        # 4. LLM interpretation (or fallback)
+        # 4. LLM interpretation (or fallback) — include fMRI temporal trace
         llm_result = interpret_persuasion(
             message=request.message,
             persona=request.persona,
             platform=request.platform,
             neural_signals=neural_signals,
             raw_features=raw_features,
+            fmri_summary=fmri_data,
         )
 
         # 5. Assemble PitchScoreReport
@@ -122,6 +126,7 @@ async def score_pitch(request: PitchScoreRequest):
             risks=llm_result.get("risks", [])[:3],
             rewrite_suggestions=rewrite_suggestions,
             persona_summary=llm_result.get("persona_summary", request.persona),
+            fmri_output=FmriOutput(**fmri_data),
             platform=request.platform,
             scored_at=datetime.now(timezone.utc).isoformat(),
         )

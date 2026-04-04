@@ -118,7 +118,6 @@ def _call_openrouter(user_prompt: str) -> dict[str, Any] | None:
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.3,
-                "response_format": {"type": "json_object"},
             },
             timeout=OPENROUTER_TIMEOUT,
         )
@@ -127,7 +126,14 @@ def _call_openrouter(user_prompt: str) -> dict[str, Any] | None:
         content = (
             data.get("choices", [{}])[0].get("message", {}).get("content", "")
         )
-        return json.loads(content)
+        # Strip markdown code fences if present
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            # Remove first line (```json) and last line (```)
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            cleaned = "\n".join(lines).strip()
+        return json.loads(cleaned)
     except Exception as exc:
         LOGGER.warning("OpenRouter call failed: %s", exc)
         return None

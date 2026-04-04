@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import subprocess
 import tempfile
 import threading
 from pathlib import Path
@@ -58,6 +60,96 @@ class _MockModel:
         return rng.rand(5, 20).astype(np.float32)
 
 
+# ── WhisperX runtime patch ──
+# tribev2 runs whisperx via `uvx whisperx` subprocess which can trigger
+# click circular import errors. This patches the transcript extraction
+# to run whisperx directly via subprocess with proper env isolation.
+
+WHISPERX_CUDA_COMPUTE_TYPE = os.getenv("WHISPERX_CUDA_COMPUTE_TYPE", "float16")
+WHISPERX_CPU_COMPUTE_TYPE = os.getenv("WHISPERX_CPU_COMPUTE_TYPE", "float32")
+WHISPERX_CUDA_BATCH_SIZE = max(1, int(os.getenv("WHISPERX_CUDA_BATCH_SIZE", "16")))
+WHISPERX_CPU_BATCH_SIZE = max(1, int(os.getenv("WHISPERX_CPU_BATCH_SIZE", "4")))
+
+
+def _resolve_device() -> str:
+    device = TRIBE_DEVICE
+    if device == "auto":
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    return device
+
+
+def _patch_whisperx_runtime() -> None:
+    """Monkey-patch tribev2's whisperx extraction to avoid uvx subprocess issues."""
+    try:
+        import pandas as pd
+        import tribev2.eventstransforms as eventstransforms
+    except Exception:
+        return
+
+    transform = eventstransforms.ExtractWordsFromAudio
+    if getattr(transform, "_pitchscore_patched", False):
+        return
+
+    def _patched_get_transcript(wav_filename: Path, language: str) -> "pd.DataFrame":
+        lang_codes = {"english": "en", "french": "fr", "spanish": "es", "dutch": "nl", "chinese": "zh"}
+        if language not in lang_codes:
+            raise ValueError(f"Language {language} not supported")
+
+        device = _resolve_device()
+        compute_type = WHISPERX_CUDA_COMPUTE_TYPE if device == "cuda" else WHISPERX_CPU_COMPUTE_TYPE
+        batch_size = WHISPERX_CUDA_BATCH_SIZE if device == "cuda" else WHISPERX_CPU_BATCH_SIZE
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            cmd = [
+                "uvx", "whisperx",
+                str(wav_filename),
+                "--model", "large-v3",
+                "--language", lang_codes[language],
+                "--device", device,
+                "--compute_type", compute_type,
+                "--batch_size", str(batch_size),
+                "--output_dir", output_dir,
+                "--output_format", "json",
+            ]
+            if language == "english":
+                cmd.extend(["--align_model", "WAV2VEC2_ASR_LARGE_LV60K_960H"])
+            env = {k: v for k, v in os.environ.items() if k != "MPLBACKEND"}
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            if result.returncode != 0:
+                # Retry with float32 on CPU if compute type fails
+                if device == "cpu" and compute_type != "float32" and "float16" in result.stderr.lower():
+                    LOGGER.warning("whisperx CPU %s failed, retrying float32", compute_type)
+                    cmd[cmd.index(compute_type)] = "float32"
+                    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+                    if result.returncode != 0:
+                        raise RuntimeError(f"whisperx failed:\n{result.stderr}")
+                else:
+                    raise RuntimeError(f"whisperx failed:\n{result.stderr}")
+
+            json_path = Path(output_dir) / f"{wav_filename.stem}.json"
+            transcript = json.loads(json_path.read_text())
+
+        words = []
+        for i, seg in enumerate(transcript.get("segments", [])):
+            sentence = seg.get("text", "").replace('"', "")
+            for w in seg.get("words", []):
+                if "start" not in w:
+                    continue
+                words.append({
+                    "text": w["word"].replace('"', ""),
+                    "start": w["start"],
+                    "duration": w["end"] - w["start"],
+                    "sequence_id": i,
+                    "sentence": sentence,
+                })
+        return pd.DataFrame(words)
+
+    transform._get_transcript_from_audio = staticmethod(_patched_get_transcript)
+    transform._pitchscore_patched = True
+    LOGGER.info("WhisperX runtime patch applied")
+
+
 # ── Model singleton ──
 
 _model: Any = None
@@ -77,7 +169,7 @@ def _load_model() -> Any:
             return _model
         # Real model loading
         try:
-            # Build-time patch already applied via Dockerfile RUN
+            _patch_whisperx_runtime()
             from tribev2.demo_utils import TribeModel
 
             device = TRIBE_DEVICE

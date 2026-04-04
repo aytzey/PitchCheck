@@ -134,6 +134,9 @@ def _call_openrouter(user_prompt: str) -> dict[str, Any] | None:
             lines = [l for l in lines if not l.strip().startswith("```")]
             cleaned = "\n".join(lines).strip()
         return json.loads(cleaned)
+    except httpx.HTTPStatusError as exc:
+        LOGGER.warning("OpenRouter HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+        return None
     except Exception as exc:
         LOGGER.warning("OpenRouter call failed: %s", exc)
         return None

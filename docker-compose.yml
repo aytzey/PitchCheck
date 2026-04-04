@@ -13,8 +13,8 @@ services:
     depends_on:
       tribe-service:
         condition: service_healthy
-    expose:
-      - "3000"
+    ports:
+      - "3100:3000"
     restart: unless-stopped
     networks:
       - pitchscore_net

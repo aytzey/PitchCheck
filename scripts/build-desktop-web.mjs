@@ -18,13 +18,8 @@ async function moveIfExists(from, to) {
 
 function runNextBuild() {
   return new Promise((resolve, reject) => {
-    const nextBin = join(
-      root,
-      "node_modules",
-      ".bin",
-      process.platform === "win32" ? "next.cmd" : "next",
-    );
-    const child = spawn(nextBin, ["build"], {
+    const nextCli = join(root, "node_modules", "next", "dist", "bin", "next");
+    const child = spawn(process.execPath, [nextCli, "build"], {
       cwd: root,
       stdio: "inherit",
       env: {

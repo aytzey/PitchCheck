@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" role="img" aria-label="PitchCheck desktop runtime overview">
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#d9f7ee"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#0f172a" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="640" rx="36" fill="url(#canvas)"/>
+  <g filter="url(#shadow)">
+    <rect x="76" y="72" width="1128" height="496" rx="24" fill="#ffffff" stroke="#d8dee8"/>
+    <rect x="76" y="72" width="1128" height="64" rx="24" fill="#111827"/>
+    <circle cx="118" cy="104" r="8" fill="#ef4444"/>
+    <circle cx="146" cy="104" r="8" fill="#f59e0b"/>
+    <circle cx="174" cy="104" r="8" fill="#22c55e"/>
+    <text x="220" y="112" font-family="Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#ffffff">PitchCheck desktop runtime</text>
+    <rect x="116" y="176" width="488" height="316" rx="18" fill="#f8fafc" stroke="#d8dee8"/>
+    <text x="148" y="224" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800" fill="#111827">Pitch + persona</text>
+    <rect x="148" y="252" width="388" height="18" rx="9" fill="#cbd5e1"/>
+    <rect x="148" y="286" width="330" height="18" rx="9" fill="#dbe4ee"/>
+    <rect x="148" y="320" width="380" height="18" rx="9" fill="#dbe4ee"/>
+    <rect x="148" y="392" width="196" height="50" rx="8" fill="#0f766e"/>
+    <text x="185" y="424" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" fill="#ffffff">Score pitch</text>
+    <rect x="656" y="176" width="428" height="316" rx="18" fill="#111827"/>
+    <text x="692" y="224" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800" fill="#ffffff">Runtime strategy</text>
+    <rect x="696" y="258" width="312" height="44" rx="8" fill="#14382f" stroke="#22c55e"/>
+    <text x="720" y="286" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="700" fill="#bbf7d0">1. Run on local NVIDIA GPU</text>
+    <rect x="696" y="326" width="312" height="44" rx="8" fill="#2f2412" stroke="#f59e0b"/>
+    <text x="720" y="354" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="700" fill="#fde68a">2. Rent cheapest Vast.ai GPU</text>
+    <rect x="696" y="394" width="312" height="44" rx="8" fill="#1f2937" stroke="#94a3b8"/>
+    <text x="720" y="422" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="700" fill="#e2e8f0">3. Destroy on disconnect</text>
+  </g>
+  <text x="88" y="618" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#334155">Tauri + Next.js + FastAPI + TRIBE + OpenRouter + Vast.ai</text>
+</svg>

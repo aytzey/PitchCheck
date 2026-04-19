@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PitchCheck",
+  "version": "0.1.0",
+  "identifier": "ai.machinity.pitchcheck",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm run build:desktop-web",
+    "frontendDist": "../out"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PitchCheck",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 720
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVGNkMyNEQwMEUwQkQ4MEEKUldRSzJBc08wQ1JzNytTT1J4bFNuVFRRRklWcXpkU0VQdWFsbnVzRXRGWVFzTEFYdHF2b25HdnkK",
+      "endpoints": [
+        "https://github.com/aytzey/PitchCheck/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

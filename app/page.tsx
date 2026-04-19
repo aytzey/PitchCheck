@@ -1,18 +1,43 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import AutoUpdatePrompt from "@/components/AutoUpdatePrompt";
+import DesktopConnectionPanel from "@/components/DesktopConnectionPanel";
+import SetupWizard from "@/components/SetupWizard";
 import ScoreForm from "@/components/ScoreForm";
 import ScoreDisplay from "@/components/ScoreDisplay";
+import {
+  isDesktopRuntime,
+  scorePitchOnDesktop,
+  type DesktopRuntimeStatus,
+} from "@/lib/desktop-runtime";
 import type { PitchScoreReport } from "@/shared/types";
 
 export default function Home() {
   const [report, setReport] = useState<PitchScoreReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [desktopMode, setDesktopMode] = useState(false);
+  const [desktopStatus, setDesktopStatus] =
+    useState<DesktopRuntimeStatus | null>(null);
+
+  useEffect(() => {
+    setDesktopMode(isDesktopRuntime());
+  }, []);
 
   async function handleScore(message: string, persona: string, platform: string) {
     setLoading(true);
     setError(null);
     try {
+      if (isDesktopRuntime()) {
+        const data = await scorePitchOnDesktop({ message, persona, platform });
+        if (!data.report) {
+          setError(data.error || "Scoring failed");
+          return;
+        }
+        setReport(data.report as PitchScoreReport);
+        return;
+      }
+
       const res = await fetch("/api/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -31,6 +56,11 @@ export default function Home() {
     }
   }
 
+  const desktopDisabledReason =
+    desktopMode && !desktopStatus?.connected
+      ? "Connect Runtime First"
+      : undefined;
+
   return (
     <main className="min-h-screen">
       {/* Header */}
@@ -39,7 +69,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-pitch)] text-white font-bold text-sm">PS</div>
             <div>
-              <h1 className="text-lg font-bold text-[var(--color-ink)]">PitchScore</h1>
+              <h1 className="text-lg font-bold text-[var(--color-ink)]">PitchCheck</h1>
               <p className="text-xs text-[var(--color-muted)]">Neural Persuasion Intelligence</p>
             </div>
           </div>
@@ -48,10 +78,17 @@ export default function Home() {
 
       {/* Content */}
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        <AutoUpdatePrompt />
+        <SetupWizard image={desktopStatus?.image} />
+        <DesktopConnectionPanel onStatusChange={setDesktopStatus} />
         <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
           {/* Left: Input */}
           <div>
-            <ScoreForm onScore={handleScore} loading={loading} />
+            <ScoreForm
+              onScore={handleScore}
+              loading={loading}
+              disabledReason={desktopDisabledReason}
+            />
             {error && (
               <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {error}

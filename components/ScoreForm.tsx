@@ -5,9 +5,10 @@ import PlatformSelector from "./PlatformSelector";
 interface Props {
   onScore: (message: string, persona: string, platform: string) => void;
   loading: boolean;
+  disabledReason?: string;
 }
 
-export default function ScoreForm({ onScore, loading }: Props) {
+export default function ScoreForm({ onScore, loading, disabledReason }: Props) {
   const [message, setMessage] = useState("");
   const [persona, setPersona] = useState("");
   const [platform, setPlatform] = useState("general");
@@ -71,7 +72,7 @@ export default function ScoreForm({ onScore, loading }: Props) {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || Boolean(disabledReason)}
         className="w-full rounded-lg bg-[var(--color-pitch)] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pitch-light)] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
@@ -83,7 +84,7 @@ export default function ScoreForm({ onScore, loading }: Props) {
             Scoring...
           </span>
         ) : (
-          "Score My Pitch"
+          disabledReason || "Score My Pitch"
         )}
       </button>
     </form>

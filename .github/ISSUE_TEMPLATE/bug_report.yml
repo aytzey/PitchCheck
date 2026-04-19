@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible problem in PitchCheck.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the desktop app
+        2. Click Connect
+        3. Score this pitch...
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime path
+      options:
+        - Web only
+        - Desktop with local GPU
+        - Desktop with Vast.ai fallback
+        - Docker Compose
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and version
+      placeholder: Ubuntu 24.04, Windows 11, macOS 15
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell

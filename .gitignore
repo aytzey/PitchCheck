@@ -4,7 +4,14 @@ dist/
 __pycache__/
 *.pyc
 .env
+.secrets/
 .venv/
 *.egg-info/
+tsconfig.tsbuildinfo
 .DS_Store
 .worktrees/
+.next-tauri-disabled-api/
+src-tauri/target/
+src-tauri/gen/
+out/*
+!out/.gitkeep

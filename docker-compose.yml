@@ -1,11 +1,11 @@
-name: pitchscore
+name: pitchcheck
 
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: pitchscore_web
+    container_name: pitchcheck_web
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -13,45 +13,33 @@ services:
     depends_on:
       tribe-service:
         condition: service_healthy
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     restart: unless-stopped
     networks:
-      - pitchscore_net
-      - machinity_proxy_net
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=machinity_proxy_net
-      - traefik.http.routers.pitchscore.rule=Host(`pitch.machinity.ai`) || Host(`www.pitch.machinity.ai`)
-      - traefik.http.routers.pitchscore.entrypoints=websecure
-      - traefik.http.routers.pitchscore.tls=true
-      - traefik.http.routers.pitchscore.tls.certresolver=le
-      - traefik.http.services.pitchscore.loadbalancer.server.port=3000
-      - traefik.http.routers.pitchscore-http.rule=Host(`pitch.machinity.ai`) || Host(`www.pitch.machinity.ai`)
-      - traefik.http.routers.pitchscore-http.entrypoints=web
-      - traefik.http.routers.pitchscore-http.middlewares=pitchscore-redirect
-      - traefik.http.middlewares.pitchscore-redirect.redirectscheme.scheme=https
+      - pitchcheck_net
 
   tribe-service:
     build:
       context: .
       dockerfile: tribe_service/Dockerfile
-    container_name: pitchscore_tribe
+    container_name: pitchcheck_tribe
     environment:
-      TRIBE_MODEL_ID: facebook/tribev2
-      TRIBE_DEVICE: cuda
+      TRIBE_MODEL_ID: ${TRIBE_MODEL_ID:-facebook/tribev2}
+      TRIBE_DEVICE: ${TRIBE_DEVICE:-cuda}
       TRIBE_CACHE_DIR: /models
-      TRIBE_ALLOW_MOCK: "0"
+      TRIBE_ALLOW_MOCK: ${TRIBE_ALLOW_MOCK:-0}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4.1-mini}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-20}
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       HF_HOME: /models/huggingface
       HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
       XDG_CACHE_HOME: /models/.cache
-      TRIBE_TEXT_MODEL: NousResearch/Hermes-3-Llama-3.2-3B
-    env_file:
-      - .env
+      TRIBE_TEXT_MODEL: ${TRIBE_TEXT_MODEL:-NousResearch/Hermes-3-Llama-3.2-3B}
     volumes:
-      - /home/dkmserver/Desktop/Machinity/aytug/isthisviral/data/tribe_cache:/models
+      - tribe_models:/models
     deploy:
       resources:
         reservations:
@@ -63,18 +51,24 @@ services:
       - "8090"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 180s
     networks:
-      - pitchscore_net
+      - pitchcheck_net
+
+volumes:
+  tribe_models:
 
 networks:
-  machinity_proxy_net:
-    external: true
-  pitchscore_net:
-    name: pitchscore_internal
+  pitchcheck_net:
+    name: pitchcheck_internal
     driver: bridge
-

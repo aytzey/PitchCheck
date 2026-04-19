@@ -5,7 +5,7 @@ interface Props {
 }
 
 export default function TemporalTrace({ fmri }: Props) {
-  const { temporal_trace, temporal_peaks, segments, voxel_count } = fmri;
+  const { temporal_trace, segments, voxel_count } = fmri;
 
   if (!temporal_trace.length) return null;
 

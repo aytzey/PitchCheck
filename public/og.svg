@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="PitchCheck social preview">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="0.52" stop-color="#17324a"/>
+      <stop offset="1" stop-color="#0f3f38"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="72" y="70" width="1056" height="490" rx="34" fill="#f8fafc"/>
+  <path d="M168 379c118-236 266-292 480-199" fill="none" stroke="#22c55e" stroke-width="22" stroke-linecap="round"/>
+  <path d="M176 426h386" stroke="#f59e0b" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="652" cy="183" r="32" fill="#111827"/>
+  <text x="706" y="198" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">Local GPU first</text>
+  <text x="706" y="256" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">Cheapest Vast.ai fallback</text>
+  <text x="706" y="314" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700" fill="#111827">Signed desktop auto-update</text>
+  <text x="168" y="128" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#0f766e">PitchCheck</text>
+  <text x="168" y="500" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="800" fill="#111827">Neural persuasion scoring</text>
+</svg>

@@ -2,7 +2,7 @@
   "name": "pitchcheck",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-platform neural persuasion scoring desktop app with local GPU first and Vast.ai fallback.",
+  "description": "Score your sales pitch against a neuroscience model before you send it. Desktop app with local GPU and Vast.ai cloud fallback.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "node scripts/build-desktop-installer.mjs",
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "install:local": "bash scripts/install-local.sh",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

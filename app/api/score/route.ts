@@ -16,15 +16,30 @@ export async function POST(request: Request) {
 
     const { message, persona, platform } = body as Record<string, unknown>;
 
-    if (!message || typeof message !== "string" || message.trim().length < 10) {
+    const trimmedMessage = typeof message === "string" ? message.trim() : "";
+    const trimmedPersona = typeof persona === "string" ? persona.trim() : "";
+
+    if (trimmedMessage.length < 10) {
       return Response.json(
         { error: "message is required (min 10 characters)." },
         { status: 400 },
       );
     }
-    if (!persona || typeof persona !== "string" || persona.trim().length < 5) {
+    if (trimmedMessage.length > 5000) {
+      return Response.json(
+        { error: "message is too long (max 5000 characters)." },
+        { status: 400 },
+      );
+    }
+    if (trimmedPersona.length < 5) {
       return Response.json(
         { error: "persona is required (min 5 characters)." },
+        { status: 400 },
+      );
+    }
+    if (trimmedPersona.length > 1500) {
+      return Response.json(
+        { error: "persona is too long (max 1500 characters)." },
         { status: 400 },
       );
     }
@@ -36,8 +51,8 @@ export async function POST(request: Request) {
         : "general";
 
     const result = await scorePitch({
-      message: (message as string).trim(),
-      persona: (persona as string).trim(),
+      message: trimmedMessage,
+      persona: trimmedPersona,
       platform: validPlatform,
     });
 

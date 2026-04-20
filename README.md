@@ -30,10 +30,11 @@ Score sales emails, cold outreach, LinkedIn DMs, and call scripts against a neur
 
 You paste a message, set a recipient ("Jordan Park, Staff Engineer"), pick a channel (email, LinkedIn, cold call, landing page, ad copy), and hit score.
 
-PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookresearch/tribev2) brain encoding model — the same model used in computational neuroscience research to predict fMRI responses to naturalistic stimuli. It maps your message onto ~20,000 cortical vertices and returns:
+PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookresearch/tribev2) brain encoding model — the same model used in computational neuroscience research to predict fMRI responses to naturalistic stimuli. It maps your message onto ~20,000 cortical vertices and treats the output as **predicted neural-response analogues**, not measured fMRI from the recipient. It returns:
 
 - **Persuasion score** (0–100) with calibration confidence
-- **Six neural signals** — emotional engagement, attention capture, personal relevance, social proof potential, memorability, cognitive friction
+- **Six neural signals** — affective value salience, early attention salience, self-value relevance, social cognition/sharing, encoding potential, cognitive friction
+- **Neuro-persuasive axes** — self/value fit, reward/affect, social cognition, encoding/attention, processing fluency
 - **Segment-by-segment engagement timeline** — where the reader tunes in, where they drop off
 - **Verdict and narrative** — an LLM reads the neural output and explains what's working and what isn't
 - **Rewrite suggestions** — before/after alternatives with reasoning
@@ -56,33 +57,49 @@ Ten raw features get extracted from the prediction matrix:
 
 | Feature | What it captures |
 |---------|-----------------|
-| `global_mean_abs` | Overall activation intensity |
-| `global_peak_abs` | Maximum voxel activation |
-| `temporal_std` | How much activation varies across segments |
-| `early_mean` | First-quartile activation (opener strength) |
-| `late_mean` | Last-quartile activation (close strength) |
+| `global_mean_abs` | Overall predicted-response intensity |
+| `global_peak_abs` | Maximum predicted voxel response |
+| `temporal_std` | How much predicted response varies across segments |
+| `early_mean` | First-quartile predicted response (opener strength) |
+| `late_mean` | Last-quartile predicted response (close strength) |
 | `max_temporal_delta` | Largest consecutive segment shift |
 | `spatial_spread` | Fraction of voxels above global mean |
 | `focus_ratio` | Top-10% voxel mean vs. global mean |
 | `sustain_ratio` | Fraction of segments above mean |
 | `arc_ratio` | (max − min) / mean of temporal trace |
 
-These get ratio-normalized against `global_mean_abs` and mapped through calibrated band ranges into six persuasion signals (0–100):
+These get ratio-normalized against `global_mean_abs` and mapped through calibrated band ranges into six predicted-response signals (0–100):
 
-| Signal | Brain region analogue | Key inputs |
+| Signal | Conservative analogue | Key inputs |
 |--------|----------------------|------------|
-| Emotional Engagement | mPFC | peak intensity, temporal variation, arc, delta |
-| Attention Capture | Salience network (AI/dACC) | early activation, peak, spatial spread |
-| Personal Relevance | PCC (self-referential) | sustain, focus, late activation |
-| Social Proof Potential | TPJ (mentalizing) | peaks, temporal dynamics, spread |
-| Memorability | Hippocampal/temporal pole | arc, sustain, peak, focus |
-| Cognitive Friction | dlPFC (cognitive load) | inverse of sustain, focus, spread |
+| Affective Value Salience | mPFC/value and affective salience | peak intensity, temporal variation, arc, delta |
+| Early Attention Salience | Salience network (AI/dACC) | early predicted response, peak, spatial spread |
+| Self-Value Relevance | mPFC/vmPFC/PCC self/value processing | sustain, focus, late predicted response |
+| Social Cognition / Sharing | TPJ/dmPFC/default-network social cognition | peaks, temporal dynamics, spread |
+| Encoding Potential | Hippocampal/temporal memory encoding | arc, sustain, peak, focus |
+| Cognitive Friction | dlPFC/control-load analogue | inverse of sustain, focus, spread |
 
 Scores are compressed to [8, 92] to avoid false confidence at extremes. Cognitive friction is inverted — a high number means high friction, which is bad.
+
+The final score does not use these signals directly as proof of persuasion. PitchCheck first builds five evidence-weighted neuro-persuasive axes:
+
+| Axis | What it means |
+|------|---------------|
+| Self-value fit | Whether the pitch connects the offer to the persona's role, value, and decision frame |
+| Reward/affect motivation | Whether benefits, outcomes, and affective language create motivational pull |
+| Social cognition/sharing | Whether the message has social/narrative potential; explicit social proof still requires text evidence |
+| Encoding and attention | Whether the message has early salience and concrete hooks likely to be remembered |
+| Processing fluency | Whether the reader can understand and act without unnecessary cognitive load |
 
 ### 3. Neural Output → LLM Interpretation
 
 The raw signals and prediction summary go to an LLM (Claude via [OpenRouter](https://openrouter.ai)) along with the recipient persona and channel context. The LLM produces the verdict, narrative, strength/risk analysis, and rewrite suggestions.
+
+PitchCheck now also runs a deterministic persuasion-evidence audit before the LLM result is accepted. It checks concrete metrics, value proposition, argument quality, social proof, authority, urgency, reciprocity/risk reversal, CTA specificity, audience-term overlap, platform fit, clarity, and prompt-injection/score-gaming language. The final score is calibrated against this audit plus TRIBE-predicted axes, so malformed JSON, overconfident LLM scores, unsupported neural overclaims, and adversarial text cannot directly force a high persuasion score.
+
+The neuroscience layer follows a conservative triangulation rule from consumer-neuroscience and neuroforecasting work: TRIBE output is useful evidence, but it is not treated as recipient-level measured fMRI. Region labels are interpretive anchors, and reverse-inference risk is exposed through confidence reasons and scientific caveats.
+
+Research basis for the calibration layer includes Falk et al. on MPFC/self-value signals predicting health behavior change ([2011](https://doi.org/10.1037/a0022259), [2016](https://doi.org/10.1093/scan/nsv108)), Venkatraman et al. on fMRI predicting market-level advertising response ([2015](https://doi.org/10.1509/jmr.13.0593)), Scholz et al. on value/self/social signals and information sharing ([2017](https://doi.org/10.1073/pnas.1615259114)), Chan et al. on temporal neural signals of ad liking ([2023](https://doi.org/10.1177/00222437231194319)), Cohen et al. on reward vs. mentalizing predictors of persuasiveness by narrative type ([2024](https://doi.org/10.1038/s41598-024-62341-3)), and Cao & Reimann on triangulation and reverse-inference limits ([2020](https://doi.org/10.3389/fpsyg.2020.550204)).
 
 This layer is optional — scoring works without an OpenRouter key, you just won't get the written interpretation.
 
@@ -231,7 +248,10 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | `TRIBE_TEXT_BATCH_SIZE` | `auto` | Batch 1 on sub-10GB GPUs |
 | `TRIBE_TEXT_INPUT_MODE` | `direct` | `direct` skips TTS/WhisperX |
 | `TRIBE_MAX_SCORE_CONCURRENCY` | `1` | Keep at 1 on local GPUs |
-| `TRIBE_OOM_FALLBACK_TEXT_DEVICE` | `cpu` | Retry device after CUDA OOM |
+| `TRIBE_OOM_FALLBACK_TEXT_DEVICE` | `accelerate,cpu` | Comma-separated retry devices after CUDA OOM |
+| `TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB` | `auto` | GPU memory cap for Accelerate offload |
+| `TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB` | `32` | CPU RAM cap for Accelerate offload |
+| `TRIBE_ACCELERATE_OFFLOAD_FOLDER` | `/models/offload` | Disk folder for Accelerate offloaded weights |
 | `TRIBE_SERVICE_URL` | `http://tribe-service:8090` | Backend URL for frontend |
 | `PITCHCHECK_TRIBE_IMAGE` | `ghcr.io/aytzey/pitchcheck-tribe:latest` | Runtime image override |
 

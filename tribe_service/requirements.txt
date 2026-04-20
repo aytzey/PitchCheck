@@ -8,6 +8,7 @@ exca>=0.5
 neuralset>=0.0.2
 neuraltrain>=0.0.2
 x_transformers==1.27.20
+accelerate>=1.11
 soundfile>=0.13
 sentencepiece>=0.2
 joblib>=1.4

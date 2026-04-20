@@ -110,7 +110,7 @@ const BRAIN_REGIONS: Record<
 > = {
   emotional_engagement: {
     label: "MPFC",
-    role: "Emotional engagement",
+    role: "Affective value",
     points: [
       [100, 40],
       [100, 58],
@@ -118,14 +118,14 @@ const BRAIN_REGIONS: Record<
     color: "ok",
   },
   personal_relevance: {
-    label: "PCC",
-    role: "Self-relevance",
+    label: "mPFC/PCC",
+    role: "Self-value fit",
     points: [[100, 175]],
     color: "ok",
   },
   social_proof_potential: {
-    label: "TPJ",
-    role: "Social proof",
+    label: "TPJ/dmPFC",
+    role: "Social cognition",
     points: [
       [42, 150],
       [158, 150],
@@ -134,7 +134,7 @@ const BRAIN_REGIONS: Record<
   },
   memorability: {
     label: "HPC",
-    role: "Memory encoding",
+    role: "Encoding",
     points: [
       [68, 140],
       [132, 140],
@@ -143,7 +143,7 @@ const BRAIN_REGIONS: Record<
   },
   attention_capture: {
     label: "AI/dACC",
-    role: "Attention capture",
+    role: "Early salience",
     points: [
       [80, 78],
       [120, 78],
@@ -189,7 +189,7 @@ export default function DesktopWorkbench() {
   const [deployStep, setDeployStep] = useState(0);
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [report, setReport] = useState<PitchScoreReport | null>(() => sampleReport());
+  const [report, setReport] = useState<PitchScoreReport | null>(null);
   const [scoring, setScoring] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refinedPitch, setRefinedPitch] = useState<RefinedPitch | null>(null);
@@ -397,7 +397,7 @@ export default function DesktopWorkbench() {
   }, [desktopMode, refreshDesktop, vastApiKey]);
 
   const handleScore = useCallback(async (messageOverride?: string) => {
-    const nextMessage = (messageOverride ?? message).trim();
+    const nextMessage = (typeof messageOverride === "string" ? messageOverride : message).trim();
     const nextOverLimit = nextMessage.length > medium.maxChars;
     const nextCanScore =
       runtimeState === "connected" &&
@@ -679,11 +679,6 @@ function TopBar({
 }) {
   return (
     <div className="pc-topbar">
-      <div className="pc-traffic nodrag" aria-hidden="true">
-        <span style={{ background: "#ff5f57" }} />
-        <span style={{ background: "#febc2e" }} />
-        <span style={{ background: "#28c840" }} />
-      </div>
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
@@ -1275,7 +1270,7 @@ function ResultView({
       <BrainPanel
         score={score}
         verdict={report.verdict}
-        confidence={confidenceFromScore(score)}
+        confidence={report.robustness?.confidence ?? confidenceFromScore(score)}
         fmri={fmri}
         signals={signals}
         runtime={runtimeKind}
@@ -1284,6 +1279,9 @@ function ResultView({
         model={openRouterModel || DEFAULT_OPENROUTER_MODEL}
       />
       <NeuralSignalsGrid signals={signals} />
+      {(report.robustness || report.persuasion_evidence) && (
+        <RobustnessPanel report={report} />
+      )}
       <div>
         <HeaderLine title="Writing facets" right="LLM interpreted" />
         <div className="pc-facet-list">
@@ -1394,6 +1392,10 @@ function BrainPanel({
   tokens: number;
   model: string;
 }) {
+  const usesSyntheticTrace = fmri.temporal_trace_basis === "synthetic_word_order";
+  const traceTitle = usesSyntheticTrace ? "Engagement trace" : "Engagement timeline";
+  const traceUnit = usesSyntheticTrace ? "Mean predicted response / ordered segment" : "Mean predicted response / time segment";
+
   return (
     <div className="pc-brain-panel">
       <CornerMarks />
@@ -1414,7 +1416,7 @@ function BrainPanel({
       </div>
       <PeakMeanBar fmri={fmri} />
       <div className="pc-trace-block">
-        <HeaderLine title="Engagement timeline" right="Mean activation / segment" />
+        <HeaderLine title={traceTitle} right={traceUnit} />
         <TemporalTrace trace={fmri.temporal_trace} peaks={fmri.temporal_peaks} />
       </div>
       <div className="pc-brain-meta mono">
@@ -1530,8 +1532,8 @@ function PeakMeanBar({ fmri }: { fmri: FmriOutput }) {
   const ratio = fmri.global_peak_abs / Math.max(fmri.global_mean_abs, 0.001);
   return (
     <div className="pc-peak-bar">
-      <MetricCell k="mean" v={fmri.global_mean_abs.toFixed(3)} note="mean activation" />
-      <MetricCell k="peak" v={fmri.global_peak_abs.toFixed(3)} note="max activation" accent />
+      <MetricCell k="mean" v={fmri.global_mean_abs.toFixed(3)} note="mean predicted response" />
+      <MetricCell k="peak" v={fmri.global_peak_abs.toFixed(3)} note="max predicted response" accent />
       <MetricCell k="ratio" v={`${ratio.toFixed(1)}x`} note="peak / mean" />
     </div>
   );
@@ -1583,6 +1585,76 @@ function NeuralSignalsGrid({ signals }: { signals: PitchScoreReport["neural_sign
       <div className="pc-signal-grid">
         {signals.map((signal) => (
           <SignalCell key={signal.key} signal={signal} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RobustnessPanel({ report }: { report: PitchScoreReport }) {
+  const robustness = report.robustness;
+  const evidence = report.persuasion_evidence;
+  const strategies = (evidence?.detected_strategies ?? []).slice(0, 5);
+  const missing = (evidence?.missing_elements ?? []).slice(0, 3);
+  const neuroAxes = robustness?.neuro_axes ? Object.entries(robustness.neuro_axes) : [];
+  const warnings = [...(robustness?.warnings ?? []), ...(evidence?.warnings ?? [])]
+    .filter((item, index, all) => all.indexOf(item) === index)
+    .slice(0, 3);
+
+  return (
+    <div>
+      <HeaderLine
+        title="Robustness calibration"
+        right={robustness ? `${Math.round(robustness.confidence * 100)}% confidence` : "deterministic audit"}
+      />
+      <div className="pc-rank-list">
+        {robustness && (
+          <>
+            <div className="pc-rank-row">
+              <span className="mono">NEU</span>
+              <strong>Neuro-axis evidence</strong>
+              <small>TRIBE-predicted analogues + text support</small>
+              <b className={`mono score-${toneFromScore(robustness.neural_score)}`}>{Math.round(robustness.neural_score)}</b>
+            </div>
+            {neuroAxes.slice(0, 5).map(([key, axis]) => (
+              <div className="pc-rank-row" key={key}>
+                <span className="mono">{key.slice(0, 3).toUpperCase()}</span>
+                <strong>{axis.label}</strong>
+                <small>{axis.caveat}</small>
+                <b className={`mono score-${toneFromScore(axis.score)}`}>{Math.round(axis.score)}</b>
+              </div>
+            ))}
+            <div className="pc-rank-row">
+              <span className="mono">TXT</span>
+              <strong>Text evidence</strong>
+              <small>Proof, CTA, audience fit, clarity</small>
+              <b className={`mono score-${toneFromScore(robustness.text_score)}`}>{Math.round(robustness.text_score)}</b>
+            </div>
+          </>
+        )}
+        {evidence && (
+          <div className="pc-rank-row">
+            <span className="mono">CUE</span>
+            <strong>{strategies.length ? strategies.join(", ") : "No strong persuasion cue"}</strong>
+            <small>{missing.length ? `Missing: ${missing.join(", ")}` : "No major deterministic gap"}</small>
+            <b className={`mono score-${toneFromScore(evidence.overall_text_score)}`}>{Math.round(evidence.overall_text_score)}</b>
+          </div>
+        )}
+        {warnings.map((warning) => (
+          <div className="pc-rank-row" key={warning}>
+            <span className="mono">!</span>
+            <strong>{warning.replaceAll("_", " ")}</strong>
+            <small>Guardrail note</small>
+            <b className="mono score-warn">watch</b>
+          </div>
+        ))}
+        {(robustness?.scientific_caveats ?? []).slice(0, 1).map((caveat) => (
+          <div className="pc-rank-row" key={caveat}>
+            <span className="mono">SCI</span>
+            <strong>Scientific caveat</strong>
+            <small>{caveat}</small>
+            <b className="mono score-warn">note</b>
+          </div>
         ))}
       </div>
     </div>
@@ -1682,7 +1754,7 @@ function RuntimeCard({
           )}
         </div>
         <div className="pc-runtime-actions">
-          {!desktopMode && selected && <Button variant="secondary" disabled>Preview connected</Button>}
+          {!desktopMode && selected && <Button variant="secondary" disabled>Web preview</Button>}
           {desktopMode && !selected && <Button variant="secondary" onClick={onSelect}>Select</Button>}
           {desktopMode && selected && state !== "connected" && state !== "scoring" && (
             <Button variant="primary" onClick={onConnect} loading={busy} disabled={busy} icon={<Icon name="bolt" />}>
@@ -2349,11 +2421,11 @@ function fallbackFmri(score: number): FmriOutput {
 
 function fallbackSignals(score: number): PitchScoreReport["neural_signals"] {
   return [
-    ["emotional_engagement", "Emotional engagement", score - 2],
-    ["personal_relevance", "Personal relevance", score + 4],
-    ["social_proof_potential", "Social proof potential", score - 9],
-    ["memorability", "Memorability", score - 5],
-    ["attention_capture", "Attention capture", score + 1],
+    ["emotional_engagement", "Affective value salience", score - 2],
+    ["personal_relevance", "Self-value relevance", score + 4],
+    ["social_proof_potential", "Social cognition / sharing", score - 9],
+    ["memorability", "Encoding potential", score - 5],
+    ["attention_capture", "Early attention salience", score + 1],
     ["cognitive_friction", "Cognitive friction", Math.max(18, 100 - score)],
   ].map(([key, label, value]) => ({
     key: String(key),
@@ -2361,91 +2433,4 @@ function fallbackSignals(score: number): PitchScoreReport["neural_signals"] {
     score: Math.max(0, Math.min(100, Number(value))),
     direction: "neutral" as const,
   }));
-}
-
-function sampleReport(): PitchScoreReport {
-  return {
-    persuasion_score: 74,
-    verdict: "Strong fit for this recipient",
-    narrative:
-      "The pitch opens with a specific, recent trigger and keeps the ask concrete. Add one hard outcome metric to make the credibility section sharper.",
-    persona_summary:
-      "A time-poor staff engineer who replies to specific evidence and ignores generic outreach.",
-    platform: "email",
-    scored_at: new Date().toISOString(),
-    breakdown: [
-      {
-        key: "personalization_fit",
-        label: "Personalization fit",
-        score: 86,
-        explanation: "Names a specific recent event and ties the offer to the recipient's current work.",
-      },
-      {
-        key: "clarity",
-        label: "Clarity",
-        score: 81,
-        explanation: "The ask is easy to understand and the meeting size is bounded.",
-      },
-      {
-        key: "credibility",
-        label: "Credibility",
-        score: 74,
-        explanation: "Named references help; a concrete adoption or time-saved metric would make it stronger.",
-      },
-      {
-        key: "emotional_resonance",
-        label: "Emotional resonance",
-        score: 68,
-        explanation: "The opener shows empathy, then the middle becomes more feature-led.",
-      },
-      {
-        key: "urgency",
-        label: "Urgency",
-        score: 54,
-        explanation: "The CTA is polite but gives little reason to reply today instead of later.",
-      },
-    ],
-    neural_signals: [
-      { key: "emotional_engagement", label: "Emotional engagement", score: 72, direction: "up" },
-      { key: "personal_relevance", label: "Personal relevance", score: 81, direction: "up" },
-      { key: "social_proof_potential", label: "Social proof potential", score: 64, direction: "up" },
-      { key: "memorability", label: "Memorability", score: 69, direction: "neutral" },
-      { key: "attention_capture", label: "Attention capture", score: 78, direction: "up" },
-      { key: "cognitive_friction", label: "Cognitive friction", score: 38, direction: "down" },
-    ],
-    strengths: [
-      "Specific opener tied to a recent migration.",
-      "Low-friction meeting ask.",
-      "Relevant proof points from recognizable teams.",
-    ],
-    risks: [
-      "Outcome metric is implied rather than explicit.",
-      "CTA leaves scheduling work to the recipient.",
-      "Middle paragraph gets slightly tool-centric.",
-    ],
-    rewrite_suggestions: [
-      {
-        title: "Add one metric",
-        before: "auto-generates Grafana dashboards from your existing OpenTelemetry traces",
-        after: "cuts dashboard setup from roughly 3 days to 10 minutes",
-        why: "Concrete savings make the credibility signal easier to remember.",
-      },
-      {
-        title: "Pick a time",
-        before: "Would you be open to a 15-min call next Tuesday or Wednesday?",
-        after: "Grab 15 min Tuesday 2pm ET?",
-        why: "A specific time reduces reply friction.",
-      },
-    ],
-    fmri_output: {
-      segments: 12,
-      voxel_count: 60784,
-      global_mean_abs: 0.147,
-      global_peak_abs: 1.234,
-      temporal_trace: [0.168, 0.201, 0.182, 0.149, 0.131, 0.142, 0.158, 0.174, 0.166, 0.138, 0.121, 0.116],
-      temporal_peaks: [0.812, 1.234, 1.088, 0.724, 0.641, 0.702, 0.812, 0.918, 0.864, 0.68, 0.59, 0.545],
-      top_voxel_indices: [8421, 12044, 31207, 40918, 52114, 58002],
-      top_voxel_values: [0.284, 0.241, 0.218, 0.204, 0.189, 0.176],
-    },
-  };
 }

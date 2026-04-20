@@ -17,6 +17,7 @@ const DEFAULT_IMAGE_FALLBACK: &str = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const DEFAULT_OPENROUTER_MODEL: &str = "anthropic/claude-sonnet-4.6";
 const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
 const LOCAL_CONTAINER_NAME: &str = "pitchcheck-tribe-service";
+const LOCAL_MODELS_VOLUME: &str = "pitchcheck_tribe_models";
 const LOCAL_SERVICE_URL: &str = "http://127.0.0.1:8090";
 const APP_ENV_FILENAME: &str = "runtime.env";
 const SERVICE_ENV_FILENAME: &str = "service.env";
@@ -435,7 +436,7 @@ async fn score_pitch(
             .client
             .post(format!("{service_url}/score"))
             .json(&request)
-            .timeout(Duration::from_secs(240))
+            .timeout(Duration::from_secs(900))
             .send()
             .await?;
         let http_status = response.status();
@@ -1124,6 +1125,7 @@ async fn connect_local(
 
     let service_env = write_service_env_file(app, &app_config_from_runtime(config))?;
     let service_env_string = service_env.to_string_lossy().to_string();
+    let model_volume = format!("{LOCAL_MODELS_VOLUME}:/models");
     let container_id = docker_output(&[
         "run",
         "-d",
@@ -1134,10 +1136,40 @@ async fn connect_local(
         LOCAL_CONTAINER_NAME,
         "-p",
         "127.0.0.1:8090:8090",
+        "-v",
+        &model_volume,
         "--env-file",
         &service_env_string,
         "-e",
         "TRIBE_DEVICE=cuda",
+        "-e",
+        "TRIBE_TEXT_DEVICE=auto",
+        "-e",
+        "TRIBE_TEXT_BATCH_SIZE=auto",
+        "-e",
+        "TRIBE_TEXT_INPUT_MODE=direct",
+        "-e",
+        "TRIBE_CACHE_DIR=/models",
+        "-e",
+        "HF_HOME=/models/huggingface",
+        "-e",
+        "HUGGINGFACE_HUB_CACHE=/models/huggingface/hub",
+        "-e",
+        "XDG_CACHE_HOME=/models/.cache",
+        "-e",
+        "TRIBE_SCORE_TIMEOUT_SECONDS=900",
+        "-e",
+        "TRIBE_MAX_SCORE_CONCURRENCY=1",
+        "-e",
+        "TRIBE_OOM_FALLBACK_TEXT_DEVICE=accelerate,cpu",
+        "-e",
+        "TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB=auto",
+        "-e",
+        "TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB=32",
+        "-e",
+        "TRIBE_ACCELERATE_OFFLOAD_FOLDER=/models/offload",
+        "-e",
+        "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True",
         "-e",
         "TRIBE_ALLOW_MOCK=0",
         image,
@@ -1423,8 +1455,16 @@ mkdir -p /models /models/huggingface/hub /models/.cache
 export PYTHONUNBUFFERED=1
 export TRIBE_MODEL_ID=facebook/tribev2
 export TRIBE_DEVICE=cuda
+export TRIBE_TEXT_DEVICE=auto
+export TRIBE_TEXT_BATCH_SIZE=auto
+export TRIBE_TEXT_INPUT_MODE=direct
 export TRIBE_CACHE_DIR=/models
 export TRIBE_ALLOW_MOCK=0
+export TRIBE_MAX_SCORE_CONCURRENCY=1
+export TRIBE_OOM_FALLBACK_TEXT_DEVICE=accelerate,cpu
+export TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB=auto
+export TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB=32
+export TRIBE_ACCELERATE_OFFLOAD_FOLDER=/models/offload
 export HF_HOME=/models/huggingface
 export HUGGINGFACE_HUB_CACHE=/models/huggingface/hub
 export XDG_CACHE_HOME=/models/.cache
@@ -1447,8 +1487,19 @@ async fn create_vast_instance(
 ) -> RuntimeResult<u64> {
     let mut env = Map::new();
     env.insert("TRIBE_DEVICE".to_string(), json!("cuda"));
+    env.insert("TRIBE_TEXT_DEVICE".to_string(), json!("auto"));
+    env.insert("TRIBE_TEXT_BATCH_SIZE".to_string(), json!("auto"));
+    env.insert("TRIBE_TEXT_INPUT_MODE".to_string(), json!("direct"));
     env.insert("TRIBE_ALLOW_MOCK".to_string(), json!("0"));
     env.insert("TRIBE_CACHE_DIR".to_string(), json!("/models"));
+    env.insert("TRIBE_MAX_SCORE_CONCURRENCY".to_string(), json!("1"));
+    env.insert("TRIBE_OOM_FALLBACK_TEXT_DEVICE".to_string(), json!("accelerate,cpu"));
+    env.insert("TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB".to_string(), json!("auto"));
+    env.insert("TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB".to_string(), json!("32"));
+    env.insert(
+        "TRIBE_ACCELERATE_OFFLOAD_FOLDER".to_string(),
+        json!("/models/offload"),
+    );
     if let Some(open_router_key) = config
         .open_router_api_key
         .as_deref()

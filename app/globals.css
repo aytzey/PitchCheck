@@ -176,18 +176,6 @@ textarea {
   -webkit-app-region: no-drag;
 }
 
-.pc-traffic {
-  display: flex;
-  gap: 8px;
-}
-
-.pc-traffic span {
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
-  height: 12px;
-  width: 12px;
-}
-
 .pc-brand {
   align-items: center;
   display: flex;

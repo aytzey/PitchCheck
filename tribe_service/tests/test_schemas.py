@@ -20,6 +20,10 @@ def test_request_short_persona():
     with pytest.raises(Exception):
         PitchScoreRequest(message="This is a valid pitch message", persona="CTO")
 
+def test_request_strips_before_length_validation():
+    with pytest.raises(Exception):
+        PitchScoreRequest(message="          ", persona="CTO at startup")
+
 def test_request_invalid_platform_defaults():
     req = PitchScoreRequest(message="Valid message here", persona="Valid persona", platform="invalid")
     assert req.platform == "general"

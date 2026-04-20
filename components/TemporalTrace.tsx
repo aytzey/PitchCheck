@@ -11,6 +11,7 @@ export default function TemporalTrace({ fmri }: Props) {
 
   const maxVal = Math.max(...temporal_trace, 0.001);
   const peakIdx = temporal_trace.indexOf(Math.max(...temporal_trace));
+  const isSynthetic = fmri.temporal_trace_basis === "synthetic_word_order";
 
   // Segment labels: opener, body, close
   function segmentLabel(i: number, total: number): string {
@@ -23,11 +24,12 @@ export default function TemporalTrace({ fmri }: Props) {
   return (
     <div className="panel p-6">
       <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-1">
-        Neural Engagement Timeline
+        {isSynthetic ? "Predicted Engagement Trace" : "Predicted Engagement Timeline"}
       </h3>
       <p className="text-xs text-[var(--color-faint)] mb-4">
         {segments} temporal segments analyzed on {voxel_count.toLocaleString()} cortical vertices
         &mdash; peak at segment {peakIdx + 1}/{segments} ({segmentLabel(peakIdx, segments)})
+        {isSynthetic ? " (Direct text mode uses ordered text segments, not elapsed seconds)" : ""}
       </p>
 
       {/* SVG Bar Chart */}
@@ -100,11 +102,11 @@ export default function TemporalTrace({ fmri }: Props) {
       <div className="grid grid-cols-3 gap-3 mt-4 text-center">
         <div className="rounded-lg border border-[var(--color-line)] p-2">
           <p className="text-lg font-bold text-[var(--color-ink)]">{fmri.global_mean_abs.toFixed(3)}</p>
-          <p className="text-[10px] text-[var(--color-faint)]">Mean Activation</p>
+          <p className="text-[10px] text-[var(--color-faint)]">Mean Response</p>
         </div>
         <div className="rounded-lg border border-[var(--color-line)] p-2">
           <p className="text-lg font-bold text-[var(--color-ink)]">{fmri.global_peak_abs.toFixed(3)}</p>
-          <p className="text-[10px] text-[var(--color-faint)]">Peak Activation</p>
+          <p className="text-[10px] text-[var(--color-faint)]">Peak Response</p>
         </div>
         <div className="rounded-lg border border-[var(--color-line)] p-2">
           <p className="text-lg font-bold text-[var(--color-ink)]">{(fmri.global_peak_abs / Math.max(fmri.global_mean_abs, 0.001)).toFixed(1)}x</p>

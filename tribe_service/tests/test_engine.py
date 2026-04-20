@@ -5,12 +5,15 @@ import pytest
 os.environ["TRIBE_ALLOW_MOCK"] = "1"
 
 from tribe_service.engine import (
+    _MockModel,
     band_score,
     clamp,
     derive_persuasion_signals,
     extract_features,
+    last_score_metrics,
     score_text,
     safe_ratio,
+    summarize_fmri_output,
     weighted_signal,
     FEATURE_KEYS,
     PERSUASION_SIGNAL_KEYS,
@@ -60,6 +63,24 @@ class TestScoreText:
         result = score_text("Another test pitch message here")
         assert result.dtype == np.float32
 
+    def test_failed_score_metrics_do_not_expose_exception_text(self, monkeypatch):
+        class FailingModel(_MockModel):
+            def predict(self, events):
+                raise RuntimeError("secret customer pitch phrase")
+
+        monkeypatch.setattr("tribe_service.engine.get_model", lambda: FailingModel())
+
+        with pytest.raises(RuntimeError):
+            score_text("This customer pitch contains sensitive launch copy")
+
+        metrics = last_score_metrics()
+        assert metrics["ok"] is False
+        assert "secret customer pitch phrase" not in repr(metrics)
+        assert "sensitive launch copy" not in repr(metrics)
+        assert metrics["failed_attempts"][0]["error_type"] == "RuntimeError"
+        assert metrics["failed_attempts"][0]["error_code"] == "runtime_error"
+        assert "error" not in metrics["failed_attempts"][0]
+
 
 class TestExtractFeatures:
     def test_returns_all_keys(self):
@@ -79,6 +100,21 @@ class TestExtractFeatures:
         features = extract_features(preds)
         assert len(features) == 10
         assert features["temporal_std"] == 0.0
+
+    def test_summarize_fmri_output_labels_direct_trace_as_synthetic(self):
+        preds = np.random.RandomState(42).rand(5, 20).astype(np.float32)
+        summary = summarize_fmri_output(preds, text_input_mode="direct")
+
+        assert summary["temporal_trace_basis"] == "synthetic_word_order"
+        assert summary["temporal_segment_label"] == "synthetic word-order segment"
+        assert "not real elapsed seconds" in summary["temporal_trace_note"]
+
+    def test_summarize_fmri_output_labels_tts_trace_as_real_time(self):
+        preds = np.random.RandomState(42).rand(5, 20).astype(np.float32)
+        summary = summarize_fmri_output(preds, text_input_mode="tts")
+
+        assert summary["temporal_trace_basis"] == "real_time_seconds"
+        assert summary["temporal_segment_label"] == "second"
 
 
 class TestDerivePersuasionSignals:
@@ -102,3 +138,10 @@ class TestDerivePersuasionSignals:
         assert len(signals) == 6
         for val in signals.values():
             assert 0.0 <= val <= 100.0
+
+    def test_extract_features_sanitizes_nan_and_1d_predictions(self):
+        features = extract_features(np.array([1.0, np.nan, np.inf], dtype=np.float32))
+
+        assert set(features.keys()) == set(FEATURE_KEYS)
+        assert features["global_mean_abs"] >= 0.0
+        assert features["temporal_std"] == 0.0

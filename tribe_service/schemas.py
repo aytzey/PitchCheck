@@ -1,14 +1,19 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 PLATFORM_VALUES = ("email", "linkedin", "cold-call-script", "landing-page", "ad-copy", "general")
 
 class PitchScoreRequest(BaseModel):
-    message: str = Field(..., min_length=10)
-    persona: str = Field(..., min_length=5)
+    message: str = Field(..., min_length=10, max_length=5000)
+    persona: str = Field(..., min_length=5, max_length=1500)
     platform: str = Field(default="general")
+
+    @field_validator("message", "persona", mode="before")
+    @classmethod
+    def strip_text_fields(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
     @field_validator("platform")
     @classmethod
@@ -45,6 +50,9 @@ class FmriOutput(BaseModel):
     temporal_peaks: list[float]     # per-segment peak activation
     top_voxel_indices: list[int]    # top 6 most-activated voxel indices
     top_voxel_values: list[float]   # their mean activation values
+    temporal_trace_basis: Literal["real_time_seconds", "synthetic_word_order"] = "real_time_seconds"
+    temporal_segment_label: str = "second"
+    temporal_trace_note: str = ""
 
 class PitchScoreReport(BaseModel):
     persuasion_score: float = Field(..., ge=0, le=100)
@@ -57,5 +65,7 @@ class PitchScoreReport(BaseModel):
     rewrite_suggestions: list[RewriteSuggestion]
     persona_summary: str
     fmri_output: FmriOutput | None = None
+    persuasion_evidence: dict[str, Any] | None = None
+    robustness: dict[str, Any] | None = None
     platform: str = "general"
     scored_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

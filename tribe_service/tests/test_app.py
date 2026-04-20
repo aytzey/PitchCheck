@@ -22,6 +22,9 @@ class TestHealth:
         data = res.json()
         assert "model_id" in data
         assert "device" in data
+        assert "runtime" in data
+        assert "configured_oom_fallback_text_devices" in data["runtime"]
+        assert "last_score" in data["runtime"]
         assert "openrouter_enabled" in data
 
 
@@ -42,6 +45,12 @@ class TestScore:
         assert isinstance(report["strengths"], list)
         assert isinstance(report["risks"], list)
         assert isinstance(report["rewrite_suggestions"], list)
+        assert isinstance(report["persuasion_evidence"], dict)
+        assert isinstance(report["robustness"], dict)
+        assert 0 <= report["robustness"]["confidence"] <= 1
+        assert isinstance(report["robustness"]["neuro_axes"], dict)
+        assert "self_value" in report["robustness"]["neuro_axes"]
+        assert isinstance(report["robustness"]["scientific_caveats"], list)
         assert report["platform"] == "general"
 
     def test_with_platform(self):

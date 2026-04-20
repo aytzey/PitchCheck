@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=ghcr.io/aytzey/pitchcheck-tribe:latest
+FROM ${BASE_IMAGE}
+
+COPY tribe_service /app/tribe_service
+
+RUN python -m pip install --no-cache-dir "accelerate>=1.11"
+
+RUN python /app/tribe_service/patch_tribev2_whisperx.py || true

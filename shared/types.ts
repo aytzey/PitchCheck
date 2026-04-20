@@ -41,6 +41,51 @@ export interface RewriteSuggestion {
   why: string;           // Explanation
 }
 
+// Deterministic content-level persuasion audit used to calibrate LLM output
+export interface PersuasionEvidence {
+  overall_text_score: number;
+  feature_scores: Record<string, number>;
+  detected_strategies: string[];
+  missing_elements: string[];
+  warnings: string[];
+  prompt_injection_risk: number;
+  readability: Record<string, number>;
+  matched_persona_terms: string[];
+  strategy_counts?: Record<string, number>;
+  platform?: Platform | string;
+  research_basis?: string[];
+}
+
+export interface NeuroAxisReport {
+  label: string;
+  score: number;
+  weight: number;
+  contribution: number;
+  analogue: string;
+  evidence: string[];
+  caveat: string;
+  unsupported_by_text?: boolean;
+}
+
+// Robustness/calibration metadata for the final persuasion score
+export interface RobustnessReport {
+  neural_prior_score?: number;
+  neural_score: number;
+  text_score: number;
+  evidence_score: number;
+  llm_score: number | null;
+  final_score: number;
+  confidence: number;
+  score_delta: number | null;
+  prompt_injection_risk: number;
+  guardrails_applied: string[];
+  warnings: string[];
+  neuro_axes?: Record<string, NeuroAxisReport>;
+  confidence_reasons?: string[];
+  scientific_caveats?: string[];
+  calibration_basis: string;
+}
+
 // Full score report
 export interface PitchScoreReport {
   persuasion_score: number;        // 0-100 overall score
@@ -53,6 +98,8 @@ export interface PitchScoreReport {
   rewrite_suggestions: RewriteSuggestion[]; // 2-3 suggestions
   persona_summary: string;          // LLM's understanding of the persona
   fmri_output?: FmriOutput | null;  // fMRI summary from TRIBE
+  persuasion_evidence?: PersuasionEvidence | null; // Deterministic text evidence audit
+  robustness?: RobustnessReport | null; // Score calibration + guardrail metadata
   platform: Platform;
   scored_at: string;                // ISO timestamp
 }
@@ -67,6 +114,9 @@ export interface FmriOutput {
   temporal_peaks: number[];     // per-segment peak activation
   top_voxel_indices: number[];  // top 6 most-activated voxel indices
   top_voxel_values: number[];   // their mean activation values
+  temporal_trace_basis?: "real_time_seconds" | "synthetic_word_order";
+  temporal_segment_label?: string;
+  temporal_trace_note?: string;
 }
 
 // Type guard

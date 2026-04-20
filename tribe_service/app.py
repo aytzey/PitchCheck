@@ -24,9 +24,11 @@ from tribe_service.engine import (
     derive_persuasion_signals,
     summarize_fmri_output,
     is_model_loaded,
+    runtime_config,
     PERSUASION_SIGNAL_LABELS,
     TRIBE_DEVICE,
     TRIBE_MODEL_ID,
+    TRIBE_TEXT_INPUT_MODE,
 )
 from tribe_service.llm_layer import (
     interpret_persuasion,
@@ -35,9 +37,11 @@ from tribe_service.llm_layer import (
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-TRIBE_SCORE_TIMEOUT_SECONDS = float(os.getenv("TRIBE_SCORE_TIMEOUT_SECONDS", "110"))
+TRIBE_SCORE_TIMEOUT_SECONDS = float(os.getenv("TRIBE_SCORE_TIMEOUT_SECONDS", "900"))
+TRIBE_MAX_SCORE_CONCURRENCY = max(1, int(os.getenv("TRIBE_MAX_SCORE_CONCURRENCY", "1")))
 
 app = FastAPI(title="PitchScore TRIBE Service", docs_url="/docs", redoc_url=None)
+_score_lock = asyncio.Semaphore(TRIBE_MAX_SCORE_CONCURRENCY)
 
 # CORS
 app.add_middleware(
@@ -60,6 +64,8 @@ async def health():
         "model_id": TRIBE_MODEL_ID,
         "device": TRIBE_DEVICE,
         "model_loaded": is_model_loaded(),
+        "runtime": runtime_config(),
+        "max_score_concurrency": TRIBE_MAX_SCORE_CONCURRENCY,
         "openrouter_enabled": OPENROUTER_ENABLED,
     }
 
@@ -69,14 +75,18 @@ async def score_pitch(request: PitchScoreRequest):
     """Score a sales pitch for persuasion effectiveness against a target persona."""
     try:
         # 1. Run TRIBE text scoring
-        predictions = await asyncio.wait_for(
-            run_in_threadpool(score_text, request.message),
-            timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
-        )
+        async with _score_lock:
+            predictions = await asyncio.wait_for(
+                run_in_threadpool(score_text, request.message),
+                timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
+            )
 
         # 2. Extract raw features + fMRI summary
         raw_features = extract_features(predictions)
-        fmri_data = summarize_fmri_output(predictions)
+        fmri_data = summarize_fmri_output(
+            predictions,
+            text_input_mode=TRIBE_TEXT_INPUT_MODE,
+        )
 
         # 3. Derive persuasion signals
         neural_signals = derive_persuasion_signals(raw_features)
@@ -133,6 +143,8 @@ async def score_pitch(request: PitchScoreRequest):
             rewrite_suggestions=rewrite_suggestions,
             persona_summary=llm_result.get("persona_summary", request.persona),
             fmri_output=FmriOutput(**fmri_data),
+            persuasion_evidence=llm_result.get("persuasion_evidence"),
+            robustness=llm_result.get("robustness"),
             platform=request.platform,
             scored_at=datetime.now(timezone.utc).isoformat(),
         )
@@ -145,9 +157,12 @@ async def score_pitch(request: PitchScoreRequest):
             status_code=504,
             detail="Scoring timed out while running TRIBE. Try a shorter message or reconnect the runtime.",
         )
-    except Exception as exc:
+    except Exception:
         LOGGER.exception("Scoring failed")
-        raise HTTPException(status_code=500, detail=f"Scoring failed: {str(exc)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Scoring failed while running TRIBE. Check service logs for the internal error code.",
+        )
 
 
 @app.on_event("startup")

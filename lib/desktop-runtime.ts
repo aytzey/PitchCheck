@@ -31,10 +31,16 @@ export interface DesktopRuntimeStatus {
 
 export interface DesktopRuntimeConfig {
   vastApiKey?: string;
+  openRouterApiKey?: string;
+  openRouterModel?: string;
   image?: string;
   minGpuRamGb?: number;
   maxHourlyPrice?: number;
   preferInterruptible?: boolean;
+}
+
+export interface DesktopAppConfig extends DesktopRuntimeConfig {
+  configPath?: string;
 }
 
 export interface SetupStep {
@@ -108,12 +114,34 @@ export async function runSetupStep(
   return invokeDesktop<SetupActionResult>("run_setup_step", { key, image });
 }
 
+export async function getDesktopAppConfig(): Promise<DesktopAppConfig> {
+  return invokeDesktop<DesktopAppConfig>("get_app_config");
+}
+
+export async function saveDesktopAppConfig(
+  config: DesktopAppConfig,
+): Promise<DesktopAppConfig> {
+  return invokeDesktop<DesktopAppConfig>("save_app_config", { config });
+}
+
 export async function scorePitchOnDesktop(
   request: { message: string; persona: string; platform: string },
 ): Promise<{ report?: unknown; error?: string }> {
   return invokeDesktop<{ report?: unknown; error?: string }>("score_pitch", {
     request,
   });
+}
+
+export async function refinePitchOnDesktop(request: {
+  message: string;
+  persona: string;
+  platform: string;
+  suggestions: string[];
+}): Promise<{ refinedMessage?: string; model?: string; error?: string }> {
+  return invokeDesktop<{ refinedMessage?: string; model?: string; error?: string }>(
+    "refine_pitch",
+    { request },
+  );
 }
 
 export async function checkDesktopTribeHealth(): Promise<unknown> {

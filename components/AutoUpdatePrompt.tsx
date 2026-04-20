@@ -63,35 +63,33 @@ export default function AutoUpdatePrompt() {
   }
 
   return (
-    <section className="mb-6 rounded-lg border border-[var(--color-pitch)] bg-[var(--color-pitch-faint)] p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--color-pitch)]">
-            Update available
-          </p>
-          <h2 className="text-base font-bold text-[var(--color-ink)]">
-            PitchCheck {update.version}
-          </h2>
-          {message && (
-            <p className="mt-1 text-sm text-[var(--color-muted)]">{message}</p>
-          )}
+    <section className="pc-update-overlay" role="dialog" aria-modal="true" aria-label="Update available">
+      <div className="pc-update-card">
+        <i className="pc-corner tl" />
+        <i className="pc-corner tr" />
+        <i className="pc-corner bl" />
+        <i className="pc-corner br" />
+        <div className="pc-update-head">
+          <span className="led warn pulse" />
+          <span className="label">Update available</span>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={installUpdate}
-            disabled={installing}
-            className="rounded-lg bg-[var(--color-pitch)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-pitch-light)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {installing ? "Installing..." : "Install and restart"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            disabled={installing}
-            className="rounded-lg border border-[var(--color-line)] px-4 py-2 text-sm font-semibold text-[var(--color-ink)] transition-colors hover:border-[var(--color-pitch)] hover:text-[var(--color-pitch)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
+        <h2>PitchCheck {update.version} is ready to install.</h2>
+        <p className="mono">
+          Signed desktop update. The app will restart after installation.
+        </p>
+        {update.body && (
+          <div className="pc-update-notes">
+            <span className="label">Release notes</span>
+            <p>{update.body.slice(0, 280)}</p>
+          </div>
+        )}
+        {message && <p className="pc-update-message mono">{message}</p>}
+        <div className="pc-update-actions">
+          <button type="button" className="pc-button ghost" onClick={() => setDismissed(true)} disabled={installing}>
             Later
+          </button>
+          <button type="button" className="pc-button primary" onClick={installUpdate} disabled={installing}>
+            {installing ? "Installing..." : "Install and restart"}
           </button>
         </div>
       </div>

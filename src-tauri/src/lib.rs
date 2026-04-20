@@ -2,6 +2,7 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::{
+    collections::BTreeMap,
     fs,
     path::PathBuf,
     process::Command,
@@ -13,11 +14,19 @@ use thiserror::Error;
 use tokio::time::sleep;
 
 const DEFAULT_IMAGE_FALLBACK: &str = "ghcr.io/aytzey/pitchcheck-tribe:latest";
+const DEFAULT_OPENROUTER_MODEL: &str = "anthropic/claude-sonnet-4.6";
 const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
 const LOCAL_CONTAINER_NAME: &str = "pitchcheck-tribe-service";
 const LOCAL_SERVICE_URL: &str = "http://127.0.0.1:8090";
+const APP_ENV_FILENAME: &str = "runtime.env";
+const SERVICE_ENV_FILENAME: &str = "service.env";
 const TRIBE_PORT: u16 = 8090;
 const VAST_API_BASE: &str = "https://console.vast.ai/api/v0";
+const GHCR_MANIFEST_URL: &str = "https://ghcr.io/v2/aytzey/pitchcheck-tribe/manifests/latest";
+const GHCR_TOKEN_URL: &str =
+    "https://ghcr.io/token?service=ghcr.io&scope=repository:aytzey/pitchcheck-tribe:pull";
+const OCI_MANIFEST_ACCEPT: &str =
+    "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json";
 
 #[derive(Debug, Error)]
 enum RuntimeError {
@@ -87,10 +96,25 @@ impl Default for RuntimeStatus {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeConfig {
     vast_api_key: Option<String>,
+    open_router_api_key: Option<String>,
+    open_router_model: Option<String>,
     image: Option<String>,
     min_gpu_ram_gb: Option<u64>,
     max_hourly_price: Option<f64>,
     prefer_interruptible: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AppConfig {
+    vast_api_key: Option<String>,
+    open_router_api_key: Option<String>,
+    open_router_model: Option<String>,
+    image: Option<String>,
+    min_gpu_ram_gb: Option<u64>,
+    max_hourly_price: Option<f64>,
+    prefer_interruptible: Option<bool>,
+    config_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -98,6 +122,21 @@ pub struct ScoreRequest {
     message: String,
     persona: String,
     platform: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RefineRequest {
+    message: String,
+    persona: String,
+    platform: String,
+    suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefineResponse {
+    refined_message: String,
+    model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -143,16 +182,33 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_app_config,
+            save_app_config,
             get_runtime_status,
             get_setup_status,
             run_setup_step,
             connect_runtime,
             disconnect_runtime,
             check_runtime_health,
-            score_pitch
+            score_pitch,
+            refine_pitch
         ])
         .run(tauri::generate_context!())
         .expect("error while running PitchCheck desktop app");
+}
+
+#[tauri::command]
+async fn get_app_config(app: AppHandle) -> Result<AppConfig, String> {
+    run_command(async move { load_app_config(&app) }).await
+}
+
+#[tauri::command]
+async fn save_app_config(app: AppHandle, config: AppConfig) -> Result<AppConfig, String> {
+    run_command(async move {
+        save_app_config_file(&app, &config)?;
+        load_app_config(&app)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -255,10 +311,11 @@ async fn connect_runtime(
     config: RuntimeConfig,
 ) -> Result<RuntimeStatus, String> {
     run_command(async move {
+        let config = merge_runtime_config(&app, config)?;
         let local_gpu = detect_local_gpu();
         let image = clean_image(config.image.as_deref());
         if local_gpu.available {
-            match connect_local(&state.client, &image, local_gpu.clone()).await {
+            match connect_local(&app, &state.client, &image, local_gpu.clone(), &config).await {
                 Ok(status) => {
                     replace_status(&app, &state, status.clone())?;
                     return Ok(status);
@@ -308,10 +365,18 @@ async fn disconnect_runtime(
                 let instance_id = current.vast_instance_id.ok_or_else(|| {
                     RuntimeError::Message("No Vast instance id is stored.".to_string())
                 })?;
+                let saved = load_app_config(&app)?;
                 let api_key = vast_api_key
                     .as_deref()
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
+                    .or_else(|| {
+                        saved
+                            .vast_api_key
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                    })
                     .ok_or_else(|| {
                         RuntimeError::Message(
                             "Vast API key is required to destroy the remote instance.".to_string(),
@@ -392,6 +457,104 @@ async fn score_pitch(
     .await
 }
 
+#[tauri::command]
+async fn refine_pitch(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    request: RefineRequest,
+) -> Result<RefineResponse, String> {
+    run_command(async move {
+        let config = load_app_config(&app)?;
+        let api_key = config
+            .open_router_api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| {
+                RuntimeError::Message(
+                    "OpenRouter API key is missing. Add it in Settings and save runtime.env."
+                        .to_string(),
+                )
+            })?;
+        let model = config
+            .open_router_model
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(DEFAULT_OPENROUTER_MODEL)
+            .to_string();
+        let suggestions = format_refine_suggestions(&request.suggestions);
+        let prompt = format!(
+            concat!(
+                "Platform: {platform}\n",
+                "Recipient persona:\n{persona}\n\n",
+                "Current message:\n{message}\n\n",
+                "Apply these scoring suggestions:\n{suggestions}\n\n",
+                "Rewrite the message only. Keep the same sender intent, keep it concise, ",
+                "make the CTA specific, preserve the input language exactly, and do not add ",
+                "explanations, markdown, or code fences."
+            ),
+            platform = request.platform.trim(),
+            persona = request.persona.trim(),
+            message = request.message.trim(),
+            suggestions = suggestions,
+        );
+        let response = state
+            .client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .bearer_auth(api_key)
+            .header("HTTP-Referer", "https://github.com/aytzey/PitchCheck")
+            .header("X-Title", "PitchCheck")
+            .json(&json!({
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are PitchCheck's rewrite engine. Return only the rewritten pitch text in the same language as the user's message."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.35
+            }))
+            .timeout(Duration::from_secs(120))
+            .send()
+            .await?;
+        let http_status = response.status();
+        let body = response
+            .json::<Value>()
+            .await
+            .unwrap_or_else(|_| json!({ "error": "Invalid response from OpenRouter" }));
+        if !http_status.is_success() {
+            return Err(RuntimeError::Message(
+                body.get("error")
+                    .and_then(|value| value.get("message").or(Some(value)))
+                    .and_then(Value::as_str)
+                    .or_else(|| body.get("detail").and_then(Value::as_str))
+                    .unwrap_or("OpenRouter refine failed")
+                    .to_string(),
+            ));
+        }
+        let refined_message = body
+            .pointer("/choices/0/message/content")
+            .and_then(Value::as_str)
+            .map(clean_refined_message)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                RuntimeError::Message("OpenRouter returned an empty refinement.".to_string())
+            })?;
+
+        Ok(RefineResponse {
+            refined_message,
+            model,
+        })
+    })
+    .await
+}
+
 async fn run_command<F, T>(future: F) -> Result<T, String>
 where
     F: std::future::Future<Output = RuntimeResult<T>>,
@@ -459,6 +622,227 @@ fn load_status(app: &AppHandle) -> RuntimeResult<RuntimeStatus> {
 fn save_status(app: &AppHandle, status: &RuntimeStatus) -> RuntimeResult<()> {
     fs::write(state_path(app)?, serde_json::to_vec_pretty(status)?)?;
     Ok(())
+}
+
+fn app_env_path(app: &AppHandle) -> RuntimeResult<PathBuf> {
+    let dir = app.path().app_config_dir().map_err(|error| {
+        RuntimeError::Message(format!("Cannot resolve app config dir: {error}"))
+    })?;
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(APP_ENV_FILENAME))
+}
+
+fn service_env_path(app: &AppHandle) -> RuntimeResult<PathBuf> {
+    let dir = app.path().app_config_dir().map_err(|error| {
+        RuntimeError::Message(format!("Cannot resolve app config dir: {error}"))
+    })?;
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(SERVICE_ENV_FILENAME))
+}
+
+fn load_app_config(app: &AppHandle) -> RuntimeResult<AppConfig> {
+    let path = app_env_path(app)?;
+    let values = read_env_file(&path)?;
+    let config = AppConfig {
+        vast_api_key: env_value(&values, "VAST_API_KEY")
+            .or_else(|| std::env::var("VAST_API_KEY").ok()),
+        open_router_api_key: env_value(&values, "OPENROUTER_API_KEY")
+            .or_else(|| std::env::var("OPENROUTER_API_KEY").ok()),
+        open_router_model: env_value(&values, "OPENROUTER_MODEL")
+            .or_else(|| std::env::var("OPENROUTER_MODEL").ok())
+            .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
+        image: env_value(&values, "PITCHCHECK_TRIBE_IMAGE")
+            .or_else(|| std::env::var("PITCHCHECK_TRIBE_IMAGE").ok())
+            .or_else(|| Some(DEFAULT_IMAGE_FALLBACK.to_string())),
+        min_gpu_ram_gb: env_value(&values, "PITCHCHECK_MIN_GPU_RAM_GB")
+            .and_then(|value| value.parse::<u64>().ok()),
+        max_hourly_price: env_value(&values, "PITCHCHECK_MAX_HOURLY_PRICE")
+            .and_then(|value| value.parse::<f64>().ok()),
+        prefer_interruptible: env_value(&values, "PITCHCHECK_PREFER_INTERRUPTIBLE")
+            .and_then(|value| parse_bool(&value)),
+        config_path: Some(path.to_string_lossy().to_string()),
+    };
+    Ok(config)
+}
+
+fn save_app_config_file(app: &AppHandle, config: &AppConfig) -> RuntimeResult<()> {
+    let path = app_env_path(app)?;
+    let open_router_model = config
+        .open_router_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_OPENROUTER_MODEL);
+    let image = config
+        .image
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_IMAGE_FALLBACK);
+
+    let content = format!(
+        concat!(
+            "# PitchCheck machine-local runtime settings\n",
+            "# This file is generated by the desktop app and is not part of the repository.\n",
+            "VAST_API_KEY={}\n",
+            "OPENROUTER_API_KEY={}\n",
+            "OPENROUTER_MODEL={}\n",
+            "PITCHCHECK_TRIBE_IMAGE={}\n",
+            "PITCHCHECK_MIN_GPU_RAM_GB={}\n",
+            "PITCHCHECK_MAX_HOURLY_PRICE={}\n",
+            "PITCHCHECK_PREFER_INTERRUPTIBLE={}\n",
+        ),
+        env_safe(config.vast_api_key.as_deref().unwrap_or("")),
+        env_safe(config.open_router_api_key.as_deref().unwrap_or("")),
+        env_safe(open_router_model),
+        env_safe(image),
+        config.min_gpu_ram_gb.unwrap_or(16),
+        config.max_hourly_price.unwrap_or(0.45),
+        config.prefer_interruptible.unwrap_or(true),
+    );
+    fs::write(&path, content)?;
+    write_service_env_file(app, config)?;
+    Ok(())
+}
+
+fn write_service_env_file(app: &AppHandle, config: &AppConfig) -> RuntimeResult<PathBuf> {
+    let path = service_env_path(app)?;
+    let model = config
+        .open_router_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_OPENROUTER_MODEL);
+    let content = format!(
+        concat!(
+            "# PitchCheck TRIBE service environment\n",
+            "OPENROUTER_API_KEY={}\n",
+            "OPENROUTER_MODEL={}\n",
+        ),
+        env_safe(config.open_router_api_key.as_deref().unwrap_or("")),
+        env_safe(model),
+    );
+    fs::write(&path, content)?;
+    Ok(path)
+}
+
+fn read_env_file(path: &PathBuf) -> RuntimeResult<BTreeMap<String, String>> {
+    let mut values = BTreeMap::new();
+    if !path.exists() {
+        return Ok(values);
+    }
+    for line in fs::read_to_string(path)?.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once('=') {
+            values.insert(key.trim().to_string(), unquote_env_value(value.trim()));
+        }
+    }
+    Ok(values)
+}
+
+fn env_value(values: &BTreeMap<String, String>, key: &str) -> Option<String> {
+    values
+        .get(key)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn env_safe(value: &str) -> String {
+    value.replace(['\r', '\n'], "").trim().to_string()
+}
+
+fn unquote_env_value(value: &str) -> String {
+    value
+        .strip_prefix('"')
+        .and_then(|next| next.strip_suffix('"'))
+        .unwrap_or(value)
+        .to_string()
+}
+
+fn parse_bool(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn format_refine_suggestions(suggestions: &[String]) -> String {
+    if suggestions.is_empty() {
+        return "- Improve clarity, proof, persona fit, and reply friction.".to_string();
+    }
+    suggestions
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .take(6)
+        .enumerate()
+        .map(|(index, value)| format!("{}. {}", index + 1, value))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn clean_refined_message(content: &str) -> String {
+    let mut value = content.trim();
+    if let Some(stripped) = value.strip_prefix("```") {
+        value = if let Some(line_break) = stripped.find('\n') {
+            &stripped[line_break + 1..]
+        } else {
+            stripped
+        };
+        if let Some(end) = value.rfind("```") {
+            value = &value[..end];
+        }
+    }
+    value.trim().to_string()
+}
+
+fn merge_runtime_config(app: &AppHandle, config: RuntimeConfig) -> RuntimeResult<RuntimeConfig> {
+    let saved = load_app_config(app)?;
+    Ok(RuntimeConfig {
+        vast_api_key: first_non_empty(config.vast_api_key, saved.vast_api_key),
+        open_router_api_key: first_non_empty(config.open_router_api_key, saved.open_router_api_key),
+        open_router_model: first_non_empty(config.open_router_model, saved.open_router_model)
+            .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
+        image: first_non_empty(config.image, saved.image)
+            .or_else(|| Some(DEFAULT_IMAGE_FALLBACK.to_string())),
+        min_gpu_ram_gb: config.min_gpu_ram_gb.or(saved.min_gpu_ram_gb).or(Some(16)),
+        max_hourly_price: config
+            .max_hourly_price
+            .or(saved.max_hourly_price)
+            .or(Some(0.45)),
+        prefer_interruptible: config
+            .prefer_interruptible
+            .or(saved.prefer_interruptible)
+            .or(Some(true)),
+    })
+}
+
+fn app_config_from_runtime(config: &RuntimeConfig) -> AppConfig {
+    AppConfig {
+        vast_api_key: config.vast_api_key.clone(),
+        open_router_api_key: config.open_router_api_key.clone(),
+        open_router_model: config.open_router_model.clone(),
+        image: config.image.clone(),
+        min_gpu_ram_gb: config.min_gpu_ram_gb,
+        max_hourly_price: config.max_hourly_price,
+        prefer_interruptible: config.prefer_interruptible,
+        config_path: None,
+    }
+}
+
+fn first_non_empty(primary: Option<String>, fallback: Option<String>) -> Option<String> {
+    primary
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            fallback
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
 }
 
 fn detect_local_gpu() -> LocalGpuInfo {
@@ -639,7 +1023,7 @@ async fn build_setup_status(client: &Client, image: &str) -> SetupStatus {
             key: "vast_account".to_string(),
             title: "Vast.ai fallback".to_string(),
             status: "optional".to_string(),
-            detail: "Add a Vast API key in the runtime panel when no local GPU is available. The app will search verified offers and pick the cheapest match.".to_string(),
+            detail: "Save a Vast API key in Settings. The app stores it in this PC's runtime.env and uses it when no local GPU is available.".to_string(),
             action_label: Some("Open Vast account".to_string()),
             url: Some("https://cloud.vast.ai/account/".to_string()),
         },
@@ -709,9 +1093,11 @@ fn open_install_url(url: &str) -> RuntimeResult<()> {
 }
 
 async fn connect_local(
+    app: &AppHandle,
     client: &Client,
     image: &str,
     local_gpu: LocalGpuInfo,
+    config: &RuntimeConfig,
 ) -> RuntimeResult<RuntimeStatus> {
     if local_gpu.vendor.as_deref() != Some("nvidia") {
         return Err(RuntimeError::Message(
@@ -726,57 +1112,48 @@ async fn connect_local(
         "--filter",
         &format!("name=^/{LOCAL_CONTAINER_NAME}$"),
     ])?;
-    if existing.trim().is_empty() {
+    if !existing.trim().is_empty() {
         let _ = Command::new("docker")
             .args(["rm", "-f", LOCAL_CONTAINER_NAME])
             .output();
-
-        if docker_output(&["image", "inspect", image]).is_err() {
-            docker_output(&["pull", image])?;
-        }
-
-        let container_id = docker_output(&[
-            "run",
-            "-d",
-            "--rm",
-            "--gpus",
-            "all",
-            "--name",
-            LOCAL_CONTAINER_NAME,
-            "-p",
-            "127.0.0.1:8090:8090",
-            "-e",
-            "TRIBE_DEVICE=cuda",
-            "-e",
-            "TRIBE_ALLOW_MOCK=0",
-            image,
-        ])?;
-        wait_for_health(client, LOCAL_SERVICE_URL, Duration::from_secs(900)).await?;
-        Ok(RuntimeStatus {
-            mode: "local".to_string(),
-            connected: true,
-            service_url: Some(LOCAL_SERVICE_URL.to_string()),
-            local_gpu,
-            container_id: Some(container_id.trim().to_string()),
-            vast_instance_id: None,
-            offer: None,
-            image: image.to_string(),
-            last_error: None,
-        })
-    } else {
-        wait_for_health(client, LOCAL_SERVICE_URL, Duration::from_secs(120)).await?;
-        Ok(RuntimeStatus {
-            mode: "local".to_string(),
-            connected: true,
-            service_url: Some(LOCAL_SERVICE_URL.to_string()),
-            local_gpu,
-            container_id: Some(existing.trim().to_string()),
-            vast_instance_id: None,
-            offer: None,
-            image: image.to_string(),
-            last_error: None,
-        })
     }
+
+    if docker_output(&["image", "inspect", image]).is_err() {
+        docker_output(&["pull", image])?;
+    }
+
+    let service_env = write_service_env_file(app, &app_config_from_runtime(config))?;
+    let service_env_string = service_env.to_string_lossy().to_string();
+    let container_id = docker_output(&[
+        "run",
+        "-d",
+        "--rm",
+        "--gpus",
+        "all",
+        "--name",
+        LOCAL_CONTAINER_NAME,
+        "-p",
+        "127.0.0.1:8090:8090",
+        "--env-file",
+        &service_env_string,
+        "-e",
+        "TRIBE_DEVICE=cuda",
+        "-e",
+        "TRIBE_ALLOW_MOCK=0",
+        image,
+    ])?;
+    wait_for_health(client, LOCAL_SERVICE_URL, Duration::from_secs(900)).await?;
+    Ok(RuntimeStatus {
+        mode: "local".to_string(),
+        connected: true,
+        service_url: Some(LOCAL_SERVICE_URL.to_string()),
+        local_gpu,
+        container_id: Some(container_id.trim().to_string()),
+        vast_instance_id: None,
+        offer: None,
+        image: image.to_string(),
+        last_error: None,
+    })
 }
 
 async fn stop_local_container() -> RuntimeResult<()> {
@@ -857,22 +1234,24 @@ async fn connect_vast(
                     last_error = Some(error.to_string());
                     continue;
                 }
-                let mut status =
-                    wait_for_vast_runtime(client, api_key, instance_id, &vast_image, offer)
-                        .await
-                        .unwrap_or_else(|error| RuntimeStatus {
-                            mode: "vast".to_string(),
-                            connected: false,
-                            service_url: None,
-                            local_gpu: local_gpu.clone(),
-                            container_id: None,
-                            vast_instance_id: Some(instance_id),
-                            offer: Some(offer.clone()),
-                            image: vast_image.clone(),
-                            last_error: Some(error.to_string()),
+                match wait_for_vast_runtime(client, api_key, instance_id, &vast_image, offer).await
+                {
+                    Ok(mut status) => {
+                        status.local_gpu = local_gpu;
+                        return Ok(status);
+                    }
+                    Err(error) => {
+                        let destroy_result =
+                            destroy_vast_instance(client, api_key, instance_id).await;
+                        last_error = Some(match destroy_result {
+                            Ok(()) => error.to_string(),
+                            Err(destroy_error) => {
+                                format!("{error}; cleanup failed for instance {instance_id}: {destroy_error}")
+                            }
                         });
-                status.local_gpu = local_gpu;
-                return Ok(status);
+                        continue;
+                    }
+                }
             }
             Err(error) => {
                 last_error = Some(error.to_string());
@@ -972,17 +1351,50 @@ async fn select_vast_image(client: &Client, requested_image: &str) -> String {
 }
 
 async fn default_ghcr_image_is_public(client: &Client) -> bool {
-    client
-        .get("https://ghcr.io/v2/aytzey/pitchcheck-tribe/manifests/latest")
-        .header(
-            "Accept",
-            "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json",
-        )
+    if ghcr_manifest_status(client, None)
+        .await
+        .map(|status| status.is_success())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    let Some(token) = ghcr_pull_token(client).await else {
+        return false;
+    };
+    ghcr_manifest_status(client, Some(&token))
+        .await
+        .map(|status| status.is_success())
+        .unwrap_or(false)
+}
+
+async fn ghcr_manifest_status(client: &Client, token: Option<&str>) -> Option<StatusCode> {
+    let mut request = client
+        .get(GHCR_MANIFEST_URL)
+        .header("Accept", OCI_MANIFEST_ACCEPT)
+        .timeout(Duration::from_secs(10));
+    if let Some(token) = token {
+        request = request.bearer_auth(token);
+    }
+    request.send().await.ok().map(|response| response.status())
+}
+
+async fn ghcr_pull_token(client: &Client) -> Option<String> {
+    let response = client
+        .get(GHCR_TOKEN_URL)
         .timeout(Duration::from_secs(10))
         .send()
         .await
-        .map(|response| response.status().is_success())
-        .unwrap_or(false)
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let value = response.json::<Value>().await.ok()?;
+    value
+        .get("token")
+        .or_else(|| value.get("access_token"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 fn prebuilt_onstart_script() -> String {
@@ -1037,6 +1449,23 @@ async fn create_vast_instance(
     env.insert("TRIBE_DEVICE".to_string(), json!("cuda"));
     env.insert("TRIBE_ALLOW_MOCK".to_string(), json!("0"));
     env.insert("TRIBE_CACHE_DIR".to_string(), json!("/models"));
+    if let Some(open_router_key) = config
+        .open_router_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        env.insert("OPENROUTER_API_KEY".to_string(), json!(open_router_key));
+    }
+    env.insert(
+        "OPENROUTER_MODEL".to_string(),
+        json!(config
+            .open_router_model
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(DEFAULT_OPENROUTER_MODEL)),
+    );
     env.insert(
         "OPEN_BUTTON_PORT".to_string(),
         json!(TRIBE_PORT.to_string()),
@@ -1413,6 +1842,30 @@ mod tests {
         assert_eq!(
             service_url_from_instance(&instance, 8090),
             Some("http://203.0.113.5:40123".to_string())
+        );
+    }
+
+    #[test]
+    fn env_helpers_parse_machine_local_runtime_settings() {
+        assert_eq!(parse_bool("true"), Some(true));
+        assert_eq!(parse_bool("0"), Some(false));
+        assert_eq!(parse_bool("maybe"), None);
+        assert_eq!(
+            unquote_env_value("\"anthropic/claude-sonnet-4.6\""),
+            DEFAULT_OPENROUTER_MODEL
+        );
+        assert_eq!(env_safe("  value\nwith\rnewline  "), "valuewithnewline");
+    }
+
+    #[test]
+    fn first_non_empty_prefers_gui_value_then_saved_value() {
+        assert_eq!(
+            first_non_empty(Some("  ".to_string()), Some("saved".to_string())),
+            Some("saved".to_string())
+        );
+        assert_eq!(
+            first_non_empty(Some(" gui ".to_string()), Some("saved".to_string())),
+            Some("gui".to_string())
         );
     }
 }

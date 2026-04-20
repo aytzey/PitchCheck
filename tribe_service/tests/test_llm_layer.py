@@ -210,6 +210,7 @@ class TestPromptIncludesPersonaAndMessage:
         assert SAMPLE_MESSAGE in user_content
         assert SAMPLE_PERSONA in user_content
         assert SAMPLE_PLATFORM in user_content
+        assert "same language as the Pitch Message" in user_content
 
 
 class TestPromptIncludesNeuralSignals:

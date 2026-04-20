@@ -166,7 +166,7 @@ Returns service status.
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `OPENROUTER_API_KEY` | Optional | - | Enables persona-aware LLM interpretation |
-| `OPENROUTER_MODEL` | No | `openai/gpt-4.1-mini` | LLM model |
+| `OPENROUTER_MODEL` | No | `anthropic/claude-sonnet-4.6` | LLM model |
 | `TRIBE_MODEL_ID` | No | `facebook/tribev2` | TRIBE model identifier |
 | `TRIBE_DEVICE` | No | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_ALLOW_MOCK` | No | `0` | Use deterministic mock model for tests |

@@ -9,7 +9,9 @@ from typing import Any
 import httpx
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4.1-mini").strip()
+OPENROUTER_MODEL = os.getenv(
+    "OPENROUTER_MODEL", "anthropic/claude-sonnet-4.6"
+).strip()
 OPENROUTER_API_BASE_URL = os.getenv(
     "OPENROUTER_API_BASE_URL", "https://openrouter.ai/api/v1"
 ).rstrip("/")
@@ -77,7 +79,7 @@ Early segments = opener, middle = body, late = close/CTA."""
 {signals_text}{temporal_section}
 
 ## Instructions
-Analyze this pitch for the target persona. Use the neural signals AND the temporal engagement trace as evidence. Return JSON:
+Analyze this pitch for the target persona. Use the neural signals AND the temporal engagement trace as evidence. Write every user-facing JSON string in the same language as the Pitch Message. Return JSON:
 {{
   "persuasion_score": <0-100 int>,
   "verdict": "<one-line verdict referencing the persona>",

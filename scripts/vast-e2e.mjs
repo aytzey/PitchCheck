@@ -1,8 +1,11 @@
 const API_BASE = "https://console.vast.ai/api/v0";
 const TRIBE_PORT = 8090;
+const DEFAULT_TRIBE_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const BOOTSTRAP_IMAGE =
   process.env.VAST_BOOTSTRAP_IMAGE ||
   "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
+const tribeImage = process.env.VAST_TRIBE_IMAGE || DEFAULT_TRIBE_IMAGE;
+const forceBootstrap = process.env.VAST_FORCE_BOOTSTRAP === "1";
 
 const apiKey = process.env.VAST_API_KEY?.trim();
 if (!apiKey) {
@@ -94,23 +97,30 @@ chmod +x /root/pitchcheck_bootstrap.sh
 nohup /bin/bash /root/pitchcheck_bootstrap.sh > /tmp/pitchcheck-bootstrap.log 2>&1 &`;
 }
 
+function prebuiltOnstart() {
+  return `env >> /etc/environment; cd /app; nohup uvicorn tribe_service.app:app --host 0.0.0.0 --port ${TRIBE_PORT} > /tmp/pitchcheck-tribe.log 2>&1 &`;
+}
+
 async function createInstance(offer) {
   const env = {
     TRIBE_DEVICE: "cuda",
     TRIBE_ALLOW_MOCK: "0",
     TRIBE_CACHE_DIR: "/models",
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || "",
+    OPENROUTER_MODEL:
+      process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4.6",
     OPEN_BUTTON_PORT: String(TRIBE_PORT),
     [`-p ${TRIBE_PORT}:${TRIBE_PORT}`]: "1",
   };
   const body = {
-    image: BOOTSTRAP_IMAGE,
+    image: forceBootstrap ? BOOTSTRAP_IMAGE : tribeImage,
     label: "pitchcheck-tribe-e2e",
-    disk: 120,
+    disk: forceBootstrap ? 120 : 80,
     runtype: "ssh_direct",
     target_state: "running",
     cancel_unavail: true,
     env,
-    onstart: bootstrapOnstart(),
+    onstart: forceBootstrap ? bootstrapOnstart() : prebuiltOnstart(),
   };
   if (offer.dph_total) {
     body.price = Math.ceil(offer.dph_total * 1.03 * 1000) / 1000;

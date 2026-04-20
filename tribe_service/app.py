@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import logging
 import os
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from tribe_service.schemas import (
     PitchScoreRequest,
@@ -33,6 +35,7 @@ from tribe_service.llm_layer import (
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+TRIBE_SCORE_TIMEOUT_SECONDS = float(os.getenv("TRIBE_SCORE_TIMEOUT_SECONDS", "110"))
 
 app = FastAPI(title="PitchScore TRIBE Service", docs_url="/docs", redoc_url=None)
 
@@ -66,7 +69,10 @@ async def score_pitch(request: PitchScoreRequest):
     """Score a sales pitch for persuasion effectiveness against a target persona."""
     try:
         # 1. Run TRIBE text scoring
-        predictions = score_text(request.message)
+        predictions = await asyncio.wait_for(
+            run_in_threadpool(score_text, request.message),
+            timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
+        )
 
         # 2. Extract raw features + fMRI summary
         raw_features = extract_features(predictions)
@@ -133,6 +139,12 @@ async def score_pitch(request: PitchScoreRequest):
 
         return {"report": report.model_dump()}
 
+    except asyncio.TimeoutError:
+        LOGGER.exception("Scoring timed out")
+        raise HTTPException(
+            status_code=504,
+            detail="Scoring timed out while running TRIBE. Try a shorter message or reconnect the runtime.",
+        )
     except Exception as exc:
         LOGGER.exception("Scoring failed")
         raise HTTPException(status_code=500, detail=f"Scoring failed: {str(exc)}")

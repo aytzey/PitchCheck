@@ -30,9 +30,11 @@ class AuthLoginRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
 class AuthChangePasswordRequest(BaseModel):
-    current_password: str = Field(..., min_length=1)
-    new_username: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=1)
+    model_config = ConfigDict(populate_by_name=True)
+
+    current_password: str = Field(..., min_length=1, alias="currentPassword")
+    new_username: str = Field(..., min_length=1, alias="newUsername")
+    new_password: str = Field(..., min_length=1, alias="newPassword")
 
 class BreakdownSection(BaseModel):
     key: str

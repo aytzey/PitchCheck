@@ -1,6 +1,6 @@
 {
   "name": "pitchcheck",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Score your sales pitch against a neuroscience model before you send it. Desktop app with local GPU and Vast.ai cloud fallback.",
   "license": "MIT",

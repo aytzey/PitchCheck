@@ -544,7 +544,7 @@ async fn change_pitch_server_credentials(
             .client
             .post(format!("{service_url}/auth/change-password"))
             .bearer_auth(token)
-            .json(&request)
+            .json(&pitch_server_credential_change_payload(&request))
             .timeout(Duration::from_secs(20))
             .send()
             .await?;
@@ -554,13 +554,10 @@ async fn change_pitch_server_credentials(
             .await
             .unwrap_or_else(|_| json!({ "error": "Invalid response from PitchServer auth" }));
         if !http_status.is_success() {
-            return Err(RuntimeError::Message(
-                body.get("detail")
-                    .or_else(|| body.get("error"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("PitchServer credential update failed")
-                    .to_string(),
-            ));
+            return Err(RuntimeError::Message(response_error_text(
+                &body,
+                "PitchServer credential update failed",
+            )));
         }
         if let Some(token) = body.get("token").and_then(Value::as_str) {
             store_pitch_server_auth_token(&state, token.to_string())?;
@@ -1639,6 +1636,14 @@ fn pitch_server_service_env(config: &RuntimeConfig) -> String {
     )
 }
 
+fn pitch_server_credential_change_payload(request: &PitchServerCredentialChangeRequest) -> Value {
+    json!({
+        "current_password": request.current_password,
+        "new_username": request.new_username,
+        "new_password": request.new_password,
+    })
+}
+
 async fn login_pitch_server(
     client: &Client,
     service_url: &str,
@@ -1660,14 +1665,10 @@ async fn login_pitch_server(
         .await
         .unwrap_or_else(|_| json!({ "error": "Invalid response from PitchServer auth" }));
     if !status.is_success() {
-        return Err(RuntimeError::Message(
-            value
-                .get("detail")
-                .or_else(|| value.get("error"))
-                .and_then(Value::as_str)
-                .unwrap_or("PitchServer login failed")
-                .to_string(),
-        ));
+        return Err(RuntimeError::Message(response_error_text(
+            &value,
+            "PitchServer login failed",
+        )));
     }
     value
         .get("token")
@@ -1676,6 +1677,18 @@ async fn login_pitch_server(
         .ok_or_else(|| {
             RuntimeError::Message("PitchServer login did not return a token.".to_string())
         })
+}
+
+fn response_error_text(body: &Value, fallback: &str) -> String {
+    for key in ["detail", "error"] {
+        if let Some(value) = body.get(key) {
+            if let Some(message) = value.as_str() {
+                return message.to_string();
+            }
+            return value.to_string();
+        }
+    }
+    fallback.to_string()
 }
 
 fn pitch_server_ssh_output(password: &str, script: &str) -> RuntimeResult<String> {
@@ -2569,5 +2582,19 @@ mod tests {
             pitch_server_image("localhost:5000/pitchcheck-tribe:dev"),
             "localhost:5000/pitchcheck-tribe:dev"
         );
+    }
+
+    #[test]
+    fn pitch_server_credential_change_payload_uses_api_field_names() {
+        let value = pitch_server_credential_change_payload(&PitchServerCredentialChangeRequest {
+            current_password: "old-pass".to_string(),
+            new_username: "new-user".to_string(),
+            new_password: "new-pass".to_string(),
+        });
+
+        assert_eq!(value["current_password"], "old-pass");
+        assert_eq!(value["new_username"], "new-user");
+        assert_eq!(value["new_password"], "new-pass");
+        assert!(value.get("currentPassword").is_none());
     }
 }

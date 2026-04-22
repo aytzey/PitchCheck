@@ -793,7 +793,7 @@ function TopBar({
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
-        <span className="mono">v0.1.4</span>
+        <span className="mono">v0.1.5</span>
       </div>
       <nav className="pc-tabs nodrag" aria-label="Primary">
         {ROUTES.map((item) => (

@@ -174,3 +174,24 @@ class TestPitchServerAuth:
             "password": "new-pass-456",
         })
         assert new_login.status_code == 200
+
+    def test_change_credentials_accepts_desktop_camel_case_payload(self, monkeypatch, tmp_path):
+        self._enable_auth(monkeypatch, tmp_path)
+        login = client.post("/auth/login", json={
+            "username": "pitchserver",
+            "password": "initial-pass-123",
+        })
+        token = login.json()["token"]
+
+        changed = client.post(
+            "/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "currentPassword": "initial-pass-123",
+                "newUsername": "desktopuser",
+                "newPassword": "desktop-pass-456",
+            },
+        )
+
+        assert changed.status_code == 200
+        assert changed.json()["username"] == "desktopuser"

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AutoUpdatePrompt from "@/components/AutoUpdatePrompt";
 import {
+  changePitchServerCredentials,
   connectDesktopRuntime,
   disconnectDesktopRuntime,
   getDesktopAppConfig,
@@ -205,6 +206,10 @@ export default function DesktopWorkbench() {
   const [medium, setMedium] = useState<Medium>(MEDIUMS[0]);
   const [vastApiKey, setVastApiKey] = useState("");
   const [pitchServerSshPassword, setPitchServerSshPassword] = useState("");
+  const [pitchServerUsername, setPitchServerUsername] = useState("pitchserver");
+  const [pitchServerPassword, setPitchServerPassword] = useState("");
+  const [pitchServerNewUsername, setPitchServerNewUsername] = useState("pitchserver");
+  const [pitchServerNewPassword, setPitchServerNewPassword] = useState("");
   const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [openRouterModel, setOpenRouterModel] = useState(DEFAULT_OPENROUTER_MODEL);
   const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_MODEL);
@@ -350,6 +355,12 @@ export default function DesktopWorkbench() {
       setRuntimeMessage(next);
       return;
     }
+    if (runtimeKind === "pitchserver" && (!pitchServerUsername.trim() || !pitchServerPassword.trim())) {
+      const next = "PitchServer username and password are required for this runtime.";
+      setError(next);
+      setRuntimeMessage(next);
+      return;
+    }
 
     setBusyAction("connect");
     setError(null);
@@ -365,6 +376,8 @@ export default function DesktopWorkbench() {
         runtimeKind,
         vastApiKey,
         pitchServerSshPassword,
+        pitchServerUsername,
+        pitchServerPassword,
         openRouterApiKey,
         openRouterModel,
         openRouterRefinerModel,
@@ -394,7 +407,9 @@ export default function DesktopWorkbench() {
     openRouterApiKey,
     openRouterModel,
     openRouterRefinerModel,
+    pitchServerPassword,
     pitchServerSshPassword,
+    pitchServerUsername,
     preferInterruptible,
     refreshDesktop,
     refreshSetup,
@@ -421,6 +436,54 @@ export default function DesktopWorkbench() {
       setBusyAction(null);
     }
   }, [desktopMode, refreshDesktop, vastApiKey]);
+
+  const handleChangePitchServerCredentials = useCallback(async () => {
+    if (!desktopMode) return;
+    if (desktopStatus?.mode !== "pitchserver" || !desktopStatus.connected) {
+      setRuntimeMessage("Connect PitchServer before changing its login.");
+      setAppRoute("runtime");
+      return;
+    }
+    const currentPassword = pitchServerPassword;
+    const newUsername = (pitchServerNewUsername || pitchServerUsername).trim();
+    const newPassword = pitchServerNewPassword;
+    if (!currentPassword.trim() || !newUsername || !newPassword.trim()) {
+      setRuntimeMessage("Current password, new username, and new password are required.");
+      return;
+    }
+
+    setBusyAction("connect");
+    setError(null);
+    setRuntimeMessage("Updating PitchServer login...");
+    try {
+      const result = await changePitchServerCredentials({
+        currentPassword,
+        newUsername,
+        newPassword,
+      });
+      if (!result.ok) throw new Error(result.error || "PitchServer login update failed.");
+      setPitchServerUsername(result.username || newUsername);
+      setPitchServerPassword(newPassword);
+      setPitchServerNewUsername(result.username || newUsername);
+      setPitchServerNewPassword("");
+      setRuntimeMessage("PitchServer login updated.");
+    } catch (caught) {
+      const next = readError(caught);
+      setError(next);
+      setRuntimeMessage(next);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [
+    desktopMode,
+    desktopStatus?.connected,
+    desktopStatus?.mode,
+    pitchServerNewPassword,
+    pitchServerNewUsername,
+    pitchServerPassword,
+    pitchServerUsername,
+    setAppRoute,
+  ]);
 
   const handleScore = useCallback(async (messageOverride?: string) => {
     const nextMessage = (typeof messageOverride === "string" ? messageOverride : message).trim();
@@ -602,6 +665,14 @@ export default function DesktopWorkbench() {
           setVastApiKey={setVastApiKey}
           pitchServerSshPassword={pitchServerSshPassword}
           setPitchServerSshPassword={setPitchServerSshPassword}
+          pitchServerUsername={pitchServerUsername}
+          setPitchServerUsername={setPitchServerUsername}
+          pitchServerPassword={pitchServerPassword}
+          setPitchServerPassword={setPitchServerPassword}
+          pitchServerNewUsername={pitchServerNewUsername}
+          setPitchServerNewUsername={setPitchServerNewUsername}
+          pitchServerNewPassword={pitchServerNewPassword}
+          setPitchServerNewPassword={setPitchServerNewPassword}
           openRouterApiKey={openRouterApiKey}
           setOpenRouterApiKey={setOpenRouterApiKey}
           openRouterModel={openRouterModel}
@@ -621,6 +692,7 @@ export default function DesktopWorkbench() {
           message={runtimeMessage}
           onConnect={handleConnect}
           onDisconnect={handleDisconnect}
+          onChangePitchServerCredentials={handleChangePitchServerCredentials}
           onRefresh={() => {
             void refreshDesktop();
             void refreshSetup();
@@ -721,7 +793,7 @@ function TopBar({
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
-        <span className="mono">v0.1.2</span>
+        <span className="mono">v0.1.3</span>
       </div>
       <nav className="pc-tabs nodrag" aria-label="Primary">
         {ROUTES.map((item) => (
@@ -989,6 +1061,14 @@ function RuntimeView({
   setVastApiKey,
   pitchServerSshPassword,
   setPitchServerSshPassword,
+  pitchServerUsername,
+  setPitchServerUsername,
+  pitchServerPassword,
+  setPitchServerPassword,
+  pitchServerNewUsername,
+  setPitchServerNewUsername,
+  pitchServerNewPassword,
+  setPitchServerNewPassword,
   openRouterApiKey,
   setOpenRouterApiKey,
   openRouterModel,
@@ -1008,6 +1088,7 @@ function RuntimeView({
   message,
   onConnect,
   onDisconnect,
+  onChangePitchServerCredentials,
   onRefresh,
 }: {
   desktopMode: boolean;
@@ -1019,6 +1100,14 @@ function RuntimeView({
   setVastApiKey: (key: string) => void;
   pitchServerSshPassword: string;
   setPitchServerSshPassword: (key: string) => void;
+  pitchServerUsername: string;
+  setPitchServerUsername: (value: string) => void;
+  pitchServerPassword: string;
+  setPitchServerPassword: (value: string) => void;
+  pitchServerNewUsername: string;
+  setPitchServerNewUsername: (value: string) => void;
+  pitchServerNewPassword: string;
+  setPitchServerNewPassword: (value: string) => void;
   openRouterApiKey: string;
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
@@ -1038,6 +1127,7 @@ function RuntimeView({
   message: string | null;
   onConnect: () => void;
   onDisconnect: () => void;
+  onChangePitchServerCredentials: () => void;
   onRefresh: () => void;
 }) {
   return (
@@ -1090,6 +1180,14 @@ function RuntimeView({
             setVastApiKey={setVastApiKey}
             pitchServerSshPassword={pitchServerSshPassword}
             setPitchServerSshPassword={setPitchServerSshPassword}
+            pitchServerUsername={pitchServerUsername}
+            setPitchServerUsername={setPitchServerUsername}
+            pitchServerPassword={pitchServerPassword}
+            setPitchServerPassword={setPitchServerPassword}
+            pitchServerNewUsername={pitchServerNewUsername}
+            setPitchServerNewUsername={setPitchServerNewUsername}
+            pitchServerNewPassword={pitchServerNewPassword}
+            setPitchServerNewPassword={setPitchServerNewPassword}
             openRouterApiKey={openRouterApiKey}
             setOpenRouterApiKey={setOpenRouterApiKey}
             openRouterModel={openRouterModel}
@@ -1104,6 +1202,9 @@ function RuntimeView({
             setMaxHourlyPrice={setMaxHourlyPrice}
             preferInterruptible={preferInterruptible}
             setPreferInterruptible={setPreferInterruptible}
+            status={status}
+            onChangePitchServerCredentials={onChangePitchServerCredentials}
+            busy={busy}
           />
           {message && <div className="pc-logline mono">{message}</div>}
         </div>
@@ -1861,6 +1962,14 @@ function RuntimeConfig({
   setVastApiKey,
   pitchServerSshPassword,
   setPitchServerSshPassword,
+  pitchServerUsername,
+  setPitchServerUsername,
+  pitchServerPassword,
+  setPitchServerPassword,
+  pitchServerNewUsername,
+  setPitchServerNewUsername,
+  pitchServerNewPassword,
+  setPitchServerNewPassword,
   openRouterApiKey,
   setOpenRouterApiKey,
   openRouterModel,
@@ -1875,6 +1984,9 @@ function RuntimeConfig({
   setMaxHourlyPrice,
   preferInterruptible,
   setPreferInterruptible,
+  status,
+  onChangePitchServerCredentials,
+  busy,
 }: {
   desktopMode: boolean;
   runtimeKind: RuntimeKind;
@@ -1882,6 +1994,14 @@ function RuntimeConfig({
   setVastApiKey: (key: string) => void;
   pitchServerSshPassword: string;
   setPitchServerSshPassword: (key: string) => void;
+  pitchServerUsername: string;
+  setPitchServerUsername: (value: string) => void;
+  pitchServerPassword: string;
+  setPitchServerPassword: (value: string) => void;
+  pitchServerNewUsername: string;
+  setPitchServerNewUsername: (value: string) => void;
+  pitchServerNewPassword: string;
+  setPitchServerNewPassword: (value: string) => void;
   openRouterApiKey: string;
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
@@ -1896,16 +2016,44 @@ function RuntimeConfig({
   setMaxHourlyPrice: (value: number) => void;
   preferInterruptible: boolean;
   setPreferInterruptible: (value: boolean) => void;
+  status: DesktopRuntimeStatus | null;
+  onChangePitchServerCredentials: () => void;
+  busy: boolean;
 }) {
+  const pitchServerConnected = runtimeKind === "pitchserver" && status?.mode === "pitchserver" && status.connected;
   return (
     <div className="pc-config-panel">
       <Field label="Runtime image">
         <input value={image} onChange={(event) => setImage(event.target.value)} />
       </Field>
       {runtimeKind === "pitchserver" ? (
-        <Field label="PitchServer SSH password" hint="Used only for this connection. It is never saved to runtime.env.">
-          <input type="password" value={pitchServerSshPassword} onChange={(event) => setPitchServerSshPassword(event.target.value)} placeholder="Required for PitchServer" />
-        </Field>
+        <>
+          <Field label="PitchServer SSH password" hint="Used only for deployment/tunnel. It is never saved to runtime.env.">
+            <input type="password" value={pitchServerSshPassword} onChange={(event) => setPitchServerSshPassword(event.target.value)} placeholder="Required for SSH tunnel" />
+          </Field>
+          <Field label="PitchServer username" hint="Seeds the server login on first setup; after that it must match the current server login.">
+            <input value={pitchServerUsername} onChange={(event) => {
+              setPitchServerUsername(event.target.value);
+              if (!pitchServerConnected) setPitchServerNewUsername(event.target.value);
+            }} placeholder="pitchserver" />
+          </Field>
+          <Field label="PitchServer password" hint="Used to login to the scoring API. It is not saved by the desktop app.">
+            <input type="password" value={pitchServerPassword} onChange={(event) => setPitchServerPassword(event.target.value)} placeholder="Required for PitchServer login" />
+          </Field>
+          {pitchServerConnected && (
+            <>
+              <Field label="New PitchServer username" hint="Applied on the server after login.">
+                <input value={pitchServerNewUsername} onChange={(event) => setPitchServerNewUsername(event.target.value)} placeholder={pitchServerUsername || "pitchserver"} />
+              </Field>
+              <Field label="New PitchServer password" hint="At least 8 characters. Existing sessions are revoked.">
+                <input type="password" value={pitchServerNewPassword} onChange={(event) => setPitchServerNewPassword(event.target.value)} placeholder="New server password" />
+              </Field>
+              <Button variant="secondary" onClick={onChangePitchServerCredentials} disabled={busy} icon={<Icon name="check" />}>
+                Change PitchServer login
+              </Button>
+            </>
+          )}
+        </>
       ) : (
         <Field label="Vast.ai API key" hint={desktopMode ? "Loaded from machine-local runtime.env when saved." : "Available in the desktop app."}>
           <input type="password" value={vastApiKey} onChange={(event) => setVastApiKey(event.target.value)} placeholder="Stored in runtime.env" />

@@ -33,6 +33,8 @@ export interface DesktopRuntimeConfig {
   runtimeKind?: Exclude<RuntimeMode, "disconnected">;
   vastApiKey?: string;
   pitchServerSshPassword?: string;
+  pitchServerUsername?: string;
+  pitchServerPassword?: string;
   openRouterApiKey?: string;
   openRouterModel?: string;
   openRouterRefinerModel?: string;
@@ -138,6 +140,17 @@ export async function scorePitchOnDesktop(
   return invokeDesktop<{ report?: unknown; error?: string }>("score_pitch", {
     request,
   });
+}
+
+export async function changePitchServerCredentials(request: {
+  currentPassword: string;
+  newUsername: string;
+  newPassword: string;
+}): Promise<{ ok?: boolean; username?: string; error?: string }> {
+  return invokeDesktop<{ ok?: boolean; username?: string; error?: string }>(
+    "change_pitch_server_credentials",
+    { request },
+  );
 }
 
 export async function refinePitchOnDesktop(request: {

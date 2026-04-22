@@ -107,3 +107,70 @@ class TestScore:
         signal_keys = {s["key"] for s in report["neural_signals"]}
         expected = {"emotional_engagement", "personal_relevance", "social_proof_potential", "memorability", "attention_capture", "cognitive_friction"}
         assert signal_keys == expected
+
+
+class TestPitchServerAuth:
+    def _enable_auth(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.setenv("PITCHSERVER_AUTH_REQUIRED", "1")
+        monkeypatch.setenv("PITCHSERVER_AUTH_FILE", str(tmp_path / "auth.json"))
+        monkeypatch.setenv("PITCHSERVER_AUTH_SEED_USERNAME", "pitchserver")
+        monkeypatch.setenv("PITCHSERVER_AUTH_SEED_PASSWORD", "initial-pass-123")
+
+    def test_score_requires_login_when_auth_enabled(self, monkeypatch, tmp_path):
+        self._enable_auth(monkeypatch, tmp_path)
+        res = client.post("/score", json={
+            "message": "Our platform reduces deployment time by 80% for enterprise teams",
+            "persona": "CTO at a mid-stage startup, technical background",
+        })
+        assert res.status_code == 401
+
+    def test_login_allows_scoring_when_auth_enabled(self, monkeypatch, tmp_path):
+        self._enable_auth(monkeypatch, tmp_path)
+        login = client.post("/auth/login", json={
+            "username": "pitchserver",
+            "password": "initial-pass-123",
+        })
+        assert login.status_code == 200
+        token = login.json()["token"]
+
+        res = client.post(
+            "/score",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "message": "Our platform reduces deployment time by 80% for enterprise teams",
+                "persona": "CTO at a mid-stage startup, technical background",
+            },
+        )
+        assert res.status_code == 200
+
+    def test_logged_in_user_can_change_credentials(self, monkeypatch, tmp_path):
+        self._enable_auth(monkeypatch, tmp_path)
+        login = client.post("/auth/login", json={
+            "username": "pitchserver",
+            "password": "initial-pass-123",
+        })
+        token = login.json()["token"]
+
+        changed = client.post(
+            "/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "current_password": "initial-pass-123",
+                "new_username": "newpitch",
+                "new_password": "new-pass-456",
+            },
+        )
+        assert changed.status_code == 200
+        assert changed.json()["username"] == "newpitch"
+
+        old_login = client.post("/auth/login", json={
+            "username": "pitchserver",
+            "password": "initial-pass-123",
+        })
+        assert old_login.status_code == 401
+
+        new_login = client.post("/auth/login", json={
+            "username": "newpitch",
+            "password": "new-pass-456",
+        })
+        assert new_login.status_code == 200

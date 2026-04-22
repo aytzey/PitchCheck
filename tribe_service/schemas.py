@@ -25,6 +25,15 @@ class PitchScoreRequest(BaseModel):
             return "general"
         return v
 
+class AuthLoginRequest(BaseModel):
+    username: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+class AuthChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_username: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=1)
+
 class BreakdownSection(BaseModel):
     key: str
     label: str

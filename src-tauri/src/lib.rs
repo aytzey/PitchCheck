@@ -107,6 +107,8 @@ pub struct RuntimeConfig {
     runtime_kind: Option<String>,
     vast_api_key: Option<String>,
     pitch_server_ssh_password: Option<String>,
+    pitch_server_username: Option<String>,
+    pitch_server_password: Option<String>,
     open_router_api_key: Option<String>,
     open_router_model: Option<String>,
     open_router_refiner_model: Option<String>,
@@ -137,6 +139,14 @@ pub struct ScoreRequest {
     persona: String,
     platform: String,
     open_router_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PitchServerCredentialChangeRequest {
+    current_password: String,
+    new_username: String,
+    new_password: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -181,6 +191,7 @@ pub struct SetupActionResult {
 struct AppState {
     status: Mutex<RuntimeStatus>,
     pitch_server_tunnel: Mutex<Option<Child>>,
+    pitch_server_auth_token: Mutex<Option<String>>,
     client: Client,
 }
 
@@ -194,6 +205,7 @@ pub fn run() {
             app.manage(AppState {
                 status: Mutex::new(status),
                 pitch_server_tunnel: Mutex::new(None),
+                pitch_server_auth_token: Mutex::new(None),
                 client: Client::new(),
             });
             Ok(())
@@ -208,6 +220,7 @@ pub fn run() {
             disconnect_runtime,
             check_runtime_health,
             score_pitch,
+            change_pitch_server_credentials,
             refine_pitch
         ])
         .run(tauri::generate_context!())
@@ -334,13 +347,16 @@ async fn connect_runtime(
         let requested_runtime = selected_runtime_kind(&config);
         if requested_runtime == "pitchserver" {
             stop_pitch_server_tunnel(&state)?;
-            let (status, tunnel) =
+            clear_pitch_server_auth_token(&state)?;
+            let (status, tunnel, auth_token) =
                 connect_pitch_server(&state.client, &image, local_gpu, &config).await?;
             replace_status(&app, &state, status.clone())?;
             store_pitch_server_tunnel(&state, tunnel)?;
+            store_pitch_server_auth_token(&state, auth_token)?;
             return Ok(status);
         }
         stop_pitch_server_tunnel(&state)?;
+        clear_pitch_server_auth_token(&state)?;
 
         if local_gpu.available {
             match connect_local(&app, &state.client, &image, local_gpu.clone(), &config).await {
@@ -389,7 +405,10 @@ async fn disconnect_runtime(
         let current = clone_status(&state)?;
         match current.mode.as_str() {
             "local" => stop_local_container().await?,
-            "pitchserver" => stop_pitch_server_tunnel(&state)?,
+            "pitchserver" => {
+                stop_pitch_server_tunnel(&state)?;
+                clear_pitch_server_auth_token(&state)?;
+            }
             "vast" => {
                 let instance_id = current.vast_instance_id.ok_or_else(|| {
                     RuntimeError::Message("No Vast instance id is stored.".to_string())
@@ -460,13 +479,16 @@ async fn score_pitch(
         let service_url = status
             .service_url
             .ok_or_else(|| RuntimeError::Message("Runtime is not connected.".to_string()))?;
-        let response = state
+        let mut request_builder = state
             .client
             .post(format!("{service_url}/score"))
             .json(&request)
-            .timeout(Duration::from_secs(900))
-            .send()
-            .await?;
+            .timeout(Duration::from_secs(900));
+        if status.mode == "pitchserver" {
+            let token = pitch_server_auth_token(&state)?;
+            request_builder = request_builder.bearer_auth(token);
+        }
+        let response = request_builder.send().await?;
         let http_status = response.status();
         let body = response
             .json::<Value>()
@@ -480,6 +502,52 @@ async fn score_pitch(
                     .unwrap_or("Scoring failed")
                     .to_string(),
             ));
+        }
+        Ok(body)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn change_pitch_server_credentials(
+    state: tauri::State<'_, AppState>,
+    request: PitchServerCredentialChangeRequest,
+) -> Result<Value, String> {
+    run_command(async move {
+        let status = clone_status(&state)?;
+        if status.mode != "pitchserver" || !status.connected {
+            return Err(RuntimeError::Message(
+                "Connect PitchServer before changing its login.".to_string(),
+            ));
+        }
+        let service_url = status
+            .service_url
+            .ok_or_else(|| RuntimeError::Message("Runtime is not connected.".to_string()))?;
+        let token = pitch_server_auth_token(&state)?;
+        let response = state
+            .client
+            .post(format!("{service_url}/auth/change-password"))
+            .bearer_auth(token)
+            .json(&request)
+            .timeout(Duration::from_secs(20))
+            .send()
+            .await?;
+        let http_status = response.status();
+        let body = response
+            .json::<Value>()
+            .await
+            .unwrap_or_else(|_| json!({ "error": "Invalid response from PitchServer auth" }));
+        if !http_status.is_success() {
+            return Err(RuntimeError::Message(
+                body.get("detail")
+                    .or_else(|| body.get("error"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("PitchServer credential update failed")
+                    .to_string(),
+            ));
+        }
+        if let Some(token) = body.get("token").and_then(Value::as_str) {
+            store_pitch_server_auth_token(&state, token.to_string())?;
         }
         Ok(body)
     })
@@ -867,6 +935,8 @@ fn merge_runtime_config(app: &AppHandle, config: RuntimeConfig) -> RuntimeResult
         runtime_kind: first_non_empty(config.runtime_kind, None),
         vast_api_key: first_non_empty(config.vast_api_key, saved.vast_api_key),
         pitch_server_ssh_password: first_non_empty(config.pitch_server_ssh_password, None),
+        pitch_server_username: first_non_empty(config.pitch_server_username, None),
+        pitch_server_password: first_non_empty(config.pitch_server_password, None),
         open_router_api_key: first_non_empty(config.open_router_api_key, saved.open_router_api_key),
         open_router_model: first_non_empty(config.open_router_model, saved.open_router_model)
             .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
@@ -1307,7 +1377,7 @@ async fn connect_pitch_server(
     image: &str,
     local_gpu: LocalGpuInfo,
     config: &RuntimeConfig,
-) -> RuntimeResult<(RuntimeStatus, Child)> {
+) -> RuntimeResult<(RuntimeStatus, Child, String)> {
     let password = config
         .pitch_server_ssh_password
         .as_deref()
@@ -1317,6 +1387,21 @@ async fn connect_pitch_server(
             RuntimeError::Message(
                 "PitchServer SSH password is required for this runtime.".to_string(),
             )
+        })?;
+    let username = config
+        .pitch_server_username
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            RuntimeError::Message("PitchServer username is required for this runtime.".to_string())
+        })?;
+    let service_password = config
+        .pitch_server_password
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            RuntimeError::Message("PitchServer password is required for this runtime.".to_string())
         })?;
     ensure_pitch_server_ssh_tools()?;
     validate_docker_image_reference(image)?;
@@ -1339,6 +1424,7 @@ async fn connect_pitch_server(
         let _ = tunnel.wait();
         return Err(error);
     }
+    let token = login_pitch_server(client, &service_url, username, service_password).await?;
 
     Ok((
         RuntimeStatus {
@@ -1353,6 +1439,7 @@ async fn connect_pitch_server(
             last_error: None,
         },
         tunnel,
+        token,
     ))
 }
 
@@ -1360,7 +1447,7 @@ fn pitch_server_remote_script(image: &str, config: &RuntimeConfig) -> String {
     let service_env = pitch_server_service_env(config);
     format!(
         r#"set -euo pipefail
-mkdir -p "{workdir}/models" "{workdir}/logs"
+mkdir -p "{workdir}/models" "{workdir}/logs" "{workdir}/auth"
 cd "{workdir}"
 cat > docker-compose.yml <<'PITCHSERVER_COMPOSE'
 name: pitchserver
@@ -1402,6 +1489,7 @@ services:
     volumes:
       - ./models:/models
       - ./logs:/logs
+      - ./auth:/auth
     ports:
       - "127.0.0.1:{remote_port}:{tribe_port}"
     networks:
@@ -1489,12 +1577,73 @@ fn pitch_server_service_env(config: &RuntimeConfig) -> String {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(open_router_model);
+    let pitch_server_username = config
+        .pitch_server_username
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("pitchserver");
+    let pitch_server_password = config
+        .pitch_server_password
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("");
     format!(
-        "OPENROUTER_API_KEY={}\nOPENROUTER_MODEL={}\nOPENROUTER_REFINER_MODEL={}\n",
+        concat!(
+            "OPENROUTER_API_KEY={}\n",
+            "OPENROUTER_MODEL={}\n",
+            "OPENROUTER_REFINER_MODEL={}\n",
+            "PITCHSERVER_AUTH_REQUIRED=1\n",
+            "PITCHSERVER_AUTH_FILE=/auth/pitchserver_auth.json\n",
+            "PITCHSERVER_AUTH_SEED_USERNAME={}\n",
+            "PITCHSERVER_AUTH_SEED_PASSWORD={}\n",
+            "PITCHSERVER_SESSION_TTL_SECONDS=86400\n",
+        ),
         env_safe(config.open_router_api_key.as_deref().unwrap_or("")),
         env_safe(open_router_model),
         env_safe(open_router_refiner_model),
+        env_safe(pitch_server_username),
+        env_safe(pitch_server_password),
     )
+}
+
+async fn login_pitch_server(
+    client: &Client,
+    service_url: &str,
+    username: &str,
+    password: &str,
+) -> RuntimeResult<String> {
+    let response = client
+        .post(format!("{service_url}/auth/login"))
+        .json(&json!({
+            "username": username,
+            "password": password,
+        }))
+        .timeout(Duration::from_secs(20))
+        .send()
+        .await?;
+    let status = response.status();
+    let value = response
+        .json::<Value>()
+        .await
+        .unwrap_or_else(|_| json!({ "error": "Invalid response from PitchServer auth" }));
+    if !status.is_success() {
+        return Err(RuntimeError::Message(
+            value
+                .get("detail")
+                .or_else(|| value.get("error"))
+                .and_then(Value::as_str)
+                .unwrap_or("PitchServer login failed")
+                .to_string(),
+        ));
+    }
+    value
+        .get("token")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            RuntimeError::Message("PitchServer login did not return a token.".to_string())
+        })
 }
 
 fn pitch_server_ssh_output(password: &str, script: &str) -> RuntimeResult<String> {
@@ -1583,6 +1732,37 @@ fn store_pitch_server_tunnel(state: &AppState, tunnel: Child) -> RuntimeResult<(
         .lock()
         .map_err(|_| RuntimeError::StateLock)?;
     *guard = Some(tunnel);
+    Ok(())
+}
+
+fn store_pitch_server_auth_token(state: &AppState, token: String) -> RuntimeResult<()> {
+    let mut guard = state
+        .pitch_server_auth_token
+        .lock()
+        .map_err(|_| RuntimeError::StateLock)?;
+    *guard = Some(token);
+    Ok(())
+}
+
+fn pitch_server_auth_token(state: &AppState) -> RuntimeResult<String> {
+    state
+        .pitch_server_auth_token
+        .lock()
+        .map_err(|_| RuntimeError::StateLock)?
+        .clone()
+        .ok_or_else(|| {
+            RuntimeError::Message(
+                "PitchServer login expired. Reconnect the PitchServer runtime.".to_string(),
+            )
+        })
+}
+
+fn clear_pitch_server_auth_token(state: &AppState) -> RuntimeResult<()> {
+    let mut guard = state
+        .pitch_server_auth_token
+        .lock()
+        .map_err(|_| RuntimeError::StateLock)?;
+    *guard = None;
     Ok(())
 }
 

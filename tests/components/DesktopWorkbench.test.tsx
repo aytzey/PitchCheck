@@ -82,6 +82,8 @@ describe("DesktopWorkbench", () => {
     window.history.replaceState(null, "", "/#settings");
     render(<DesktopWorkbench />);
     expect(screen.queryByLabelText(/PitchServer SSH password/)).toBeNull();
+    expect(screen.queryByLabelText(/PitchServer username/)).toBeNull();
+    expect(screen.queryByLabelText(/PitchServer password/)).toBeNull();
   });
 
   it("exposes refine and variant re-rank controls in the workspace", async () => {

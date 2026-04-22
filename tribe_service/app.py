@@ -6,11 +6,14 @@ import os
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
 from tribe_service.schemas import (
+    AuthChangePasswordRequest,
+    AuthLoginRequest,
     PitchScoreRequest,
     PitchScoreReport,
     BreakdownSection,
@@ -34,6 +37,12 @@ from tribe_service.llm_layer import (
     interpret_persuasion,
     OPENROUTER_ENABLED,
 )
+from tribe_service.auth import (
+    AUTH_STORE,
+    AuthConfigurationError,
+    InvalidCredentialUpdateError,
+    InvalidCredentialsError,
+)
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +51,7 @@ TRIBE_MAX_SCORE_CONCURRENCY = max(1, int(os.getenv("TRIBE_MAX_SCORE_CONCURRENCY"
 
 app = FastAPI(title="PitchScore TRIBE Service", docs_url="/docs", redoc_url=None)
 _score_lock = asyncio.Semaphore(TRIBE_MAX_SCORE_CONCURRENCY)
+_bearer = HTTPBearer(auto_error=False)
 
 # CORS
 app.add_middleware(
@@ -56,11 +66,35 @@ app.add_middleware(
 )
 
 
+def _auth_error(error: Exception) -> HTTPException:
+    if isinstance(error, AuthConfigurationError):
+        return HTTPException(status_code=503, detail=str(error))
+    if isinstance(error, InvalidCredentialUpdateError):
+        return HTTPException(status_code=400, detail=str(error))
+    if isinstance(error, InvalidCredentialsError):
+        return HTTPException(status_code=401, detail=str(error))
+    return HTTPException(status_code=500, detail="Authentication failed.")
+
+
+def _token_from_credentials(credentials: HTTPAuthorizationCredentials | None) -> str | None:
+    return credentials.credentials if credentials else None
+
+
+async def require_auth(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    try:
+        return AUTH_STORE.verify_token(_token_from_credentials(credentials))
+    except Exception as error:
+        raise _auth_error(error) from error
+
+
 @app.get("/health")
 async def health():
     return {
         "ok": True,
         "service": "pitchscore-tribe",
+        "auth": AUTH_STORE.status(),
         "model_id": TRIBE_MODEL_ID,
         "device": TRIBE_DEVICE,
         "model_loaded": is_model_loaded(),
@@ -70,8 +104,32 @@ async def health():
     }
 
 
+@app.post("/auth/login")
+async def auth_login(request: AuthLoginRequest):
+    try:
+        return AUTH_STORE.login(request.username, request.password)
+    except Exception as error:
+        raise _auth_error(error) from error
+
+
+@app.post("/auth/change-password")
+async def auth_change_password(
+    request: AuthChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+):
+    try:
+        return AUTH_STORE.change_credentials(
+            token=_token_from_credentials(credentials),
+            current_password=request.current_password,
+            new_username=request.new_username,
+            new_password=request.new_password,
+        )
+    except Exception as error:
+        raise _auth_error(error) from error
+
+
 @app.post("/score")
-async def score_pitch(request: PitchScoreRequest):
+async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)):
     """Score a sales pitch for persuasion effectiveness against a target persona."""
     try:
         # 1. Run TRIBE text scoring
@@ -169,6 +227,6 @@ async def score_pitch(request: PitchScoreRequest):
 @app.on_event("startup")
 async def startup():
     LOGGER.info(
-        "PitchScore TRIBE service starting — model=%s device=%s openrouter=%s",
-        TRIBE_MODEL_ID, TRIBE_DEVICE, OPENROUTER_ENABLED,
+        "PitchScore TRIBE service starting — model=%s device=%s openrouter=%s auth=%s",
+        TRIBE_MODEL_ID, TRIBE_DEVICE, OPENROUTER_ENABLED, AUTH_STORE.status(),
     )

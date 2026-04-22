@@ -246,9 +246,27 @@ def _parse_json_content(content: str) -> dict[str, Any] | None:
     return None
 
 
-def _openrouter_payload(user_prompt: str, *, temperature: float, json_mode: bool) -> dict[str, Any]:
+def _resolve_openrouter_model(model: str | None = None) -> str:
+    return (model or OPENROUTER_MODEL or "").strip()
+
+
+def _openrouter_enabled(model: str | None = None) -> bool:
+    if not OPENROUTER_API_KEY:
+        return False
+    if not OPENROUTER_ENABLED and not model:
+        return False
+    return bool(_resolve_openrouter_model(model))
+
+
+def _openrouter_payload(
+    user_prompt: str,
+    *,
+    model: str | None = None,
+    temperature: float,
+    json_mode: bool,
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "model": OPENROUTER_MODEL,
+        "model": _resolve_openrouter_model(model),
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -260,8 +278,13 @@ def _openrouter_payload(user_prompt: str, *, temperature: float, json_mode: bool
     return payload
 
 
-def _call_openrouter_once(user_prompt: str, *, temperature: float = 0.2) -> dict[str, Any] | None:
-    if not OPENROUTER_ENABLED:
+def _call_openrouter_once(
+    user_prompt: str,
+    *,
+    model: str | None = None,
+    temperature: float = 0.2,
+) -> dict[str, Any] | None:
+    if not _openrouter_enabled(model):
         return None
 
     json_mode_options = [True, False] if OPENROUTER_JSON_MODE else [False]
@@ -276,7 +299,12 @@ def _call_openrouter_once(user_prompt: str, *, temperature: float = 0.2) -> dict
                         "HTTP-Referer": "https://pitch.machinity.ai",
                         "X-Title": "PitchCheck",
                     },
-                    json=_openrouter_payload(user_prompt, temperature=temperature, json_mode=json_mode),
+                    json=_openrouter_payload(
+                        user_prompt,
+                        model=model,
+                        temperature=temperature,
+                        json_mode=json_mode,
+                    ),
                     timeout=OPENROUTER_TIMEOUT,
                 )
                 # Some providers reject response_format. Retry same attempt without it.
@@ -304,14 +332,14 @@ def _call_openrouter_once(user_prompt: str, *, temperature: float = 0.2) -> dict
     return None
 
 
-def _call_openrouter(user_prompt: str) -> dict[str, Any] | None:
+def _call_openrouter(user_prompt: str, *, model: str | None = None) -> dict[str, Any] | None:
     """Call OpenRouter and return parsed JSON, or None on failure."""
     if OPENROUTER_SELF_CONSISTENCY_SAMPLES <= 1:
-        return _call_openrouter_once(user_prompt, temperature=0.2)
+        return _call_openrouter_once(user_prompt, model=model, temperature=0.2)
 
     results: list[dict[str, Any]] = []
     for idx in range(OPENROUTER_SELF_CONSISTENCY_SAMPLES):
-        result = _call_openrouter_once(user_prompt, temperature=0.25 + idx * 0.03)
+        result = _call_openrouter_once(user_prompt, model=model, temperature=0.25 + idx * 0.03)
         if result is not None:
             results.append(result)
     if not results:
@@ -694,6 +722,7 @@ def interpret_persuasion(
     neural_signals: dict[str, float],
     raw_features: dict[str, float] | None = None,
     fmri_summary: dict | None = None,
+    openrouter_model: str | None = None,
 ) -> dict[str, Any]:
     """Interpret TRIBE neural signals into a robust persuasion report."""
     del raw_features  # Reserved for future calibration without changing the public signature.
@@ -708,7 +737,7 @@ def interpret_persuasion(
         persuasion_evidence=persuasion_evidence,
     )
 
-    llm_result = _call_openrouter(user_prompt)
+    llm_result = _call_openrouter(user_prompt, model=openrouter_model)
     if llm_result and isinstance(llm_result, dict) and "persuasion_score" in llm_result:
         try:
             normalised = _normalise_llm_result(llm_result, fallback)

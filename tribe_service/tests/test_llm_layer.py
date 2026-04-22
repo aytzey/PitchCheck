@@ -237,6 +237,28 @@ class TestPromptIncludesPersonaAndMessage:
         assert "TRIBE-predicted analogues" in user_content
         assert "not measured fMRI" in user_content
 
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_model_override_is_sent_to_openrouter(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(
+            json.dumps(VALID_LLM_RESPONSE)
+        )
+
+        interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+            openrouter_model="openai/gpt-5.4",
+        )
+
+        call_args = mock_post.call_args
+        request_body = call_args.kwargs.get("json") or call_args[1].get("json")
+
+        assert request_body["model"] == "openai/gpt-5.4"
+
 
 class TestPromptIncludesNeuralSignals:
     """Assert neural signal scores appear in the prompt."""

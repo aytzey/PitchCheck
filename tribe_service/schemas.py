@@ -1,14 +1,17 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PLATFORM_VALUES = ("email", "linkedin", "cold-call-script", "landing-page", "ad-copy", "general")
 
 class PitchScoreRequest(BaseModel):
-    message: str = Field(..., min_length=10, max_length=5000)
-    persona: str = Field(..., min_length=5, max_length=1500)
+    model_config = ConfigDict(populate_by_name=True)
+
+    message: str = Field(..., min_length=10)
+    persona: str = Field(..., min_length=5)
     platform: str = Field(default="general")
+    open_router_model: str | None = Field(default=None, alias="openRouterModel")
 
     @field_validator("message", "persona", mode="before")
     @classmethod

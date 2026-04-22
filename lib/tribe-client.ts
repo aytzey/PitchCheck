@@ -13,6 +13,7 @@ export async function scorePitch(request: {
   message: string;
   persona: string;
   platform: string;
+  openRouterModel?: string;
 }): Promise<TribeScoreResponse> {
   try {
     const response = await fetch(`${TRIBE_SERVICE_URL}/score`, {

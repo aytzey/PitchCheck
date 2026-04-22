@@ -99,6 +99,7 @@ pub struct RuntimeConfig {
     vast_api_key: Option<String>,
     open_router_api_key: Option<String>,
     open_router_model: Option<String>,
+    open_router_refiner_model: Option<String>,
     image: Option<String>,
     min_gpu_ram_gb: Option<u64>,
     max_hourly_price: Option<f64>,
@@ -111,6 +112,7 @@ pub struct AppConfig {
     vast_api_key: Option<String>,
     open_router_api_key: Option<String>,
     open_router_model: Option<String>,
+    open_router_refiner_model: Option<String>,
     image: Option<String>,
     min_gpu_ram_gb: Option<u64>,
     max_hourly_price: Option<f64>,
@@ -119,10 +121,12 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScoreRequest {
     message: String,
     persona: String,
     platform: String,
+    open_router_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -479,10 +483,17 @@ async fn refine_pitch(
                 )
             })?;
         let model = config
-            .open_router_model
+            .open_router_refiner_model
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
+            .or_else(|| {
+                config
+                    .open_router_model
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+            })
             .unwrap_or(DEFAULT_OPENROUTER_MODEL)
             .to_string();
         let suggestions = format_refine_suggestions(&request.suggestions);
@@ -491,10 +502,19 @@ async fn refine_pitch(
                 "Platform: {platform}\n",
                 "Recipient persona:\n{persona}\n\n",
                 "Current message:\n{message}\n\n",
-                "Apply these scoring suggestions:\n{suggestions}\n\n",
-                "Rewrite the message only. Keep the same sender intent, keep it concise, ",
-                "make the CTA specific, preserve the input language exactly, and do not add ",
-                "explanations, markdown, or code fences."
+                "Score-lift repair brief:\n{suggestions}\n\n",
+                "Rewrite objective:\n",
+                "- Optimize for a materially higher next PitchCheck persuasion score, not a light paraphrase.\n",
+                "- First repair the weakest persuasion facets and neural signals in the brief.\n",
+                "- Make the opener persona-specific, the value claim concrete, the proof more credible, ",
+                "and the CTA lower-friction.\n",
+                "- Prefer specific, verifiable detail already present in the draft. Do not invent fake customers, ",
+                "metrics, dates, or credentials; if proof is missing, create a credible proof path such as a pilot, ",
+                "benchmark, example, or screen-share.\n",
+                "- Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.\n",
+                "- Preserve the sender intent, platform fit, and the input language exactly.\n\n",
+                "Return only the rewritten message. Do not include explanations, markdown, bullets about what changed, ",
+                "or code fences."
             ),
             platform = request.platform.trim(),
             persona = request.persona.trim(),
@@ -652,6 +672,11 @@ fn load_app_config(app: &AppHandle) -> RuntimeResult<AppConfig> {
         open_router_model: env_value(&values, "OPENROUTER_MODEL")
             .or_else(|| std::env::var("OPENROUTER_MODEL").ok())
             .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
+        open_router_refiner_model: env_value(&values, "OPENROUTER_REFINER_MODEL")
+            .or_else(|| std::env::var("OPENROUTER_REFINER_MODEL").ok())
+            .or_else(|| env_value(&values, "OPENROUTER_MODEL"))
+            .or_else(|| std::env::var("OPENROUTER_MODEL").ok())
+            .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
         image: env_value(&values, "PITCHCHECK_TRIBE_IMAGE")
             .or_else(|| std::env::var("PITCHCHECK_TRIBE_IMAGE").ok())
             .or_else(|| Some(DEFAULT_IMAGE_FALLBACK.to_string())),
@@ -674,6 +699,12 @@ fn save_app_config_file(app: &AppHandle, config: &AppConfig) -> RuntimeResult<()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(DEFAULT_OPENROUTER_MODEL);
+    let open_router_refiner_model = config
+        .open_router_refiner_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(open_router_model);
     let image = config
         .image
         .as_deref()
@@ -688,6 +719,7 @@ fn save_app_config_file(app: &AppHandle, config: &AppConfig) -> RuntimeResult<()
             "VAST_API_KEY={}\n",
             "OPENROUTER_API_KEY={}\n",
             "OPENROUTER_MODEL={}\n",
+            "OPENROUTER_REFINER_MODEL={}\n",
             "PITCHCHECK_TRIBE_IMAGE={}\n",
             "PITCHCHECK_MIN_GPU_RAM_GB={}\n",
             "PITCHCHECK_MAX_HOURLY_PRICE={}\n",
@@ -696,6 +728,7 @@ fn save_app_config_file(app: &AppHandle, config: &AppConfig) -> RuntimeResult<()
         env_safe(config.vast_api_key.as_deref().unwrap_or("")),
         env_safe(config.open_router_api_key.as_deref().unwrap_or("")),
         env_safe(open_router_model),
+        env_safe(open_router_refiner_model),
         env_safe(image),
         config.min_gpu_ram_gb.unwrap_or(16),
         config.max_hourly_price.unwrap_or(0.45),
@@ -779,7 +812,7 @@ fn format_refine_suggestions(suggestions: &[String]) -> String {
         .iter()
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
-        .take(6)
+        .take(12)
         .enumerate()
         .map(|(index, value)| format!("{}. {}", index + 1, value))
         .collect::<Vec<_>>()
@@ -808,6 +841,11 @@ fn merge_runtime_config(app: &AppHandle, config: RuntimeConfig) -> RuntimeResult
         open_router_api_key: first_non_empty(config.open_router_api_key, saved.open_router_api_key),
         open_router_model: first_non_empty(config.open_router_model, saved.open_router_model)
             .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
+        open_router_refiner_model: first_non_empty(
+            config.open_router_refiner_model,
+            saved.open_router_refiner_model,
+        )
+        .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
         image: first_non_empty(config.image, saved.image)
             .or_else(|| Some(DEFAULT_IMAGE_FALLBACK.to_string())),
         min_gpu_ram_gb: config.min_gpu_ram_gb.or(saved.min_gpu_ram_gb).or(Some(16)),
@@ -827,6 +865,7 @@ fn app_config_from_runtime(config: &RuntimeConfig) -> AppConfig {
         vast_api_key: config.vast_api_key.clone(),
         open_router_api_key: config.open_router_api_key.clone(),
         open_router_model: config.open_router_model.clone(),
+        open_router_refiner_model: config.open_router_refiner_model.clone(),
         image: config.image.clone(),
         min_gpu_ram_gb: config.min_gpu_ram_gb,
         max_hourly_price: config.max_hourly_price,
@@ -1493,9 +1532,18 @@ async fn create_vast_instance(
     env.insert("TRIBE_ALLOW_MOCK".to_string(), json!("0"));
     env.insert("TRIBE_CACHE_DIR".to_string(), json!("/models"));
     env.insert("TRIBE_MAX_SCORE_CONCURRENCY".to_string(), json!("1"));
-    env.insert("TRIBE_OOM_FALLBACK_TEXT_DEVICE".to_string(), json!("accelerate,cpu"));
-    env.insert("TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB".to_string(), json!("auto"));
-    env.insert("TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB".to_string(), json!("32"));
+    env.insert(
+        "TRIBE_OOM_FALLBACK_TEXT_DEVICE".to_string(),
+        json!("accelerate,cpu"),
+    );
+    env.insert(
+        "TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB".to_string(),
+        json!("auto"),
+    );
+    env.insert(
+        "TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB".to_string(),
+        json!("32"),
+    );
     env.insert(
         "TRIBE_ACCELERATE_OFFLOAD_FOLDER".to_string(),
         json!("/models/offload"),

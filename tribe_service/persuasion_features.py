@@ -29,14 +29,14 @@ STOPWORDS = {
     "olarak", "sizin", "senin", "biz", "siz", "ben", "onlar", "gibi", "ama",
 }
 
-PLATFORM_WORD_BANDS: dict[str, tuple[int, int, int]] = {
-    # min ideal, max ideal, hard-ish char limit used for fit warnings
-    "email": (55, 210, 2000),
-    "linkedin": (25, 110, 1000),
-    "cold-call-script": (45, 150, 800),
-    "landing-page": (18, 140, 1200),
-    "ad-copy": (4, 45, 300),
-    "general": (20, 320, 3000),
+PLATFORM_WORD_BANDS: dict[str, tuple[int, int]] = {
+    # min ideal, max ideal
+    "email": (55, 210),
+    "linkedin": (25, 110),
+    "cold-call-script": (45, 150),
+    "landing-page": (18, 140),
+    "ad-copy": (4, 45),
+    "general": (20, 320),
 }
 
 PATTERNS: dict[str, list[str]] = {
@@ -231,7 +231,8 @@ def _persona_overlap(message: str, persona: str) -> tuple[float, list[str]]:
 
 
 def _platform_fit_score(platform: str, word_count: int, char_count: int) -> tuple[float, list[str]]:
-    min_words, max_words, char_limit = PLATFORM_WORD_BANDS.get(platform, PLATFORM_WORD_BANDS["general"])
+    del char_count
+    min_words, max_words = PLATFORM_WORD_BANDS.get(platform, PLATFORM_WORD_BANDS["general"])
     warnings: list[str] = []
     if word_count < min_words:
         score = 72.0 - (min_words - word_count) * 1.25
@@ -241,9 +242,6 @@ def _platform_fit_score(platform: str, word_count: int, char_count: int) -> tupl
     else:
         score = 90.0 - (word_count - max_words) * 0.65
         warnings.append("message_may_be_too_long_for_channel")
-    if char_count > char_limit:
-        score -= 22.0 + min(20.0, (char_count - char_limit) / max(char_limit, 1) * 35.0)
-        warnings.append("message_exceeds_platform_character_guideline")
     return clamp(score, 12.0, 96.0), warnings
 
 

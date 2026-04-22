@@ -234,6 +234,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | Which model interprets neural output |
+| `OPENROUTER_REFINER_MODEL` | `OPENROUTER_MODEL` | Which model generates rewrite candidates in the desktop app |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |
 | `TRIBE_ALLOW_MOCK` | `0` | Deterministic mock for tests |

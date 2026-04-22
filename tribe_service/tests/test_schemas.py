@@ -28,6 +28,14 @@ def test_request_invalid_platform_defaults():
     req = PitchScoreRequest(message="Valid message here", persona="Valid persona", platform="invalid")
     assert req.platform == "general"
 
+def test_request_accepts_long_text_and_model_alias():
+    req = PitchScoreRequest(
+        message="A" * 6000,
+        persona="Technical buyer " * 120,
+        openRouterModel="openai/gpt-5.4",
+    )
+    assert req.open_router_model == "openai/gpt-5.4"
+
 def test_valid_report():
     report = PitchScoreReport(
         persuasion_score=75.0,

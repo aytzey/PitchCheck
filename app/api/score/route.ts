@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { message, persona, platform } = body as Record<string, unknown>;
+    const { message, persona, platform, openRouterModel } = body as Record<string, unknown>;
 
     const trimmedMessage = typeof message === "string" ? message.trim() : "";
     const trimmedPersona = typeof persona === "string" ? persona.trim() : "";
@@ -25,21 +25,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (trimmedMessage.length > 5000) {
-      return Response.json(
-        { error: "message is too long (max 5000 characters)." },
-        { status: 400 },
-      );
-    }
     if (trimmedPersona.length < 5) {
       return Response.json(
         { error: "persona is required (min 5 characters)." },
-        { status: 400 },
-      );
-    }
-    if (trimmedPersona.length > 1500) {
-      return Response.json(
-        { error: "persona is too long (max 1500 characters)." },
         { status: 400 },
       );
     }
@@ -54,6 +42,7 @@ export async function POST(request: Request) {
       message: trimmedMessage,
       persona: trimmedPersona,
       platform: validPlatform,
+      openRouterModel: typeof openRouterModel === "string" ? openRouterModel.trim() || undefined : undefined,
     });
 
     return Response.json(result.data ?? { error: result.error }, {

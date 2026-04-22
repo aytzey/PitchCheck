@@ -33,6 +33,7 @@ export interface DesktopRuntimeConfig {
   vastApiKey?: string;
   openRouterApiKey?: string;
   openRouterModel?: string;
+  openRouterRefinerModel?: string;
   image?: string;
   minGpuRamGb?: number;
   maxHourlyPrice?: number;
@@ -125,7 +126,12 @@ export async function saveDesktopAppConfig(
 }
 
 export async function scorePitchOnDesktop(
-  request: { message: string; persona: string; platform: string },
+  request: {
+    message: string;
+    persona: string;
+    platform: string;
+    openRouterModel?: string;
+  },
 ): Promise<{ report?: unknown; error?: string }> {
   return invokeDesktop<{ report?: unknown; error?: string }>("score_pitch", {
     request,

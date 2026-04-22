@@ -15,6 +15,7 @@ export interface PitchScoreRequest {
   message: string;      // The pitch/sales message (min 10 chars)
   persona: string;      // Free-text target persona description (min 5 chars)
   platform?: Platform;  // Optional platform context (default: "general")
+  openRouterModel?: string; // Optional evaluator model override
 }
 
 // Individual breakdown dimension

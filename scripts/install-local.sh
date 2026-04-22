@@ -104,9 +104,12 @@ write_desktop_runtime_config() {
   )
   local openrouter_key
   local openrouter_model
+  local openrouter_refiner_model
   openrouter_key="$(sed -n 's/^OPENROUTER_API_KEY=//p' .env 2>/dev/null | tail -n 1)"
   openrouter_model="$(sed -n 's/^OPENROUTER_MODEL=//p' .env 2>/dev/null | tail -n 1)"
   openrouter_model="${openrouter_model:-anthropic/claude-sonnet-4.6}"
+  openrouter_refiner_model="$(sed -n 's/^OPENROUTER_REFINER_MODEL=//p' .env 2>/dev/null | tail -n 1)"
+  openrouter_refiner_model="${openrouter_refiner_model:-$openrouter_model}"
 
   for dir in "${config_dirs[@]}"; do
     mkdir -p "$dir"
@@ -117,6 +120,7 @@ write_desktop_runtime_config() {
 VAST_API_KEY=
 OPENROUTER_API_KEY=${openrouter_key}
 OPENROUTER_MODEL=${openrouter_model}
+OPENROUTER_REFINER_MODEL=${openrouter_refiner_model}
 PITCHCHECK_TRIBE_IMAGE=${image}
 PITCHCHECK_MIN_GPU_RAM_GB=8
 PITCHCHECK_MAX_HOURLY_PRICE=0.45

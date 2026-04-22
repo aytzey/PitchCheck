@@ -54,7 +54,10 @@ describe("DesktopWorkbench", () => {
 
     expect(screen.getByText("Machine env")).toBeDefined();
     expect(screen.getByLabelText(/OpenRouter API key/)).toBeDefined();
-    expect(screen.getByLabelText<HTMLInputElement>(/OpenRouter model/).value).toBe(
+    expect(screen.getByLabelText<HTMLInputElement>(/Evaluator model/).value).toBe(
+      "anthropic/claude-sonnet-4.6",
+    );
+    expect(screen.getByLabelText<HTMLInputElement>(/Refiner model/).value).toBe(
       "anthropic/claude-sonnet-4.6",
     );
   });
@@ -83,6 +86,7 @@ describe("DesktopWorkbench", () => {
     fireEvent.click(screen.getByRole("button", { name: /Refine & re-score/ }));
 
     await waitFor(() => expect(screen.getByText("After . refined")).toBeDefined());
-    expect(screen.getByRole("button", { name: "Accept & rescore" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Accept & re-evaluate" })).toBeDefined();
   });
 });

@@ -99,6 +99,7 @@ async def score_pitch(request: PitchScoreRequest):
             neural_signals=neural_signals,
             raw_features=raw_features,
             fmri_summary=fmri_data,
+            openrouter_model=request.open_router_model,
         )
 
         # 5. Assemble PitchScoreReport

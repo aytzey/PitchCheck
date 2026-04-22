@@ -45,7 +45,6 @@ type Medium = {
   id: Platform;
   label: string;
   hint: string;
-  maxChars: number;
 };
 
 type RefinedPitch = {
@@ -73,12 +72,12 @@ I built a small tool that auto-generates Grafana dashboards from your existing O
 Would you be open to a 15-min call next Tuesday or Wednesday? Happy to screen-share it against one of your services - if it's not useful you've lost nothing but the meeting slot.`;
 
 const MEDIUMS: Medium[] = [
-  { id: "email", label: "Email", hint: "Cold or warm outreach, follow-up, intro.", maxChars: 2000 },
-  { id: "linkedin", label: "LinkedIn", hint: "Short, professional, sender photo visible.", maxChars: 1000 },
-  { id: "cold-call-script", label: "Cold call", hint: "Opening script, 30-second ear-grab.", maxChars: 800 },
-  { id: "landing-page", label: "Landing page", hint: "Hero copy, subhead, CTA. Scannable.", maxChars: 1200 },
-  { id: "ad-copy", label: "Ad copy", hint: "Headline-first, tight, platform-constrained.", maxChars: 300 },
-  { id: "general", label: "Other", hint: "Speech, essay, note, anything else.", maxChars: 3000 },
+  { id: "email", label: "Email", hint: "Cold or warm outreach, follow-up, intro." },
+  { id: "linkedin", label: "LinkedIn", hint: "Short, professional, sender photo visible." },
+  { id: "cold-call-script", label: "Cold call", hint: "Opening script, 30-second ear-grab." },
+  { id: "landing-page", label: "Landing page", hint: "Hero copy, subhead, CTA. Scannable." },
+  { id: "ad-copy", label: "Ad copy", hint: "Headline-first, tight, platform-constrained." },
+  { id: "general", label: "Other", hint: "Speech, essay, note, anything else." },
 ];
 
 const DEFAULT_AUDIENCE: Audience = {
@@ -199,6 +198,7 @@ export default function DesktopWorkbench() {
   const [vastApiKey, setVastApiKey] = useState("");
   const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [openRouterModel, setOpenRouterModel] = useState(DEFAULT_OPENROUTER_MODEL);
+  const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_MODEL);
   const [configPath, setConfigPath] = useState<string | undefined>();
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [image, setImage] = useState(DEFAULT_IMAGE);
@@ -233,6 +233,7 @@ export default function DesktopWorkbench() {
           setVastApiKey,
           setOpenRouterApiKey,
           setOpenRouterModel,
+          setOpenRouterRefinerModel,
           setImage,
           setMinGpuRamGb,
           setMaxHourlyPrice,
@@ -322,13 +323,11 @@ export default function DesktopWorkbench() {
     return "ready";
   }, [busyAction, desktopMode, desktopStatus, error, runtimeKind, scoring, setupStatus]);
 
-  const selectedMediumOverLimit = message.length > medium.maxChars;
   const persona = useMemo(() => formatPersona(audience), [audience]);
   const canScore =
     runtimeState === "connected" &&
     message.trim().length >= 10 &&
-    persona.trim().length >= 5 &&
-    !selectedMediumOverLimit;
+    persona.trim().length >= 5;
 
   const handleConnect = useCallback(async () => {
     if (!desktopMode) {
@@ -344,6 +343,7 @@ export default function DesktopWorkbench() {
         vastApiKey,
         openRouterApiKey,
         openRouterModel,
+        openRouterRefinerModel,
         image,
         minGpuRamGb,
         maxHourlyPrice,
@@ -369,6 +369,7 @@ export default function DesktopWorkbench() {
     minGpuRamGb,
     openRouterApiKey,
     openRouterModel,
+    openRouterRefinerModel,
     preferInterruptible,
     refreshDesktop,
     refreshSetup,
@@ -398,19 +399,15 @@ export default function DesktopWorkbench() {
 
   const handleScore = useCallback(async (messageOverride?: string) => {
     const nextMessage = (typeof messageOverride === "string" ? messageOverride : message).trim();
-    const nextOverLimit = nextMessage.length > medium.maxChars;
     const nextCanScore =
       runtimeState === "connected" &&
       nextMessage.length >= 10 &&
-      persona.trim().length >= 5 &&
-      !nextOverLimit;
+      persona.trim().length >= 5;
 
     if (!nextCanScore) {
       if (runtimeState !== "connected") {
         setError("Connect a runtime before scoring.");
         setAppRoute("runtime");
-      } else if (nextOverLimit) {
-        setError(`Message is over the ${medium.maxChars} character limit for ${medium.label}.`);
       }
       return;
     }
@@ -424,6 +421,7 @@ export default function DesktopWorkbench() {
           message: nextMessage,
           persona,
           platform: medium.id,
+          openRouterModel,
         });
         if (!data.report) throw new Error(data.error || "Scoring failed.");
         setReport(data.report as PitchScoreReport);
@@ -435,6 +433,7 @@ export default function DesktopWorkbench() {
             message: nextMessage,
             persona,
             platform: medium.id,
+            openRouterModel,
           }),
         });
         const data = (await res.json()) as { report?: PitchScoreReport; error?: string };
@@ -446,7 +445,7 @@ export default function DesktopWorkbench() {
     } finally {
       setScoring(false);
     }
-  }, [desktopMode, medium.id, medium.label, medium.maxChars, message, persona, runtimeState, setAppRoute]);
+  }, [desktopMode, medium.id, message, openRouterModel, persona, runtimeState, setAppRoute]);
 
   const handleRefine = useCallback(async () => {
     if (!report) return;
@@ -461,7 +460,7 @@ export default function DesktopWorkbench() {
       return;
     }
 
-    const suggestions = extractSuggestions(report);
+    const refineBrief = extractRefineBrief(report);
     setRefining(true);
     setError(null);
     try {
@@ -470,21 +469,21 @@ export default function DesktopWorkbench() {
           message: source,
           persona,
           platform: medium.id,
-          suggestions,
+          suggestions: refineBrief,
         });
         if (!data.refinedMessage) throw new Error(data.error || "Refine failed.");
         setRefinedPitch({
           before: source,
           after: data.refinedMessage.trim(),
-          model: data.model || openRouterModel || DEFAULT_OPENROUTER_MODEL,
-          applied: suggestions,
+          model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+          applied: refineBrief,
         });
       } else {
         setRefinedPitch({
           before: source,
-          after: buildPreviewRewrite(source, suggestions),
+          after: buildPreviewRewrite(source, refineBrief),
           model: "Web preview rewrite",
-          applied: suggestions,
+          applied: refineBrief,
         });
       }
     } catch (caught) {
@@ -498,6 +497,7 @@ export default function DesktopWorkbench() {
     message,
     openRouterApiKey,
     openRouterModel,
+    openRouterRefinerModel,
     persona,
     report,
     setAppRoute,
@@ -510,6 +510,12 @@ export default function DesktopWorkbench() {
     setRefinedPitch(null);
     void handleScore(nextMessage);
   }, [handleScore, refinedPitch]);
+
+  const handleAcceptRefineForEditing = useCallback(() => {
+    if (!refinedPitch) return;
+    setMessage(refinedPitch.after);
+    setRefinedPitch(null);
+  }, [refinedPitch]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -546,10 +552,10 @@ export default function DesktopWorkbench() {
           refining={refining}
           refinedPitch={refinedPitch}
           canScore={canScore}
-          overLimit={selectedMediumOverLimit}
           onScore={handleScore}
           onRefine={handleRefine}
           onAcceptRefine={handleAcceptRefine}
+          onAcceptRefineForEditing={handleAcceptRefineForEditing}
           onDiscardRefine={() => setRefinedPitch(null)}
           onClear={() => {
             setMessage("");
@@ -573,6 +579,8 @@ export default function DesktopWorkbench() {
           setOpenRouterApiKey={setOpenRouterApiKey}
           openRouterModel={openRouterModel}
           setOpenRouterModel={setOpenRouterModel}
+          openRouterRefinerModel={openRouterRefinerModel}
+          setOpenRouterRefinerModel={setOpenRouterRefinerModel}
           image={image}
           setImage={setImage}
           minGpuRamGb={minGpuRamGb}
@@ -613,6 +621,8 @@ export default function DesktopWorkbench() {
           setOpenRouterApiKey={setOpenRouterApiKey}
           openRouterModel={openRouterModel}
           setOpenRouterModel={setOpenRouterModel}
+          openRouterRefinerModel={openRouterRefinerModel}
+          setOpenRouterRefinerModel={setOpenRouterRefinerModel}
           image={image}
           setImage={setImage}
           minGpuRamGb={minGpuRamGb}
@@ -630,6 +640,7 @@ export default function DesktopWorkbench() {
                 vastApiKey,
                 openRouterApiKey,
                 openRouterModel,
+                openRouterRefinerModel,
                 image,
                 minGpuRamGb,
                 maxHourlyPrice,
@@ -639,6 +650,7 @@ export default function DesktopWorkbench() {
                 setVastApiKey,
                 setOpenRouterApiKey,
                 setOpenRouterModel,
+                setOpenRouterRefinerModel,
                 setImage,
                 setMinGpuRamGb,
                 setMaxHourlyPrice,
@@ -713,10 +725,10 @@ function WorkspaceView({
   refining,
   refinedPitch,
   canScore,
-  overLimit,
   onScore,
   onRefine,
   onAcceptRefine,
+  onAcceptRefineForEditing,
   onDiscardRefine,
   onClear,
   onConnect,
@@ -736,10 +748,10 @@ function WorkspaceView({
   refining: boolean;
   refinedPitch: RefinedPitch | null;
   canScore: boolean;
-  overLimit: boolean;
   onScore: () => void;
   onRefine: () => void;
   onAcceptRefine: () => void;
+  onAcceptRefineForEditing: () => void;
   onDiscardRefine: () => void;
   onClear: () => void;
   onConnect: () => void;
@@ -756,8 +768,8 @@ function WorkspaceView({
 
         <div className="pc-strip">
           <span className="label">03 / Your message</span>
-          <span className="mono pc-count" data-warning={overLimit || undefined}>
-            {message.length} / {medium.maxChars} chars . ~{tokens} tokens
+          <span className="mono pc-count">
+            {message.length} chars . ~{tokens} tokens
           </span>
           <button className="pc-link-button" onClick={onClear} type="button">
             Clear
@@ -799,8 +811,11 @@ function WorkspaceView({
               <Button variant="ghost" onClick={onDiscardRefine}>
                 Discard
               </Button>
+              <Button variant="secondary" disabled={scoring} onClick={onAcceptRefineForEditing} icon={<Icon name="check" />}>
+                Accept & continue editing
+              </Button>
               <Button variant="primary" loading={scoring} disabled={scoring} onClick={onAcceptRefine} icon={<Icon name="spark" />}>
-                {scoring ? "Re-scoring..." : "Accept & rescore"}
+                {scoring ? "Re-evaluating..." : "Accept & re-evaluate"}
               </Button>
             </>
           )}
@@ -949,6 +964,8 @@ function RuntimeView({
   setOpenRouterApiKey,
   openRouterModel,
   setOpenRouterModel,
+  openRouterRefinerModel,
+  setOpenRouterRefinerModel,
   image,
   setImage,
   minGpuRamGb,
@@ -975,6 +992,8 @@ function RuntimeView({
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
   setOpenRouterModel: (model: string) => void;
+  openRouterRefinerModel: string;
+  setOpenRouterRefinerModel: (model: string) => void;
   image: string;
   setImage: (image: string) => void;
   minGpuRamGb: number;
@@ -1030,6 +1049,8 @@ function RuntimeView({
             setOpenRouterApiKey={setOpenRouterApiKey}
             openRouterModel={openRouterModel}
             setOpenRouterModel={setOpenRouterModel}
+            openRouterRefinerModel={openRouterRefinerModel}
+            setOpenRouterRefinerModel={setOpenRouterRefinerModel}
             image={image}
             setImage={setImage}
             minGpuRamGb={minGpuRamGb}
@@ -1161,6 +1182,8 @@ function SettingsView({
   setOpenRouterApiKey,
   openRouterModel,
   setOpenRouterModel,
+  openRouterRefinerModel,
+  setOpenRouterRefinerModel,
   image,
   setImage,
   minGpuRamGb,
@@ -1179,6 +1202,8 @@ function SettingsView({
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
   setOpenRouterModel: (model: string) => void;
+  openRouterRefinerModel: string;
+  setOpenRouterRefinerModel: (model: string) => void;
   image: string;
   setImage: (image: string) => void;
   minGpuRamGb: number;
@@ -1205,8 +1230,11 @@ function SettingsView({
           <Field label="OpenRouter API key" hint="Saved on this PC and injected into the TRIBE service env.">
             <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Stored in runtime.env" />
           </Field>
-          <Field label="OpenRouter model" hint="Default for persona-aware LLM interpretation.">
+          <Field label="Evaluator model" hint="Used for score explanations and rewrite suggestions.">
             <input value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
+          </Field>
+          <Field label="Refiner model" hint="Used only when generating an accepted rewrite candidate.">
+            <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
           </Field>
           <Field label="Runtime image" hint="Published from GitHub Actions.">
             <input value={image} onChange={(event) => setImage(event.target.value)} />
@@ -1780,6 +1808,8 @@ function RuntimeConfig({
   setOpenRouterApiKey,
   openRouterModel,
   setOpenRouterModel,
+  openRouterRefinerModel,
+  setOpenRouterRefinerModel,
   image,
   setImage,
   minGpuRamGb,
@@ -1796,6 +1826,8 @@ function RuntimeConfig({
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
   setOpenRouterModel: (model: string) => void;
+  openRouterRefinerModel: string;
+  setOpenRouterRefinerModel: (model: string) => void;
   image: string;
   setImage: (image: string) => void;
   minGpuRamGb: number;
@@ -1816,8 +1848,11 @@ function RuntimeConfig({
       <Field label="OpenRouter API key" hint={desktopMode ? "Saved to this PC with Settings / Save." : "Available in the desktop app."}>
         <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Saved in runtime.env" />
       </Field>
-      <Field label="OpenRouter model">
+      <Field label="Evaluator model">
         <input value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
+      </Field>
+      <Field label="Refiner model">
+        <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
       </Field>
       <Field label="Minimum VRAM">
         <input type="number" min={8} value={minGpuRamGb} onChange={(event) => setMinGpuRamGb(Number(event.target.value))} />
@@ -2283,6 +2318,7 @@ function applyDesktopConfig(
     setVastApiKey: (value: string) => void;
     setOpenRouterApiKey: (value: string) => void;
     setOpenRouterModel: (value: string) => void;
+    setOpenRouterRefinerModel: (value: string) => void;
     setImage: (value: string) => void;
     setMinGpuRamGb: (value: number) => void;
     setMaxHourlyPrice: (value: number) => void;
@@ -2293,6 +2329,7 @@ function applyDesktopConfig(
   setters.setVastApiKey(config.vastApiKey || "");
   setters.setOpenRouterApiKey(config.openRouterApiKey || "");
   setters.setOpenRouterModel(config.openRouterModel || DEFAULT_OPENROUTER_MODEL);
+  setters.setOpenRouterRefinerModel(config.openRouterRefinerModel || config.openRouterModel || DEFAULT_OPENROUTER_MODEL);
   setters.setImage(config.image || DEFAULT_IMAGE);
   setters.setMinGpuRamGb(config.minGpuRamGb ?? 16);
   setters.setMaxHourlyPrice(config.maxHourlyPrice ?? 0.45);
@@ -2370,6 +2407,88 @@ function extractSuggestions(report: PitchScoreReport) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 5);
+}
+
+function extractRefineBrief(report: PitchScoreReport) {
+  const rewriteGuidance = report.rewrite_suggestions
+    .map((item) => {
+      const before = item.before ? ` Replace or improve "${item.before}"` : "";
+      const after = item.after ? ` Target direction: "${item.after}"` : "";
+      return `Rewrite suggestion - ${item.title}: ${item.why || "Apply this directly."}${before}${after}`;
+    })
+    .filter(Boolean);
+  const weakFacets = report.breakdown
+    .filter((item) => item.score < 78)
+    .sort((left, right) => left.score - right.score)
+    .slice(0, 3)
+    .map((item) => `Weak facet - ${item.label} (${Math.round(item.score)}/100): ${item.explanation} Repair tactic: ${facetRepairTactic(item.key, item.label)}`);
+  const weakSignals = report.neural_signals
+    .filter((item) => (item.key === "cognitive_friction" ? item.score > 38 : item.score < 70))
+    .sort((left, right) => {
+      const leftWeakness = left.key === "cognitive_friction" ? left.score : 100 - left.score;
+      const rightWeakness = right.key === "cognitive_friction" ? right.score : 100 - right.score;
+      return rightWeakness - leftWeakness;
+    })
+    .slice(0, 3)
+    .map((item) => `Weak neural signal - ${item.label} (${Math.round(item.score)}/100): ${neuralRepairTactic(item.key)}`);
+  const evidence = report.persuasion_evidence;
+  const missingElements = (evidence?.missing_elements ?? [])
+    .slice(0, 3)
+    .map((item) => `Missing persuasion element: ${item}. Add it without inventing unverifiable facts.`);
+  const risks = report.risks.slice(0, 3).map((risk) => `Risk to fix: ${risk}`);
+
+  return [
+    ...rewriteGuidance,
+    ...weakFacets,
+    ...weakSignals,
+    ...missingElements,
+    ...risks,
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function facetRepairTactic(key: string, label: string) {
+  const normalized = `${key} ${label}`.toLowerCase();
+  if (/clarity|friction/.test(normalized)) {
+    return "Shorten long sentences, remove vague words, make the value proposition instantly scannable, and keep one clear next step.";
+  }
+  if (/credibility|proof|trust/.test(normalized)) {
+    return "Add concrete proof already supported by the draft: customer type, measurable outcome, benchmark, implementation detail, or a low-risk pilot proof path.";
+  }
+  if (/personal|fit|relevance/.test(normalized)) {
+    return "Tie the opener and value claim to the recipient's role, current context, pain, and decision criteria.";
+  }
+  if (/urgency|attention/.test(normalized)) {
+    return "Make the cost of waiting or timing reason explicit, then connect it to a specific CTA.";
+  }
+  if (/emotion|resonance|reward/.test(normalized)) {
+    return "Translate the feature into an outcome the recipient wants, such as saved time, less risk, status, confidence, or reduced workload.";
+  }
+  return "Make the weak point more concrete, more persona-specific, and easier to act on.";
+}
+
+function neuralRepairTactic(key: string) {
+  if (key === "cognitive_friction") {
+    return "Reduce cognitive load: fewer clauses, simpler structure, one ask, and no generic jargon.";
+  }
+  if (key === "personal_relevance") {
+    return "Increase self-relevance: mention the persona's situation and show why this matters to them now.";
+  }
+  if (key === "emotional_engagement") {
+    return "Increase reward value: state a tangible win or avoided pain in human terms.";
+  }
+  if (key === "social_proof_potential") {
+    return "Add credible social proof only if supported: peer teams, customer category, reference, benchmark, or proof path.";
+  }
+  if (key === "memorability") {
+    return "Add a compact, specific phrase or contrast that is easy to remember.";
+  }
+  if (key === "attention_capture") {
+    return "Strengthen the first line with a relevant trigger, specific observation, or sharp problem statement.";
+  }
+  return "Improve this signal with concrete, audience-specific evidence.";
 }
 
 function buildPreviewRewrite(source: string, suggestions: string[]) {

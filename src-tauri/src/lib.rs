@@ -36,6 +36,9 @@ const GHCR_TOKEN_URL: &str =
     "https://ghcr.io/token?service=ghcr.io&scope=repository:aytzey/pitchcheck-tribe:pull";
 const OCI_MANIFEST_ACCEPT: &str =
     "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json";
+const TRIBE_SCORE_TIMEOUT_SECONDS: u64 = 900;
+const TRIBE_CLIENT_SCORE_TIMEOUT_SECONDS: u64 = TRIBE_SCORE_TIMEOUT_SECONDS + 30;
+const TRIBE_IDLE_UNLOAD_SECONDS: u64 = 600;
 
 #[derive(Debug, Error)]
 enum RuntimeError {
@@ -101,7 +104,7 @@ impl Default for RuntimeStatus {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeConfig {
     runtime_kind: Option<String>,
@@ -422,6 +425,18 @@ async fn disconnect_runtime(
         match current.mode.as_str() {
             "local" => stop_local_container().await?,
             "pitchserver" => {
+                if let (Some(service_url), Ok(token)) = (
+                    current.service_url.as_deref(),
+                    pitch_server_auth_token(&state),
+                ) {
+                    let _ = unload_pitch_server_pipeline(
+                        &state.client,
+                        service_url,
+                        &token,
+                        "disconnect",
+                    )
+                    .await;
+                }
                 stop_pitch_server_tunnel(&state)?;
                 clear_pitch_server_auth_token(&state)?;
             }
@@ -499,12 +514,15 @@ async fn score_pitch(
             .client
             .post(format!("{service_url}/score"))
             .json(&request)
-            .timeout(Duration::from_secs(900));
+            .timeout(Duration::from_secs(TRIBE_CLIENT_SCORE_TIMEOUT_SECONDS));
         if status.mode == "pitchserver" {
             let token = pitch_server_auth_token(&state)?;
             request_builder = request_builder.bearer_auth(token);
         }
-        let response = request_builder.send().await?;
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|error| score_request_error(error, status.mode.as_str()))?;
         let http_status = response.status();
         let body = response
             .json::<Value>()
@@ -1355,6 +1373,8 @@ async fn connect_local(
         "-e",
         "TRIBE_MAX_SCORE_CONCURRENCY=1",
         "-e",
+        "TRIBE_IDLE_UNLOAD_SECONDS=600",
+        "-e",
         "TRIBE_OOM_FALLBACK_TEXT_DEVICE=accelerate,cpu",
         "-e",
         "TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB=auto",
@@ -1504,8 +1524,9 @@ services:
       HF_HOME: /models/huggingface
       HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
       XDG_CACHE_HOME: /models/.cache
-      TRIBE_SCORE_TIMEOUT_SECONDS: "900"
+      TRIBE_SCORE_TIMEOUT_SECONDS: "{score_timeout_seconds}"
       TRIBE_MAX_SCORE_CONCURRENCY: "1"
+      TRIBE_IDLE_UNLOAD_SECONDS: "{idle_unload_seconds}"
       TRIBE_OOM_FALLBACK_TEXT_DEVICE: accelerate,cpu
       TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB: auto
       TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB: "32"
@@ -1586,7 +1607,9 @@ fi
 "#,
         domain = PITCH_SERVER_DOMAIN,
         image = image,
+        idle_unload_seconds = TRIBE_IDLE_UNLOAD_SECONDS,
         remote_port = PITCH_SERVER_REMOTE_PORT,
+        score_timeout_seconds = TRIBE_SCORE_TIMEOUT_SECONDS,
         service_env = service_env,
         tribe_port = TRIBE_PORT,
         workdir = PITCH_SERVER_WORKDIR,
@@ -1689,6 +1712,57 @@ fn response_error_text(body: &Value, fallback: &str) -> String {
         }
     }
     fallback.to_string()
+}
+
+fn score_request_error(error: reqwest::Error, mode: &str) -> RuntimeError {
+    if error.is_timeout() {
+        let runtime_name = if mode == "pitchserver" {
+            "PitchServer"
+        } else {
+            "Runtime"
+        };
+        return RuntimeError::Message(format!(
+            "{runtime_name} scoring timed out after {TRIBE_CLIENT_SCORE_TIMEOUT_SECONDS}s. The pipeline may still be warming or wedged; reconnect the runtime and try a shorter pitch."
+        ));
+    }
+    if error.is_connect() || error.is_request() {
+        let runtime_name = if mode == "pitchserver" {
+            "PitchServer"
+        } else {
+            "Runtime"
+        };
+        return RuntimeError::Message(format!(
+            "{runtime_name} connection failed while scoring: {error}"
+        ));
+    }
+    RuntimeError::Http(error)
+}
+
+async fn unload_pitch_server_pipeline(
+    client: &Client,
+    service_url: &str,
+    token: &str,
+    reason: &str,
+) -> RuntimeResult<()> {
+    let response = client
+        .post(format!("{service_url}/runtime/unload"))
+        .bearer_auth(token)
+        .json(&json!({ "reason": reason }))
+        .timeout(Duration::from_secs(60))
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response
+        .json::<Value>()
+        .await
+        .unwrap_or_else(|_| json!({ "error": "Invalid response from PitchServer runtime unload" }));
+    if !status.is_success() {
+        return Err(RuntimeError::Message(response_error_text(
+            &body,
+            "PitchServer runtime unload failed",
+        )));
+    }
+    Ok(())
 }
 
 fn pitch_server_ssh_output(password: &str, script: &str) -> RuntimeResult<String> {
@@ -2596,5 +2670,21 @@ mod tests {
         assert_eq!(value["new_username"], "new-user");
         assert_eq!(value["new_password"], "new-pass");
         assert!(value.get("currentPassword").is_none());
+    }
+
+    #[test]
+    fn pitch_server_script_configures_idle_pipeline_unload() {
+        let script = pitch_server_remote_script(
+            DEFAULT_IMAGE_FALLBACK,
+            &RuntimeConfig {
+                runtime_kind: Some("pitchserver".to_string()),
+                pitch_server_username: Some("pitchserver".to_string()),
+                pitch_server_password: Some("password-123".to_string()),
+                ..RuntimeConfig::default()
+            },
+        );
+
+        assert!(script.contains(r#"TRIBE_IDLE_UNLOAD_SECONDS: "600""#));
+        assert!(script.contains(r#"TRIBE_SCORE_TIMEOUT_SECONDS: "900""#));
     }
 }

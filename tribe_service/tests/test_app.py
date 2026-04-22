@@ -23,6 +23,9 @@ class TestHealth:
         assert "model_id" in data
         assert "device" in data
         assert "runtime" in data
+        assert "pipeline" in data
+        assert data["pipeline"]["idle_unload_seconds"] >= 0
+        assert data["pipeline"]["active_scores"] >= 0
         assert "configured_oom_fallback_text_devices" in data["runtime"]
         assert "last_score" in data["runtime"]
         assert "openrouter_enabled" in data
@@ -107,6 +110,19 @@ class TestScore:
         signal_keys = {s["key"] for s in report["neural_signals"]}
         expected = {"emotional_engagement", "personal_relevance", "social_proof_potential", "memorability", "attention_capture", "cognitive_friction"}
         assert signal_keys == expected
+
+    def test_runtime_unload_releases_loaded_pipeline(self):
+        res = client.post("/score", json={
+            "message": "Our platform reduces deployment time by 80% for enterprise teams",
+            "persona": "CTO at startup, technical",
+        })
+        assert res.status_code == 200
+        assert client.get("/health").json()["pipeline"]["model_loaded"] is True
+
+        unload = client.post("/runtime/unload")
+        assert unload.status_code == 200
+        assert unload.json()["ok"] is True
+        assert client.get("/health").json()["pipeline"]["model_loaded"] is False
 
 
 class TestPitchServerAuth:

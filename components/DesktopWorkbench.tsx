@@ -503,6 +503,13 @@ export default function DesktopWorkbench() {
     setScoring(true);
     setRefinedPitch(null);
     setError(null);
+    if (desktopMode) {
+      setRuntimeMessage(
+        runtimeKind === "pitchserver"
+          ? "Preparing PitchServer pipeline and analyzing pitch..."
+          : "Analyzing pitch...",
+      );
+    }
     try {
       if (desktopMode) {
         const data = await scorePitchOnDesktop({
@@ -513,6 +520,7 @@ export default function DesktopWorkbench() {
         });
         if (!data.report) throw new Error(data.error || "Scoring failed.");
         setReport(data.report as PitchScoreReport);
+        setRuntimeMessage("Analysis complete.");
       } else {
         const res = await fetch("/api/score", {
           method: "POST",
@@ -529,11 +537,13 @@ export default function DesktopWorkbench() {
         setReport(data.report);
       }
     } catch (caught) {
-      setError(readError(caught));
+      const next = readError(caught);
+      setError(next);
+      if (desktopMode) setRuntimeMessage(next);
     } finally {
       setScoring(false);
     }
-  }, [desktopMode, medium.id, message, openRouterModel, persona, runtimeState, setAppRoute]);
+  }, [desktopMode, medium.id, message, openRouterModel, persona, runtimeKind, runtimeState, setAppRoute]);
 
   const handleRefine = useCallback(async () => {
     if (!report) return;
@@ -793,7 +803,7 @@ function TopBar({
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
-        <span className="mono">v0.1.5</span>
+        <span className="mono">v0.1.6</span>
       </div>
       <nav className="pc-tabs nodrag" aria-label="Primary">
         {ROUTES.map((item) => (

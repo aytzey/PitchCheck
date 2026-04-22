@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 import os
 import asyncio
+import contextlib
+import time
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -28,6 +30,7 @@ from tribe_service.engine import (
     summarize_fmri_output,
     is_model_loaded,
     runtime_config,
+    unload_model,
     PERSUASION_SIGNAL_LABELS,
     TRIBE_DEVICE,
     TRIBE_MODEL_ID,
@@ -48,10 +51,15 @@ LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 TRIBE_SCORE_TIMEOUT_SECONDS = float(os.getenv("TRIBE_SCORE_TIMEOUT_SECONDS", "900"))
 TRIBE_MAX_SCORE_CONCURRENCY = max(1, int(os.getenv("TRIBE_MAX_SCORE_CONCURRENCY", "1")))
+TRIBE_IDLE_UNLOAD_SECONDS = max(0.0, float(os.getenv("TRIBE_IDLE_UNLOAD_SECONDS", "600")))
 
 app = FastAPI(title="PitchScore TRIBE Service", docs_url="/docs", redoc_url=None)
 _score_lock = asyncio.Semaphore(TRIBE_MAX_SCORE_CONCURRENCY)
 _bearer = HTTPBearer(auto_error=False)
+_pipeline_lock = asyncio.Lock()
+_active_scores = 0
+_last_runtime_activity = time.monotonic()
+_idle_unload_task: asyncio.Task | None = None
 
 # CORS
 app.add_middleware(
@@ -80,6 +88,71 @@ def _token_from_credentials(credentials: HTTPAuthorizationCredentials | None) ->
     return credentials.credentials if credentials else None
 
 
+def _idle_for_seconds() -> float:
+    return max(0.0, time.monotonic() - _last_runtime_activity)
+
+
+async def _begin_runtime_activity() -> None:
+    global _active_scores, _last_runtime_activity
+    async with _pipeline_lock:
+        _active_scores += 1
+        _last_runtime_activity = time.monotonic()
+
+
+async def _finish_runtime_activity() -> None:
+    global _active_scores, _last_runtime_activity
+    async with _pipeline_lock:
+        _active_scores = max(0, _active_scores - 1)
+        _last_runtime_activity = time.monotonic()
+
+
+async def _pipeline_status() -> dict:
+    async with _pipeline_lock:
+        return {
+            "model_loaded": is_model_loaded(),
+            "active_scores": _active_scores,
+            "idle_for_seconds": round(_idle_for_seconds(), 3),
+            "idle_unload_seconds": TRIBE_IDLE_UNLOAD_SECONDS,
+        }
+
+
+async def _unload_pipeline(reason: str) -> dict:
+    async with _pipeline_lock:
+        if _active_scores > 0:
+            return {
+                "ok": False,
+                "unloaded": False,
+                "reason": "score_in_progress",
+                "active_scores": _active_scores,
+                "model_loaded": is_model_loaded(),
+            }
+        was_loaded = is_model_loaded()
+        if was_loaded:
+            await run_in_threadpool(unload_model)
+        return {
+            "ok": True,
+            "unloaded": was_loaded,
+            "reason": reason,
+            "active_scores": _active_scores,
+            "model_loaded": is_model_loaded(),
+        }
+
+
+async def _idle_unload_loop() -> None:
+    if TRIBE_IDLE_UNLOAD_SECONDS <= 0:
+        return
+    interval = min(60.0, max(5.0, TRIBE_IDLE_UNLOAD_SECONDS / 4))
+    while True:
+        await asyncio.sleep(interval)
+        if not is_model_loaded():
+            continue
+        async with _pipeline_lock:
+            should_unload = _active_scores == 0 and _idle_for_seconds() >= TRIBE_IDLE_UNLOAD_SECONDS
+        if should_unload:
+            LOGGER.info("Unloading idle TRIBE pipeline after %.1fs", _idle_for_seconds())
+            await _unload_pipeline("idle_timeout")
+
+
 async def require_auth(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> str:
@@ -98,6 +171,7 @@ async def health():
         "model_id": TRIBE_MODEL_ID,
         "device": TRIBE_DEVICE,
         "model_loaded": is_model_loaded(),
+        "pipeline": await _pipeline_status(),
         "runtime": runtime_config(),
         "max_score_concurrency": TRIBE_MAX_SCORE_CONCURRENCY,
         "openrouter_enabled": OPENROUTER_ENABLED,
@@ -131,6 +205,7 @@ async def auth_change_password(
 @app.post("/score")
 async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)):
     """Score a sales pitch for persuasion effectiveness against a target persona."""
+    await _begin_runtime_activity()
     try:
         # 1. Run TRIBE text scoring
         async with _score_lock:
@@ -222,11 +297,34 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             status_code=500,
             detail="Scoring failed while running TRIBE. Check service logs for the internal error code.",
         )
+    finally:
+        await _finish_runtime_activity()
+
+
+@app.post("/runtime/unload")
+async def unload_runtime(_: str = Depends(require_auth)):
+    return await _unload_pipeline("requested")
 
 
 @app.on_event("startup")
 async def startup():
+    global _idle_unload_task
     LOGGER.info(
-        "PitchScore TRIBE service starting — model=%s device=%s openrouter=%s auth=%s",
-        TRIBE_MODEL_ID, TRIBE_DEVICE, OPENROUTER_ENABLED, AUTH_STORE.status(),
+        "PitchScore TRIBE service starting — model=%s device=%s openrouter=%s auth=%s idle_unload=%ss",
+        TRIBE_MODEL_ID,
+        TRIBE_DEVICE,
+        OPENROUTER_ENABLED,
+        AUTH_STORE.status(),
+        TRIBE_IDLE_UNLOAD_SECONDS,
     )
+    if TRIBE_IDLE_UNLOAD_SECONDS > 0:
+        _idle_unload_task = asyncio.create_task(_idle_unload_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    if _idle_unload_task:
+        _idle_unload_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _idle_unload_task
+    await _unload_pipeline("shutdown")

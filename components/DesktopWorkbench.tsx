@@ -22,7 +22,7 @@ import {
 import { type FmriOutput, type PitchScoreReport, type Platform } from "@/shared/types";
 
 type Route = "workspace" | "runtime" | "setup" | "settings";
-type RuntimeKind = "local" | "vast";
+type RuntimeKind = "local" | "vast" | "pitchserver";
 type RuntimeState =
   | "not-configured"
   | "ready"
@@ -93,6 +93,14 @@ const DEPLOY_STEPS = [
   "Searching offers",
   "Creating instance",
   "Booting container",
+  "Health check",
+  "Ready",
+];
+
+const PITCHSERVER_STEPS = [
+  "Updating image",
+  "Starting container",
+  "Opening SSH tunnel",
   "Health check",
   "Ready",
 ];
@@ -196,6 +204,7 @@ export default function DesktopWorkbench() {
   const [audience, setAudience] = useState<Audience>(DEFAULT_AUDIENCE);
   const [medium, setMedium] = useState<Medium>(MEDIUMS[0]);
   const [vastApiKey, setVastApiKey] = useState("");
+  const [pitchServerSshPassword, setPitchServerSshPassword] = useState("");
   const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [openRouterModel, setOpenRouterModel] = useState(DEFAULT_OPENROUTER_MODEL);
   const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_MODEL);
@@ -213,7 +222,7 @@ export default function DesktopWorkbench() {
     if (status.connected && status.image) {
       setImage(status.image);
     }
-    setRuntimeKind(status.mode === "vast" ? "vast" : "local");
+    setRuntimeKind(runtimeKindFromMode(status.mode));
   }, []);
 
   const refreshSetup = useCallback(async () => {
@@ -269,7 +278,7 @@ export default function DesktopWorkbench() {
   }, []);
 
   useEffect(() => {
-    if (busyAction !== "connect" || runtimeKind !== "vast") {
+    if (busyAction !== "connect" || runtimeKind === "local") {
       setDeployStep(0);
       return;
     }
@@ -290,7 +299,7 @@ export default function DesktopWorkbench() {
         const status = await getDesktopRuntimeStatus();
         if (cancelled) return;
         setDesktopStatus(status);
-        setRuntimeKind(status.mode === "vast" ? "vast" : "local");
+        setRuntimeKind(runtimeKindFromMode(status.mode));
         if (status.connected) {
           setBusyAction(null);
           setRuntimeMessage("Runtime connected.");
@@ -313,7 +322,7 @@ export default function DesktopWorkbench() {
   const runtimeState = useMemo<RuntimeState>(() => {
     if (scoring) return "scoring";
     if (desktopStatus?.connected) return "connected";
-    if (busyAction === "connect") return runtimeKind === "vast" ? "deploying" : "connecting";
+    if (busyAction === "connect") return runtimeKind === "local" ? "connecting" : "deploying";
     if (error || desktopStatus?.last_error) return "failed";
     if (desktopMode && setupStatus && !setupStatus.ready_for_local && !setupStatus.ready_for_cloud && !desktopStatus?.connected) {
       return "not-configured";
@@ -335,12 +344,27 @@ export default function DesktopWorkbench() {
       return;
     }
 
+    if (runtimeKind === "pitchserver" && !pitchServerSshPassword.trim()) {
+      const next = "PitchServer SSH password is required for this runtime.";
+      setError(next);
+      setRuntimeMessage(next);
+      return;
+    }
+
     setBusyAction("connect");
     setError(null);
-    setRuntimeMessage(runtimeKind === "vast" ? "Searching for the cheapest viable Vast.ai GPU..." : "Starting local GPU runtime...");
+    setRuntimeMessage(
+      runtimeKind === "vast"
+        ? "Searching for the cheapest viable Vast.ai GPU..."
+        : runtimeKind === "pitchserver"
+        ? "Updating PitchServer and opening the SSH tunnel..."
+        : "Starting local GPU runtime...",
+    );
     try {
       const status = await connectDesktopRuntime({
+        runtimeKind,
         vastApiKey,
+        pitchServerSshPassword,
         openRouterApiKey,
         openRouterModel,
         openRouterRefinerModel,
@@ -350,7 +374,7 @@ export default function DesktopWorkbench() {
         preferInterruptible,
       });
       setDesktopStatus(status);
-      setRuntimeKind(status.mode === "vast" ? "vast" : "local");
+      setRuntimeKind(runtimeKindFromMode(status.mode));
       setRuntimeMessage("Runtime connected.");
       await refreshSetup().catch(() => undefined);
       setAppRoute("workspace");
@@ -370,6 +394,7 @@ export default function DesktopWorkbench() {
     openRouterApiKey,
     openRouterModel,
     openRouterRefinerModel,
+    pitchServerSshPassword,
     preferInterruptible,
     refreshDesktop,
     refreshSetup,
@@ -575,6 +600,8 @@ export default function DesktopWorkbench() {
           status={desktopStatus}
           vastApiKey={vastApiKey}
           setVastApiKey={setVastApiKey}
+          pitchServerSshPassword={pitchServerSshPassword}
+          setPitchServerSshPassword={setPitchServerSshPassword}
           openRouterApiKey={openRouterApiKey}
           setOpenRouterApiKey={setOpenRouterApiKey}
           openRouterModel={openRouterModel}
@@ -694,7 +721,7 @@ function TopBar({
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
-        <span className="mono">v0.1.0</span>
+        <span className="mono">v0.1.2</span>
       </div>
       <nav className="pc-tabs nodrag" aria-label="Primary">
         {ROUTES.map((item) => (
@@ -960,6 +987,8 @@ function RuntimeView({
   status,
   vastApiKey,
   setVastApiKey,
+  pitchServerSshPassword,
+  setPitchServerSshPassword,
   openRouterApiKey,
   setOpenRouterApiKey,
   openRouterModel,
@@ -988,6 +1017,8 @@ function RuntimeView({
   status: DesktopRuntimeStatus | null;
   vastApiKey: string;
   setVastApiKey: (key: string) => void;
+  pitchServerSshPassword: string;
+  setPitchServerSshPassword: (key: string) => void;
   openRouterApiKey: string;
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
@@ -1041,10 +1072,24 @@ function RuntimeView({
             onDisconnect={onDisconnect}
             busy={busy}
           />
+          <RuntimeCard
+            desktopMode={desktopMode}
+            kind="pitchserver"
+            selected={runtimeKind === "pitchserver"}
+            state={state}
+            status={status}
+            onSelect={() => setRuntimeKind("pitchserver")}
+            onConnect={onConnect}
+            onDisconnect={onDisconnect}
+            busy={busy}
+          />
           <RuntimeConfig
             desktopMode={desktopMode}
+            runtimeKind={runtimeKind}
             vastApiKey={vastApiKey}
             setVastApiKey={setVastApiKey}
+            pitchServerSshPassword={pitchServerSshPassword}
+            setPitchServerSshPassword={setPitchServerSshPassword}
             openRouterApiKey={openRouterApiKey}
             setOpenRouterApiKey={setOpenRouterApiKey}
             openRouterModel={openRouterModel}
@@ -1065,12 +1110,12 @@ function RuntimeView({
       </div>
       <aside className="pc-runtime-side">
         <div className="pc-strip">
-          <span className="label">04 / {runtimeKind === "vast" ? "Deployment" : "Diagnostics"}</span>
+          <span className="label">04 / {runtimeKind === "local" ? "Diagnostics" : "Deployment"}</span>
           <StatusPill tone={state === "connected" ? "ok" : state === "deploying" || state === "connecting" ? "warn" : "off"} pulse={state === "deploying" || state === "connecting"}>
             {state === "connected" ? "Healthy" : state === "deploying" ? "Deploying" : state === "connecting" ? "Connecting" : "Idle"}
           </StatusPill>
         </div>
-        {runtimeKind === "vast" ? <DeployTimeline state={state} step={deployStep} offer={status?.offer} /> : <LocalDiagnostics state={state} status={status} />}
+        {runtimeKind === "local" ? <LocalDiagnostics state={state} status={status} /> : <DeployTimeline runtimeKind={runtimeKind} state={state} step={deployStep} offer={status?.offer} />}
       </aside>
     </section>
   );
@@ -1741,11 +1786,12 @@ function RuntimeCard({
   busy: boolean;
 }) {
   const local = kind === "local";
+  const pitchServer = kind === "pitchserver";
   const active = selected && (state === "connected" || state === "scoring");
   const working = selected && (state === "connecting" || state === "deploying");
   const gpu = status?.local_gpu;
   const offer = status?.offer;
-  const title = !desktopMode && local ? "Web API preview" : local ? "Local GPU" : "Vast.ai fallback";
+  const title = !desktopMode && local ? "Web API preview" : local ? "Local GPU" : pitchServer ? "PitchServer" : "Vast.ai fallback";
 
   return (
     <div className={selected ? "pc-runtime-card selected" : "pc-runtime-card"}>
@@ -1757,13 +1803,15 @@ function RuntimeCard({
         <div className="pc-runtime-title">
           <h2>{title}</h2>
           {active && <StatusPill tone="ok">Active</StatusPill>}
-          {working && <StatusPill tone="warn" pulse>{local ? "Connecting" : "Deploying"}</StatusPill>}
+          {working && <StatusPill tone="warn" pulse>{local ? "Connecting" : pitchServer ? "Updating" : "Deploying"}</StatusPill>}
         </div>
         <p>
           {!desktopMode && local
             ? "Scores through the local Next.js API in web preview. Open the desktop app for Docker, GPU, and Vast.ai controls."
             : local
             ? "Runs the TRIBE service on your NVIDIA GPU via Docker. Zero egress, zero rental cost."
+            : pitchServer
+            ? "Uses the Machinity RTX5080 box over an SSH tunnel and keeps the TRIBE image fresh on the server."
             : "Rents the cheapest viable GPU and deploys the runtime image when local hardware is unavailable."}
         </p>
         <div className="pc-spec-grid">
@@ -1772,6 +1820,12 @@ function RuntimeCard({
               <Spec k="DEVICE" v={!desktopMode ? "Web API" : gpu?.available ? gpu.name || gpu.vendor || "NVIDIA" : "Not detected"} />
               <Spec k="VRAM" v={gpu?.memory_mb ? `${Math.round(gpu.memory_mb / 1024)} GB` : "-"} />
               <Spec k="DOCKER" v={!desktopMode ? "desktop only" : status?.container_id ? "running" : "-"} />
+            </>
+          ) : pitchServer ? (
+            <>
+              <Spec k="SERVER" v="RTX 5080" />
+              <Spec k="SSH" v=":2022 tunnel" />
+              <Spec k="DOCKER" v={active ? "running" : "remote"} />
             </>
           ) : (
             <>
@@ -1786,7 +1840,7 @@ function RuntimeCard({
           {desktopMode && !selected && <Button variant="secondary" onClick={onSelect}>Select</Button>}
           {desktopMode && selected && state !== "connected" && state !== "scoring" && (
             <Button variant="primary" onClick={onConnect} loading={busy} disabled={busy} icon={<Icon name="bolt" />}>
-              {local ? "Connect" : "Deploy"}
+              {local || pitchServer ? "Connect" : "Deploy"}
             </Button>
           )}
           {desktopMode && selected && (state === "connected" || state === "scoring") && (
@@ -1802,8 +1856,11 @@ function RuntimeCard({
 
 function RuntimeConfig({
   desktopMode,
+  runtimeKind,
   vastApiKey,
   setVastApiKey,
+  pitchServerSshPassword,
+  setPitchServerSshPassword,
   openRouterApiKey,
   setOpenRouterApiKey,
   openRouterModel,
@@ -1820,8 +1877,11 @@ function RuntimeConfig({
   setPreferInterruptible,
 }: {
   desktopMode: boolean;
+  runtimeKind: RuntimeKind;
   vastApiKey: string;
   setVastApiKey: (key: string) => void;
+  pitchServerSshPassword: string;
+  setPitchServerSshPassword: (key: string) => void;
   openRouterApiKey: string;
   setOpenRouterApiKey: (key: string) => void;
   openRouterModel: string;
@@ -1842,9 +1902,15 @@ function RuntimeConfig({
       <Field label="Runtime image">
         <input value={image} onChange={(event) => setImage(event.target.value)} />
       </Field>
-      <Field label="Vast.ai API key" hint={desktopMode ? "Loaded from machine-local runtime.env when saved." : "Available in the desktop app."}>
-        <input type="password" value={vastApiKey} onChange={(event) => setVastApiKey(event.target.value)} placeholder="Stored in runtime.env" />
-      </Field>
+      {runtimeKind === "pitchserver" ? (
+        <Field label="PitchServer SSH password" hint="Used only for this connection. It is never saved to runtime.env.">
+          <input type="password" value={pitchServerSshPassword} onChange={(event) => setPitchServerSshPassword(event.target.value)} placeholder="Required for PitchServer" />
+        </Field>
+      ) : (
+        <Field label="Vast.ai API key" hint={desktopMode ? "Loaded from machine-local runtime.env when saved." : "Available in the desktop app."}>
+          <input type="password" value={vastApiKey} onChange={(event) => setVastApiKey(event.target.value)} placeholder="Stored in runtime.env" />
+        </Field>
+      )}
       <Field label="OpenRouter API key" hint={desktopMode ? "Saved to this PC with Settings / Save." : "Available in the desktop app."}>
         <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Saved in runtime.env" />
       </Field>
@@ -1854,31 +1920,36 @@ function RuntimeConfig({
       <Field label="Refiner model">
         <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
       </Field>
-      <Field label="Minimum VRAM">
-        <input type="number" min={8} value={minGpuRamGb} onChange={(event) => setMinGpuRamGb(Number(event.target.value))} />
-      </Field>
-      <Field label="Max hourly">
-        <input type="number" min={0.05} step={0.01} value={maxHourlyPrice} onChange={(event) => setMaxHourlyPrice(Number(event.target.value))} />
-      </Field>
-      <label className="pc-checkbox compact">
-        <input type="checkbox" checked={preferInterruptible} onChange={(event) => setPreferInterruptible(event.target.checked)} />
-        <span>Prefer interruptible for lower cost</span>
-      </label>
+      {runtimeKind !== "pitchserver" && (
+        <>
+          <Field label="Minimum VRAM">
+            <input type="number" min={8} value={minGpuRamGb} onChange={(event) => setMinGpuRamGb(Number(event.target.value))} />
+          </Field>
+          <Field label="Max hourly">
+            <input type="number" min={0.05} step={0.01} value={maxHourlyPrice} onChange={(event) => setMaxHourlyPrice(Number(event.target.value))} />
+          </Field>
+          <label className="pc-checkbox compact">
+            <input type="checkbox" checked={preferInterruptible} onChange={(event) => setPreferInterruptible(event.target.checked)} />
+            <span>Prefer interruptible for lower cost</span>
+          </label>
+        </>
+      )}
     </div>
   );
 }
 
-function DeployTimeline({ state, step, offer }: { state: RuntimeState; step: number; offer?: OfferSummary }) {
+function DeployTimeline({ runtimeKind, state, step, offer }: { runtimeKind: RuntimeKind; state: RuntimeState; step: number; offer?: OfferSummary }) {
+  const steps = runtimeKind === "pitchserver" ? PITCHSERVER_STEPS : DEPLOY_STEPS;
   return (
     <div className="pc-deploy">
-      {DEPLOY_STEPS.map((label, index) => {
+      {steps.map((label, index) => {
         const done = state === "connected" || index < step;
         const active = state === "deploying" && index === step;
-        return <DeployStep key={label} index={index} label={label} done={done} active={active} last={index === DEPLOY_STEPS.length - 1} />;
+        return <DeployStep key={label} index={index} label={label} done={done} active={active} last={index === steps.length - 1} />;
       })}
       <div className="pc-live-log mono">
-        <p>$ search --verified --max-price {formatPrice(offer?.dph_total) || "$0.450/hr"}</p>
-        <p>{offer?.gpu_name ? `selected ${offer.gpu_name} at ${formatPrice(offer.dph_total)}` : "waiting for offer selection"}</p>
+        <p>{runtimeKind === "pitchserver" ? "$ ssh -p 2022 pitchserver update" : `$ search --verified --max-price ${formatPrice(offer?.dph_total) || "$0.450/hr"}`}</p>
+        <p>{runtimeKind === "pitchserver" ? "using Machinity RTX5080 over local SSH tunnel" : offer?.gpu_name ? `selected ${offer.gpu_name} at ${formatPrice(offer.dph_total)}` : "waiting for offer selection"}</p>
         <p>{state === "connected" ? "health check passed" : "container logs streaming..."}</p>
       </div>
     </div>
@@ -2039,7 +2110,7 @@ function StatusStrip({
 }) {
   return (
     <footer className="pc-status-strip">
-      <StripItem k="RUNTIME" v={!desktopMode ? "web / api" : runtimeKind === "local" ? "local / gpu" : "vast.ai / remote"} />
+      <StripItem k="RUNTIME" v={!desktopMode ? "web / api" : runtimeKind === "local" ? "local / gpu" : runtimeKind === "pitchserver" ? "pitchserver / ssh" : "vast.ai / remote"} />
       <StripItem k="MODEL" v={shorten(model, 34)} />
       <StripItem k="SCORE" v={report ? `${Math.round(report.persuasion_score)}/100` : "-"} />
       <StripItem k="COST" v={formatPrice(cost)} />
@@ -2068,7 +2139,7 @@ function RuntimeBadge({ desktopMode, state, runtimeKind }: { desktopMode: boolea
         <i className={`led ${item.tone} ${item.pulse ? "pulse" : ""}`} />
         <strong className={`mono tone-${item.tone}`}>{item.label}</strong>
       </span>
-      <em className="mono">{!desktopMode ? "WEB-API" : runtimeKind === "local" ? "LOCAL-GPU" : "VAST-AI"}</em>
+      <em className="mono">{!desktopMode ? "WEB-API" : runtimeKind === "local" ? "LOCAL-GPU" : runtimeKind === "pitchserver" ? "PITCHSERVER" : "VAST-AI"}</em>
     </div>
   );
 }
@@ -2310,6 +2381,10 @@ function readError(error: unknown) {
 function routeFromHash(hash: string): Route {
   const route = hash.replace(/^#/, "").trim().toLowerCase();
   return ROUTES.includes(route as Route) ? (route as Route) : "workspace";
+}
+
+function runtimeKindFromMode(mode: DesktopRuntimeStatus["mode"]): RuntimeKind {
+  return mode === "vast" || mode === "pitchserver" ? mode : "local";
 }
 
 function applyDesktopConfig(

@@ -1,6 +1,6 @@
 [package]
 name = "pitchcheck-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "PitchCheck desktop runtime manager"
 authors = ["PitchCheck"]
 edition = "2021"

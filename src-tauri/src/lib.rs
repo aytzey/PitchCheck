@@ -4,8 +4,10 @@ use serde_json::{json, Map, Value};
 use std::{
     collections::BTreeMap,
     fs,
+    io::Write,
+    net::TcpListener,
     path::PathBuf,
-    process::Command,
+    process::{Child, Command, Stdio},
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -19,6 +21,12 @@ const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel"
 const LOCAL_CONTAINER_NAME: &str = "pitchcheck-tribe-service";
 const LOCAL_MODELS_VOLUME: &str = "pitchcheck_tribe_models";
 const LOCAL_SERVICE_URL: &str = "http://127.0.0.1:8090";
+const PITCH_SERVER_HOST: &str = "78.186.120.189";
+const PITCH_SERVER_SSH_PORT: &str = "2022";
+const PITCH_SERVER_USER: &str = "dkmserver";
+const PITCH_SERVER_WORKDIR: &str = "/home/dkmserver/Desktop/Machinity/aytug/pitchserver";
+const PITCH_SERVER_REMOTE_PORT: u16 = 18090;
+const PITCH_SERVER_DOMAIN: &str = "pitchserver.machinity.ai";
 const APP_ENV_FILENAME: &str = "runtime.env";
 const SERVICE_ENV_FILENAME: &str = "service.env";
 const TRIBE_PORT: u16 = 8090;
@@ -96,7 +104,9 @@ impl Default for RuntimeStatus {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeConfig {
+    runtime_kind: Option<String>,
     vast_api_key: Option<String>,
+    pitch_server_ssh_password: Option<String>,
     open_router_api_key: Option<String>,
     open_router_model: Option<String>,
     open_router_refiner_model: Option<String>,
@@ -170,6 +180,7 @@ pub struct SetupActionResult {
 
 struct AppState {
     status: Mutex<RuntimeStatus>,
+    pitch_server_tunnel: Mutex<Option<Child>>,
     client: Client,
 }
 
@@ -182,6 +193,7 @@ pub fn run() {
             let status = load_status(app.handle()).unwrap_or_default();
             app.manage(AppState {
                 status: Mutex::new(status),
+                pitch_server_tunnel: Mutex::new(None),
                 client: Client::new(),
             });
             Ok(())
@@ -319,6 +331,17 @@ async fn connect_runtime(
         let config = merge_runtime_config(&app, config)?;
         let local_gpu = detect_local_gpu();
         let image = clean_image(config.image.as_deref());
+        let requested_runtime = selected_runtime_kind(&config);
+        if requested_runtime == "pitchserver" {
+            stop_pitch_server_tunnel(&state)?;
+            let (status, tunnel) =
+                connect_pitch_server(&state.client, &image, local_gpu, &config).await?;
+            replace_status(&app, &state, status.clone())?;
+            store_pitch_server_tunnel(&state, tunnel)?;
+            return Ok(status);
+        }
+        stop_pitch_server_tunnel(&state)?;
+
         if local_gpu.available {
             match connect_local(&app, &state.client, &image, local_gpu.clone(), &config).await {
                 Ok(status) => {
@@ -366,6 +389,7 @@ async fn disconnect_runtime(
         let current = clone_status(&state)?;
         match current.mode.as_str() {
             "local" => stop_local_container().await?,
+            "pitchserver" => stop_pitch_server_tunnel(&state)?,
             "vast" => {
                 let instance_id = current.vast_instance_id.ok_or_else(|| {
                     RuntimeError::Message("No Vast instance id is stored.".to_string())
@@ -637,6 +661,9 @@ fn load_status(app: &AppHandle) -> RuntimeResult<RuntimeStatus> {
     let mut status = serde_json::from_str::<RuntimeStatus>(&fs::read_to_string(path)?)?;
     status.connected = false;
     status.local_gpu = detect_local_gpu();
+    if status.mode == "pitchserver" {
+        status.service_url = None;
+    }
     Ok(status)
 }
 
@@ -837,7 +864,9 @@ fn clean_refined_message(content: &str) -> String {
 fn merge_runtime_config(app: &AppHandle, config: RuntimeConfig) -> RuntimeResult<RuntimeConfig> {
     let saved = load_app_config(app)?;
     Ok(RuntimeConfig {
+        runtime_kind: first_non_empty(config.runtime_kind, None),
         vast_api_key: first_non_empty(config.vast_api_key, saved.vast_api_key),
+        pitch_server_ssh_password: first_non_empty(config.pitch_server_ssh_password, None),
         open_router_api_key: first_non_empty(config.open_router_api_key, saved.open_router_api_key),
         open_router_model: first_non_empty(config.open_router_model, saved.open_router_model)
             .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
@@ -883,6 +912,15 @@ fn first_non_empty(primary: Option<String>, fallback: Option<String>) -> Option<
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
         })
+}
+
+fn selected_runtime_kind(config: &RuntimeConfig) -> &str {
+    config
+        .runtime_kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("auto")
 }
 
 fn detect_local_gpu() -> LocalGpuInfo {
@@ -959,6 +997,7 @@ async fn build_setup_status(client: &Client, image: &str) -> SetupStatus {
         .await
         .map(|response| response.status().is_success())
         .unwrap_or(false);
+    let pitch_server_ssh_ready = command_exists("ssh") && command_exists("sshpass");
 
     let mut steps = vec![
         SetupStep {
@@ -1068,6 +1107,18 @@ async fn build_setup_status(client: &Client, image: &str) -> SetupStatus {
             url: Some("https://cloud.vast.ai/account/".to_string()),
         },
         SetupStep {
+            key: "pitchserver_ssh".to_string(),
+            title: "PitchServer SSH tunnel".to_string(),
+            status: if pitch_server_ssh_ready { "ok" } else { "warning" }.to_string(),
+            detail: if pitch_server_ssh_ready {
+                "OpenSSH and sshpass are available for the RTX5080 PitchServer runtime.".to_string()
+            } else {
+                "Install OpenSSH and sshpass to use PitchServer from the desktop app.".to_string()
+            },
+            action_label: None,
+            url: None,
+        },
+        SetupStep {
             key: "github_release".to_string(),
             title: "Auto updates".to_string(),
             status: if release_reachable { "ok" } else { "warning" }.to_string(),
@@ -1106,6 +1157,11 @@ fn command_available(command: &str) -> bool {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+fn command_exists(command: &str) -> bool {
+    Command::new(command).arg("-V").output().is_ok()
+        || Command::new(command).arg("--version").output().is_ok()
 }
 
 fn docker_install_url() -> &'static str {
@@ -1243,6 +1299,325 @@ async fn stop_local_container() -> RuntimeResult<()> {
                 stderr.trim()
             )))
         }
+    }
+}
+
+async fn connect_pitch_server(
+    client: &Client,
+    image: &str,
+    local_gpu: LocalGpuInfo,
+    config: &RuntimeConfig,
+) -> RuntimeResult<(RuntimeStatus, Child)> {
+    let password = config
+        .pitch_server_ssh_password
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            RuntimeError::Message(
+                "PitchServer SSH password is required for this runtime.".to_string(),
+            )
+        })?;
+    ensure_pitch_server_ssh_tools()?;
+    validate_docker_image_reference(image)?;
+
+    let script = pitch_server_remote_script(image, config);
+    pitch_server_ssh_output(password, &script)?;
+
+    let local_port = reserve_local_port()?;
+    let mut tunnel = spawn_pitch_server_tunnel(password, local_port)?;
+    sleep(Duration::from_secs(2)).await;
+    if let Some(status) = tunnel.try_wait()? {
+        return Err(RuntimeError::Message(format!(
+            "PitchServer SSH tunnel exited before the runtime was reachable: {status}"
+        )));
+    }
+
+    let service_url = format!("http://127.0.0.1:{local_port}");
+    if let Err(error) = wait_for_health(client, &service_url, Duration::from_secs(900)).await {
+        let _ = tunnel.kill();
+        let _ = tunnel.wait();
+        return Err(error);
+    }
+
+    Ok((
+        RuntimeStatus {
+            mode: "pitchserver".to_string(),
+            connected: true,
+            service_url: Some(service_url),
+            local_gpu,
+            container_id: Some("pitchserver_tribe".to_string()),
+            vast_instance_id: None,
+            offer: None,
+            image: image.to_string(),
+            last_error: None,
+        },
+        tunnel,
+    ))
+}
+
+fn pitch_server_remote_script(image: &str, config: &RuntimeConfig) -> String {
+    let service_env = pitch_server_service_env(config);
+    format!(
+        r#"set -euo pipefail
+mkdir -p "{workdir}/models" "{workdir}/logs"
+cd "{workdir}"
+cat > docker-compose.yml <<'PITCHSERVER_COMPOSE'
+name: pitchserver
+
+services:
+  tribe:
+    image: {image}
+    container_name: pitchserver_tribe
+    restart: unless-stopped
+    runtime: nvidia
+    pull_policy: always
+    env_file:
+      - ../.env
+      - ./service.env
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      PYTHONUNBUFFERED: "1"
+      TRIBE_MODEL_ID: facebook/tribev2
+      TRIBE_DEVICE: cuda
+      TRIBE_TEXT_DEVICE: auto
+      TRIBE_TEXT_BATCH_SIZE: auto
+      TRIBE_TEXT_INPUT_MODE: direct
+      TRIBE_CACHE_DIR: /models
+      HF_HOME: /models/huggingface
+      HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
+      XDG_CACHE_HOME: /models/.cache
+      TRIBE_SCORE_TIMEOUT_SECONDS: "900"
+      TRIBE_MAX_SCORE_CONCURRENCY: "1"
+      TRIBE_OOM_FALLBACK_TEXT_DEVICE: accelerate,cpu
+      TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB: auto
+      TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB: "32"
+      TRIBE_ACCELERATE_OFFLOAD_FOLDER: /models/offload
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      TRIBE_ALLOW_MOCK: "0"
+      OPENROUTER_API_KEY: ${{OPENROUTER_API_KEY:-}}
+      OPENROUTER_MODEL: ${{OPENROUTER_MODEL:-anthropic/claude-sonnet-4.6}}
+      OPENROUTER_REFINER_MODEL: ${{OPENROUTER_REFINER_MODEL:-anthropic/claude-sonnet-4.6}}
+    volumes:
+      - ./models:/models
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:{remote_port}:{tribe_port}"
+    networks:
+      - machinity_proxy_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=machinity_proxy_net
+      - traefik.http.routers.pitchserver.rule=Host(`{domain}`)
+      - traefik.http.routers.pitchserver.entrypoints=websecure
+      - traefik.http.routers.pitchserver.tls=true
+      - traefik.http.routers.pitchserver.tls.certresolver=le
+      - traefik.http.services.pitchserver.loadbalancer.server.port={tribe_port}
+      - traefik.http.routers.pitchserver-http.rule=Host(`{domain}`)
+      - traefik.http.routers.pitchserver-http.entrypoints=web
+      - traefik.http.routers.pitchserver-http.middlewares=pitchserver-redirect
+      - traefik.http.middlewares.pitchserver-redirect.redirectscheme.scheme=https
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{tribe_port}/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+
+networks:
+  machinity_proxy_net:
+    external: true
+PITCHSERVER_COMPOSE
+
+cat > service.env <<'PITCHSERVER_SERVICE_ENV'
+{service_env}
+PITCHSERVER_SERVICE_ENV
+chmod 600 service.env
+
+cat > update-pitchserver.sh <<'PITCHSERVER_UPDATE'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+read_env_value() {{
+  local file="$1"
+  local key="$2"
+  [ -f "$file" ] || return 0
+  awk -v key="$key" 'index($0, key "=") == 1 {{ print substr($0, length(key) + 2); exit }}' "$file"
+}}
+if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
+  OPENROUTER_API_KEY="$(read_env_value ../.env OPENROUTER_API_KEY)"
+fi
+if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
+  OPENROUTER_API_KEY="$(read_env_value ../../landing/.env OPENROUTER_API_KEY)"
+fi
+if [ -z "${{OPENROUTER_MODEL:-}}" ]; then
+  OPENROUTER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_MODEL)"
+fi
+export OPENROUTER_API_KEY OPENROUTER_MODEL
+docker compose pull tribe
+docker compose up -d --remove-orphans
+docker compose ps tribe
+PITCHSERVER_UPDATE
+chmod +x update-pitchserver.sh
+
+if command -v crontab >/dev/null 2>&1; then
+  (crontab -l 2>/dev/null | grep -v -F "{workdir}/update-pitchserver.sh" || true; echo "*/15 * * * * {workdir}/update-pitchserver.sh >> {workdir}/update.log 2>&1") | crontab -
+fi
+
+./update-pitchserver.sh
+"#,
+        domain = PITCH_SERVER_DOMAIN,
+        image = image,
+        remote_port = PITCH_SERVER_REMOTE_PORT,
+        service_env = service_env,
+        tribe_port = TRIBE_PORT,
+        workdir = PITCH_SERVER_WORKDIR,
+    )
+}
+
+fn pitch_server_service_env(config: &RuntimeConfig) -> String {
+    let open_router_model = config
+        .open_router_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_OPENROUTER_MODEL);
+    let open_router_refiner_model = config
+        .open_router_refiner_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(open_router_model);
+    format!(
+        "OPENROUTER_API_KEY={}\nOPENROUTER_MODEL={}\nOPENROUTER_REFINER_MODEL={}\n",
+        env_safe(config.open_router_api_key.as_deref().unwrap_or("")),
+        env_safe(open_router_model),
+        env_safe(open_router_refiner_model),
+    )
+}
+
+fn pitch_server_ssh_output(password: &str, script: &str) -> RuntimeResult<String> {
+    let target = pitch_server_ssh_target();
+    let mut child = Command::new("sshpass")
+        .env("SSHPASS", password)
+        .args([
+            "-e",
+            "ssh",
+            "-p",
+            PITCH_SERVER_SSH_PORT,
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            "ServerAliveInterval=30",
+            "-o",
+            "ServerAliveCountMax=3",
+            &target,
+            "bash",
+            "-s",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(script.as_bytes())?;
+    }
+    let output = child.wait_with_output()?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(RuntimeError::Message(format!(
+            "PitchServer SSH command failed: {}{}",
+            String::from_utf8_lossy(&output.stderr).trim(),
+            if output.stdout.is_empty() {
+                String::new()
+            } else {
+                format!("\n{}", String::from_utf8_lossy(&output.stdout).trim())
+            }
+        )))
+    }
+}
+
+fn spawn_pitch_server_tunnel(password: &str, local_port: u16) -> RuntimeResult<Child> {
+    let forward = format!("127.0.0.1:{local_port}:127.0.0.1:{PITCH_SERVER_REMOTE_PORT}");
+    let target = pitch_server_ssh_target();
+    Ok(Command::new("sshpass")
+        .env("SSHPASS", password)
+        .args([
+            "-e",
+            "ssh",
+            "-N",
+            "-p",
+            PITCH_SERVER_SSH_PORT,
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-o",
+            "ServerAliveInterval=30",
+            "-o",
+            "ServerAliveCountMax=3",
+            "-L",
+            &forward,
+            &target,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?)
+}
+
+fn pitch_server_ssh_target() -> String {
+    format!("{PITCH_SERVER_USER}@{PITCH_SERVER_HOST}")
+}
+
+fn reserve_local_port() -> RuntimeResult<u16> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    Ok(listener.local_addr()?.port())
+}
+
+fn store_pitch_server_tunnel(state: &AppState, tunnel: Child) -> RuntimeResult<()> {
+    let mut guard = state
+        .pitch_server_tunnel
+        .lock()
+        .map_err(|_| RuntimeError::StateLock)?;
+    *guard = Some(tunnel);
+    Ok(())
+}
+
+fn stop_pitch_server_tunnel(state: &AppState) -> RuntimeResult<()> {
+    let mut guard = state
+        .pitch_server_tunnel
+        .lock()
+        .map_err(|_| RuntimeError::StateLock)?;
+    if let Some(mut tunnel) = guard.take() {
+        let _ = tunnel.kill();
+        let _ = tunnel.wait();
+    }
+    Ok(())
+}
+
+fn ensure_pitch_server_ssh_tools() -> RuntimeResult<()> {
+    for command in ["ssh", "sshpass"] {
+        if !command_exists(command) {
+            return Err(RuntimeError::Message(format!(
+                "PitchServer runtime requires `{command}` on this machine."
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_docker_image_reference(image: &str) -> RuntimeResult<()> {
+    if image.chars().all(|character| {
+        character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-' | ':' | '/' | '@')
+    }) {
+        Ok(())
+    } else {
+        Err(RuntimeError::Message(
+            "Runtime image contains unsupported characters.".to_string(),
+        ))
     }
 }
 

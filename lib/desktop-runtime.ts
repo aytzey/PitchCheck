@@ -1,4 +1,4 @@
-export type RuntimeMode = "disconnected" | "local" | "vast";
+export type RuntimeMode = "disconnected" | "local" | "vast" | "pitchserver";
 
 export interface LocalGpuInfo {
   available: boolean;
@@ -30,7 +30,9 @@ export interface DesktopRuntimeStatus {
 }
 
 export interface DesktopRuntimeConfig {
+  runtimeKind?: Exclude<RuntimeMode, "disconnected">;
   vastApiKey?: string;
+  pitchServerSshPassword?: string;
   openRouterApiKey?: string;
   openRouterModel?: string;
   openRouterRefinerModel?: string;

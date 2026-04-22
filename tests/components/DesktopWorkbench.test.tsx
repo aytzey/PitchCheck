@@ -71,6 +71,19 @@ describe("DesktopWorkbench", () => {
     expect(screen.getByText("03 / Runtime selection")).toBeDefined();
   });
 
+  it("shows PitchServer as an unsaved runtime password option", () => {
+    window.history.replaceState(null, "", "/#runtime");
+
+    const { unmount } = render(<DesktopWorkbench />);
+
+    expect(screen.getByText("PitchServer")).toBeDefined();
+
+    unmount();
+    window.history.replaceState(null, "", "/#settings");
+    render(<DesktopWorkbench />);
+    expect(screen.queryByLabelText(/PitchServer SSH password/)).toBeNull();
+  });
+
   it("exposes refine and variant re-rank controls in the workspace", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

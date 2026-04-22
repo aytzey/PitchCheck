@@ -381,7 +381,7 @@ export default function DesktopWorkbench() {
         openRouterApiKey,
         openRouterModel,
         openRouterRefinerModel,
-        image,
+        image: runtimeKind === "pitchserver" ? DEFAULT_IMAGE : image,
         minGpuRamGb,
         maxHourlyPrice,
         preferInterruptible,
@@ -793,7 +793,7 @@ function TopBar({
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
-        <span className="mono">v0.1.3</span>
+        <span className="mono">v0.1.4</span>
       </div>
       <nav className="pc-tabs nodrag" aria-label="Primary">
         {ROUTES.map((item) => (
@@ -2023,8 +2023,15 @@ function RuntimeConfig({
   const pitchServerConnected = runtimeKind === "pitchserver" && status?.mode === "pitchserver" && status.connected;
   return (
     <div className="pc-config-panel">
-      <Field label="Runtime image">
-        <input value={image} onChange={(event) => setImage(event.target.value)} />
+      <Field
+        label={runtimeKind === "pitchserver" ? "PitchServer image" : "Runtime image"}
+        hint={runtimeKind === "pitchserver" ? "PitchServer pulls the published GHCR image; local image aliases are ignored." : undefined}
+      >
+        <input
+          value={runtimeKind === "pitchserver" ? DEFAULT_IMAGE : image}
+          onChange={(event) => setImage(event.target.value)}
+          disabled={runtimeKind === "pitchserver"}
+        />
       </Field>
       {runtimeKind === "pitchserver" ? (
         <>

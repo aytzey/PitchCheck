@@ -343,11 +343,12 @@ async fn connect_runtime(
     run_command(async move {
         let config = merge_runtime_config(&app, config)?;
         let local_gpu = detect_local_gpu();
-        let image = clean_image(config.image.as_deref());
+        let configured_image = clean_image(config.image.as_deref());
         let requested_runtime = selected_runtime_kind(&config);
         if requested_runtime == "pitchserver" {
             stop_pitch_server_tunnel(&state)?;
             clear_pitch_server_auth_token(&state)?;
+            let image = pitch_server_image(&configured_image);
             let (status, tunnel, auth_token) =
                 connect_pitch_server(&state.client, &image, local_gpu, &config).await?;
             replace_status(&app, &state, status.clone())?;
@@ -359,7 +360,15 @@ async fn connect_runtime(
         clear_pitch_server_auth_token(&state)?;
 
         if local_gpu.available {
-            match connect_local(&app, &state.client, &image, local_gpu.clone(), &config).await {
+            match connect_local(
+                &app,
+                &state.client,
+                &configured_image,
+                local_gpu.clone(),
+                &config,
+            )
+            .await
+            {
                 Ok(status) => {
                     replace_status(&app, &state, status.clone())?;
                     return Ok(status);
@@ -388,7 +397,14 @@ async fn connect_runtime(
                     "No local GPU runtime was available and Vast API key is empty.".to_string(),
                 )
             })?;
-        let status = connect_vast(&state.client, api_key, &image, &config, local_gpu).await?;
+        let status = connect_vast(
+            &state.client,
+            api_key,
+            &configured_image,
+            &config,
+            local_gpu,
+        )
+        .await?;
         replace_status(&app, &state, status.clone())?;
         Ok(status)
     })
@@ -710,6 +726,22 @@ fn default_image() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| DEFAULT_IMAGE_FALLBACK.to_string())
+}
+
+fn pitch_server_image(configured_image: &str) -> String {
+    if is_registry_qualified_image(configured_image) {
+        configured_image.to_string()
+    } else {
+        DEFAULT_IMAGE_FALLBACK.to_string()
+    }
+}
+
+fn is_registry_qualified_image(image: &str) -> bool {
+    if !image.contains('/') {
+        return false;
+    }
+    let first_segment = image.split('/').next().unwrap_or("");
+    first_segment == "localhost" || first_segment.contains('.') || first_segment.contains(':')
 }
 
 fn state_path(app: &AppHandle) -> RuntimeResult<PathBuf> {
@@ -2520,6 +2552,22 @@ mod tests {
         assert_eq!(
             first_non_empty(Some(" gui ".to_string()), Some("saved".to_string())),
             Some("gui".to_string())
+        );
+    }
+
+    #[test]
+    fn pitch_server_image_ignores_local_aliases() {
+        assert_eq!(
+            pitch_server_image("pitchcheck-tribe:local"),
+            DEFAULT_IMAGE_FALLBACK
+        );
+        assert_eq!(
+            pitch_server_image("ghcr.io/acme/pitchcheck-tribe:canary"),
+            "ghcr.io/acme/pitchcheck-tribe:canary"
+        );
+        assert_eq!(
+            pitch_server_image("localhost:5000/pitchcheck-tribe:dev"),
+            "localhost:5000/pitchcheck-tribe:dev"
         );
     }
 }

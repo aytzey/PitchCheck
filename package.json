@@ -24,7 +24,12 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "mobile:install": "npm install --prefix mobile",
+    "mobile:start": "npm --prefix mobile run start",
+    "mobile:typecheck": "npm --prefix mobile run typecheck",
+    "mobile:build:ios": "npm --prefix mobile run build:ios",
+    "mobile:submit:ios": "npm --prefix mobile run submit:ios"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

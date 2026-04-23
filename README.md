@@ -140,6 +140,26 @@ docker compose up -d --build
 
 App runs on `http://localhost:3000`.
 
+### Mobile App (Expo, iOS-first, TestFlight-ready)
+
+PitchCheck includes a production-oriented Expo mobile client in `mobile/` with the same dark design language as desktop and native runtime controls:
+
+- **PitchServer** runtime
+- **Vast AI** runtime
+- Transport mode toggle (`auto`, `next-api`, `direct`)
+- Runtime health probing before scoring
+- Secure local credential storage (`expo-secure-store`)
+- EAS build profiles for development/preview/production and iOS submit scripts
+
+Run it:
+
+```bash
+npm run mobile:install
+npm run mobile:start
+```
+
+For App Store release flow, see `mobile/README.md` (`build:ios`, `submit:ios`) and configure `mobile/.env` from `.env.example`.
+
 ### One-Line Install
 
 ```bash

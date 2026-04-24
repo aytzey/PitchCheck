@@ -4,8 +4,41 @@ import { platformValues, type Platform } from "@/shared/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function isAuthorized(request: Request): { ok: true } | { ok: false; status: number; error: string } {
+  // In production, require a shared secret header to protect costly scoring compute.
+  if (process.env.NODE_ENV !== "production") {
+    return { ok: true };
+  }
+
+  const configuredApiKey = process.env.SCORE_API_KEY?.trim();
+  if (!configuredApiKey) {
+    return {
+      ok: false,
+      status: 503,
+      error: "Server misconfiguration: SCORE_API_KEY is not set.",
+    };
+  }
+
+  const headerApiKey = request.headers.get("x-api-key")?.trim();
+  const bearerToken = request.headers
+    .get("authorization")
+    ?.match(/^Bearer\s+(.+)$/i)?.[1]
+    ?.trim();
+
+  if (headerApiKey === configuredApiKey || bearerToken === configuredApiKey) {
+    return { ok: true };
+  }
+
+  return { ok: false, status: 401, error: "Unauthorized." };
+}
+
 export async function POST(request: Request) {
   try {
+    const auth = isAuthorized(request);
+    if (!auth.ok) {
+      return Response.json({ error: auth.error }, { status: auth.status });
+    }
+
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return Response.json(

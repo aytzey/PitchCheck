@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -17,8 +17,46 @@ function makeRequest(body: unknown): Request {
 }
 
 describe("POST /api/score", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalApiKey = process.env.SCORE_API_KEY;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.SCORE_API_KEY = originalApiKey;
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.SCORE_API_KEY = originalApiKey;
+  });
+
+  it("returns 503 in production when SCORE_API_KEY is not configured", async () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.SCORE_API_KEY;
+
+    const res = await POST(
+      makeRequest({
+        message: "Our platform reduces deployment time by 80%",
+        persona: "CTO at startup, technical",
+      }),
+    );
+
+    expect(res.status).toBe(503);
+  });
+
+  it("returns 401 in production when API key is missing", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.SCORE_API_KEY = "test-key";
+
+    const res = await POST(
+      makeRequest({
+        message: "Our platform reduces deployment time by 80%",
+        persona: "CTO at startup, technical",
+      }),
+    );
+
+    expect(res.status).toBe(401);
   });
 
   it("returns 400 when message is missing", async () => {

@@ -10,6 +10,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       TRIBE_SERVICE_URL: http://tribe-service:8090
+      SCORE_API_KEY: ${SCORE_API_KEY:?SCORE_API_KEY must be set}
     depends_on:
       tribe-service:
         condition: service_healthy

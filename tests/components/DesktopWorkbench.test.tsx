@@ -116,7 +116,8 @@ describe("DesktopWorkbench", () => {
 
   it("shows desktop refiner clarification questions in the main editor", async () => {
     window.__TAURI_INTERNALS__ = {};
-    tauriMocks.invoke.mockImplementation(async (command: string) => {
+    let refineCalls = 0;
+    tauriMocks.invoke.mockImplementation(async (command: string, args?: unknown) => {
       if (command === "get_app_config") {
         return {
           openRouterApiKey: "sk-test",
@@ -145,13 +146,23 @@ describe("DesktopWorkbench", () => {
         return { report: mockReport };
       }
       if (command === "refine_pitch") {
+        refineCalls += 1;
+        if (refineCalls === 1) {
+          return {
+            needsClarification: true,
+            model: "anthropic/claude-haiku-4.5",
+            questions: [
+              "Does Jordan's team currently use OpenTelemetry, or would adoption be a prerequisite?",
+            ],
+            safetyNotes: ["No invented metrics, timelines, or credentials will be added."],
+          };
+        }
+        const request = (args as { request?: { persona?: string; clarificationAnswers?: Array<{ answer: string }> } } | undefined)?.request;
+        expect(request?.persona).toContain("Yes, they already use OpenTelemetry.");
+        expect(request?.clarificationAnswers?.[0]?.answer).toBe("Yes, they already use OpenTelemetry.");
         return {
-          needsClarification: true,
+          refinedMessage: "Hey Jordan - since your team already has OpenTelemetry in place, I can show a dashboard from one service without new instrumentation.",
           model: "anthropic/claude-haiku-4.5",
-          questions: [
-            "Does Jordan's team currently use OpenTelemetry, or would adoption be a prerequisite?",
-          ],
-          safetyNotes: ["No invented metrics, timelines, or credentials will be added."],
         };
       }
       throw new Error(`unexpected command ${command}`);
@@ -167,6 +178,14 @@ describe("DesktopWorkbench", () => {
     expect(await screen.findByText("Refiner needs context")).toBeDefined();
     expect(screen.getAllByText(/Does Jordan's team currently use OpenTelemetry/).length).toBeGreaterThan(0);
     expect(screen.queryByText("After . refined")).toBeNull();
-    expect(screen.getByRole("button", { name: /Refine again/ })).toBeDefined();
+    expect((screen.getAllByRole("button", { name: /Use answers & refine/ })[0] as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Answer"), {
+      target: { value: "Yes, they already use OpenTelemetry." },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /Use answers & refine/ })[0]);
+
+    expect(await screen.findByText("After . refined")).toBeDefined();
+    expect(refineCalls).toBe(2);
   });
 });

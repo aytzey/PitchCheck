@@ -70,6 +70,19 @@ class PitchScoreRequest(BaseModel):
 
 class PitchRefineRequest(PitchScoreRequest):
     suggestions: list[str] = Field(default_factory=list, max_length=12)
+    clarification_answers: list["PitchRefineClarificationAnswer"] = Field(
+        default_factory=list,
+        max_length=6,
+        alias="clarificationAnswers",
+    )
+
+
+class PitchRefineClarificationAnswer(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(default="", max_length=80)
+    question: str = Field(default="", max_length=500)
+    answer: str = Field(..., min_length=1, max_length=1000)
 
 
 class AuthLoginRequest(BaseModel):

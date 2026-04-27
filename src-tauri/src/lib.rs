@@ -158,6 +158,15 @@ pub struct RefineRequest {
     persona: String,
     platform: String,
     suggestions: Vec<String>,
+    #[serde(default, rename = "clarificationAnswers")]
+    clarification_answers: Vec<RefineClarificationAnswer>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RefineClarificationAnswer {
+    id: String,
+    question: String,
+    answer: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -645,6 +654,7 @@ async fn refine_pitch(
                         "persona": request.persona.trim(),
                         "platform": request.platform.trim(),
                         "suggestions": request.suggestions.clone(),
+                        "clarification_answers": request.clarification_answers.clone(),
                         "openRouterModel": model.clone(),
                     });
                     let mut builder = state
@@ -742,11 +752,13 @@ async fn refine_pitch(
                 )
             })?;
         let suggestions = format_refine_suggestions(&request.suggestions);
+        let clarification_answers = format_refine_clarification_answers(&request.clarification_answers);
         let prompt = format!(
             concat!(
                 "Platform: {platform}\n",
                 "Recipient persona:\n{persona}\n\n",
                 "Current message:\n{message}\n\n",
+                "Clarification answers already provided:\n{clarification_answers}\n\n",
                 "Score-lift repair brief:\n{suggestions}\n\n",
                 "Rewrite objective:\n",
                 "- Optimize for a materially higher next PitchCheck persuasion score, not a light paraphrase.\n",
@@ -756,9 +768,14 @@ async fn refine_pitch(
                 "- Prefer specific, verifiable detail already present in the draft. Do not invent fake customers, ",
                 "metrics, dates, or credentials; if proof is missing, create a credible proof path such as a pilot, ",
                 "benchmark, example, or screen-share.\n",
+                "- Do not invent talk/post topics, service names, before/after baselines, customer names, customer counts, ",
+                "or source-specific observations. If a detail is only generic, keep it generic.\n",
+                "- If the draft has a one-sided metric, preserve it as one-sided; do not add a \"from X to Y\" baseline unless X is explicitly provided.\n",
                 "- Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.\n",
                 "- Preserve the sender intent, platform fit, and the input language exactly.\n\n",
                 "Clarification behavior:\n",
+                "- If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.\n",
+                "- Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.\n",
                 "- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask 1-3 short questions instead of inventing.\n",
                 "- Ask questions especially when proof, target outcome, decision criterion, likely objection, relationship level, or CTA constraints are missing.\n",
                 "- If proof is missing but a proof path is enough, rewrite using a pilot, demo, benchmark, screen-share, or sample-output path.\n\n",
@@ -768,6 +785,7 @@ async fn refine_pitch(
             platform = request.platform.trim(),
             persona = request.persona.trim(),
             message = request.message.trim(),
+            clarification_answers = clarification_answers,
             suggestions = suggestions,
         );
         let response = state
@@ -1142,6 +1160,28 @@ fn format_refine_suggestions(suggestions: &[String]) -> String {
         .map(|(index, value)| format!("{}. {}", index + 1, value))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn format_refine_clarification_answers(answers: &[RefineClarificationAnswer]) -> String {
+    let cleaned = answers
+        .iter()
+        .filter_map(|item| {
+            let question = item.question.trim();
+            let answer = item.answer.trim();
+            if question.is_empty() || answer.is_empty() {
+                None
+            } else {
+                Some(format!("- {question}\n  Answer: {answer}"))
+            }
+        })
+        .take(6)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if cleaned.is_empty() {
+        "- None.".to_string()
+    } else {
+        cleaned
+    }
 }
 
 fn clean_refined_message(content: &str) -> String {

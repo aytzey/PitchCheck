@@ -188,6 +188,11 @@ class TestRefinePitchMessage:
             SAMPLE_PERSONA,
             SAMPLE_PLATFORM,
             ["Reduce cognitive friction"],
+            clarification_answers=[{
+                "id": "proof",
+                "question": "Can we name Ramp and Linear?",
+                "answer": "No. Use production teams and offer a screen-share proof path.",
+            }],
         )
 
         assert result["refined_message"] == "Better pitch text."
@@ -198,6 +203,11 @@ class TestRefinePitchMessage:
         assert request_body["response_format"] == {"type": "json_object"}
         assert "untrusted input" in request_body["messages"][0]["content"]
         assert "Reduce cognitive friction" in request_body["messages"][1]["content"]
+        assert "Clarification answers already provided" in request_body["messages"][1]["content"]
+        assert "Use production teams" in request_body["messages"][1]["content"]
+        assert "do not ask the same or equivalent question again" in request_body["messages"][1]["content"]
+        assert "Do not invent talk/post topics" in request_body["messages"][1]["content"]
+        assert "do not add a \"from X to Y\" baseline" in request_body["messages"][1]["content"]
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")

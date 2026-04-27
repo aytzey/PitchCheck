@@ -584,6 +584,76 @@ textarea {
   background: var(--bg-sunken);
 }
 
+.pc-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pc-question-card {
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 10px;
+}
+
+.pc-question-text {
+  color: var(--fg-muted);
+  display: flex;
+  font-size: 12.5px;
+  gap: 10px;
+}
+
+.pc-question-text > span {
+  color: var(--ok);
+  flex: 0 0 auto;
+}
+
+.pc-question-text p {
+  line-height: 1.5;
+  margin: 0;
+}
+
+.pc-question-text small {
+  color: var(--fg-dim);
+  display: block;
+  margin-top: 4px;
+}
+
+.pc-answer-field {
+  display: block;
+  margin-top: 10px;
+}
+
+.pc-answer-field .label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.pc-answer-field textarea {
+  background: var(--bg-app);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--fg);
+  font-family: var(--ff-sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  min-height: 78px;
+  outline: none;
+  padding: 8px 9px;
+  resize: vertical;
+  width: 100%;
+}
+
+.pc-answer-field textarea:focus {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 2px var(--ok-dim);
+}
+
+.pc-answer-field textarea::placeholder {
+  color: var(--fg-faint);
+}
+
 .pc-refine-safety {
   margin-top: 14px;
 }
@@ -593,6 +663,12 @@ textarea {
   font-size: 12px;
   line-height: 1.5;
   margin: 12px 0 0;
+}
+
+.pc-question-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .pc-actionbar {

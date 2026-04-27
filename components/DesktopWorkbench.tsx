@@ -70,6 +70,12 @@ type RefineQuestionSet = {
   safetyNotes?: string[];
 };
 
+type RefineClarificationAnswer = {
+  id: string;
+  question: string;
+  answer: string;
+};
+
 type RankRow = {
   label: string;
   score: number;
@@ -79,7 +85,7 @@ type RankRow = {
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
-const APP_VERSION = "0.1.10";
+const APP_VERSION = "0.1.11";
 const ROUTES: Route[] = ["workspace", "runtime", "setup", "settings"];
 
 const SAMPLE_PITCH = `Hey Jordan - saw your post about the Athena migration going live last week, congrats. I know you mentioned the team was stretched thin on the observability side afterwards.
@@ -226,6 +232,7 @@ export default function DesktopWorkbench() {
   const [refining, setRefining] = useState(false);
   const [refinedPitch, setRefinedPitch] = useState<RefinedPitch | null>(null);
   const [refineQuestions, setRefineQuestions] = useState<RefineQuestionSet | null>(null);
+  const [refineQuestionAnswers, setRefineQuestionAnswers] = useState<Record<string, string>>({});
   const [message, setMessage] = useState(SAMPLE_PITCH);
   const [audience, setAudience] = useState<Audience>(DEFAULT_AUDIENCE);
   const [medium, setMedium] = useState<Medium>(MEDIUMS[0]);
@@ -528,6 +535,7 @@ export default function DesktopWorkbench() {
     setScoring(true);
     setRefinedPitch(null);
     setRefineQuestions(null);
+    setRefineQuestionAnswers({});
     setError(null);
     if (desktopMode) {
       setRuntimeMessage(
@@ -576,9 +584,10 @@ export default function DesktopWorkbench() {
     }
   }, [desktopMode, medium.id, message, openRouterModel, persona, runtimeKind, runtimeState, setAppRoute]);
 
-  const handleRefine = useCallback(async () => {
+  const handleRefine = useCallback(async (options?: { personaOverride?: string; clarificationAnswers?: RefineClarificationAnswer[] }) => {
     if (!report) return;
     const source = message.trim();
+    const activePersona = options?.personaOverride ?? persona;
     if (source.length < 10) {
       setError("Write a message before refining.");
       return;
@@ -593,13 +602,15 @@ export default function DesktopWorkbench() {
     setRefining(true);
     setError(null);
     setRefineQuestions(null);
+    setRefineQuestionAnswers({});
     try {
       if (desktopMode) {
         const data = await refinePitchOnDesktop({
           message: source,
-          persona,
+          persona: activePersona,
           platform: medium.id,
           suggestions: refineBrief,
+          clarificationAnswers: options?.clarificationAnswers ?? [],
         });
         const questions = normaliseRefineQuestions(data.questions);
         if (data.needsClarification) {
@@ -639,16 +650,34 @@ export default function DesktopWorkbench() {
       setRefining(false);
     }
   }, [
+    persona,
     desktopMode,
     medium.id,
     message,
     openRouterApiKey,
     openRouterModel,
     openRouterRefinerModel,
-    persona,
     report,
     setAppRoute,
   ]);
+
+  const handleUseRefineAnswers = useCallback(() => {
+    if (!refineQuestions) return;
+    const clarificationContext = buildRefineClarificationContext(refineQuestions, refineQuestionAnswers);
+    if (!clarificationContext) {
+      setError("Answer at least one refiner question before using the answers.");
+      return;
+    }
+    const nextAudience = {
+      ...audience,
+      context: appendRefineClarificationContext(audience.context, clarificationContext),
+    };
+    const nextPersona = formatPersona(nextAudience);
+    const clarificationAnswers = buildRefineClarificationAnswers(refineQuestions, refineQuestionAnswers);
+    setAudience(nextAudience);
+    setRuntimeMessage("Using clarification answers and refining again...");
+    void handleRefine({ personaOverride: nextPersona, clarificationAnswers });
+  }, [audience, handleRefine, refineQuestionAnswers, refineQuestions]);
 
   const handleAcceptRefine = useCallback(() => {
     if (!refinedPitch) return;
@@ -656,6 +685,7 @@ export default function DesktopWorkbench() {
     setMessage(nextMessage);
     setRefinedPitch(null);
     setRefineQuestions(null);
+    setRefineQuestionAnswers({});
     void handleScore(nextMessage);
   }, [handleScore, refinedPitch]);
 
@@ -664,6 +694,7 @@ export default function DesktopWorkbench() {
     setMessage(refinedPitch.after);
     setRefinedPitch(null);
     setRefineQuestions(null);
+    setRefineQuestionAnswers({});
   }, [refinedPitch]);
 
   useEffect(() => {
@@ -694,6 +725,7 @@ export default function DesktopWorkbench() {
             setMessage(nextMessage);
             setRefinedPitch(null);
             setRefineQuestions(null);
+            setRefineQuestionAnswers({});
           }}
           report={report}
           error={error}
@@ -702,14 +734,23 @@ export default function DesktopWorkbench() {
           refining={refining}
           refinedPitch={refinedPitch}
           refineQuestions={refineQuestions}
+          refineQuestionAnswers={refineQuestionAnswers}
           canScore={canScore}
           onScore={handleScore}
-          onRefine={handleRefine}
+          onRefine={() => void handleRefine()}
+          onRefineAnswerChange={(id, value) =>
+            setRefineQuestionAnswers((current) => ({
+              ...current,
+              [id]: value,
+            }))
+          }
+          onUseRefineAnswers={handleUseRefineAnswers}
           onAcceptRefine={handleAcceptRefine}
           onAcceptRefineForEditing={handleAcceptRefineForEditing}
           onDiscardRefine={() => {
             setRefinedPitch(null);
             setRefineQuestions(null);
+            setRefineQuestionAnswers({});
           }}
           onClear={() => {
             setMessage("");
@@ -717,6 +758,7 @@ export default function DesktopWorkbench() {
             setError(null);
             setRefinedPitch(null);
             setRefineQuestions(null);
+            setRefineQuestionAnswers({});
           }}
           onConnect={handleConnect}
         />
@@ -891,9 +933,12 @@ function WorkspaceView({
   refining,
   refinedPitch,
   refineQuestions,
+  refineQuestionAnswers,
   canScore,
   onScore,
   onRefine,
+  onRefineAnswerChange,
+  onUseRefineAnswers,
   onAcceptRefine,
   onAcceptRefineForEditing,
   onDiscardRefine,
@@ -915,9 +960,12 @@ function WorkspaceView({
   refining: boolean;
   refinedPitch: RefinedPitch | null;
   refineQuestions: RefineQuestionSet | null;
+  refineQuestionAnswers: Record<string, string>;
   canScore: boolean;
   onScore: () => void;
   onRefine: () => void;
+  onRefineAnswerChange: (id: string, value: string) => void;
+  onUseRefineAnswers: () => void;
   onAcceptRefine: () => void;
   onAcceptRefineForEditing: () => void;
   onDiscardRefine: () => void;
@@ -927,6 +975,7 @@ function WorkspaceView({
   const tokens = Math.ceil(message.length / 4.2);
   const needsConnect = state === "ready" || state === "disconnected" || state === "failed";
   const needsSetup = state === "not-configured";
+  const hasRefineAnswers = hasAnyRefineAnswer(refineQuestionAnswers);
 
   return (
     <section className="pc-workspace">
@@ -947,7 +996,13 @@ function WorkspaceView({
         {refinedPitch ? (
           <DiffView refinedPitch={refinedPitch} />
         ) : refineQuestions ? (
-          <RefineQuestionsEditorPanel questionSet={refineQuestions} />
+          <RefineQuestionsEditorPanel
+            answers={refineQuestionAnswers}
+            questionSet={refineQuestions}
+            refining={refining}
+            onAnswerChange={onRefineAnswerChange}
+            onUseAnswers={onUseRefineAnswers}
+          />
         ) : (
           <div className="pc-text-well">
             <div className="pc-gutter" aria-hidden="true">
@@ -998,8 +1053,14 @@ function WorkspaceView({
               <Button variant="ghost" onClick={onDiscardRefine}>
                 Back to draft
               </Button>
-              <Button variant="primary" loading={refining} disabled={refining} onClick={onRefine} icon={<Icon name="spark" />}>
-                {refining ? "Refining..." : "Refine again"}
+              <Button
+                variant="primary"
+                loading={refining}
+                disabled={refining || !hasRefineAnswers}
+                onClick={onUseRefineAnswers}
+                icon={<Icon name="spark" />}
+              >
+                {refining ? "Refining..." : "Use answers & refine"}
               </Button>
             </>
           )}
@@ -1659,20 +1720,46 @@ function RefineQuestionsPanel({ questionSet }: { questionSet: RefineQuestionSet 
   );
 }
 
-function RefineQuestionsEditorPanel({ questionSet }: { questionSet: RefineQuestionSet }) {
+function RefineQuestionsEditorPanel({
+  answers,
+  questionSet,
+  refining,
+  onAnswerChange,
+  onUseAnswers,
+}: {
+  answers: Record<string, string>;
+  questionSet: RefineQuestionSet;
+  refining: boolean;
+  onAnswerChange: (id: string, value: string) => void;
+  onUseAnswers: () => void;
+}) {
+  const hasAnswers = hasAnyRefineAnswer(answers);
+
   return (
     <div className="pc-refine-questions-main">
       <div className="pc-refine-questions-card">
         <HeaderLine title="Refiner needs context" right={questionSet.model} />
-        <div className="pc-suggestions">
+        <div className="pc-question-list">
           {questionSet.questions.map((item, index) => (
-            <div key={`${item.id}-${index}`}>
-              <span className="mono">{String(index + 1).padStart(2, "0")}</span>
-              <p>
-                <strong>{item.label || "Question"}: </strong>
-                {item.question}
-                {item.why ? <small>{item.why}</small> : null}
-              </p>
+            <div className="pc-question-card" key={`${item.id}-${index}`}>
+              <div className="pc-question-text">
+                <span className="mono">{String(index + 1).padStart(2, "0")}</span>
+                <p>
+                  <strong>{item.label || "Question"}: </strong>
+                  {item.question}
+                  {item.why ? <small>{item.why}</small> : null}
+                </p>
+              </div>
+              <label className="pc-answer-field" htmlFor={`refine-answer-${item.id}`}>
+                <span className="label">Answer</span>
+                <textarea
+                  id={`refine-answer-${item.id}`}
+                  value={answers[item.id] ?? ""}
+                  onChange={(event) => onAnswerChange(item.id, event.target.value)}
+                  placeholder="Add the missing fact, constraint, proof permission, or target pain here."
+                  rows={3}
+                />
+              </label>
             </div>
           ))}
         </div>
@@ -1690,8 +1777,19 @@ function RefineQuestionsEditorPanel({ questionSet }: { questionSet: RefineQuesti
           </div>
         )}
         <p className="pc-refine-question-hint">
-          Add the missing context to the recipient profile or draft, then run refine again.
+          Answers are saved into the recipient profile context for this refinement so the outgoing draft stays clean.
         </p>
+        <div className="pc-question-actions">
+          <Button
+            variant="primary"
+            loading={refining}
+            disabled={refining || !hasAnswers}
+            onClick={onUseAnswers}
+            icon={<Icon name="spark" />}
+          >
+            {refining ? "Refining..." : "Use answers & refine"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -2783,6 +2881,39 @@ function normaliseRefineQuestions(value: unknown): RefineQuestion[] {
     if (questions.length >= 3) break;
   }
   return questions;
+}
+
+function hasAnyRefineAnswer(answers: Record<string, string>) {
+  return Object.values(answers).some((answer) => answer.trim().length > 0);
+}
+
+function buildRefineClarificationContext(questionSet: RefineQuestionSet, answers: Record<string, string>) {
+  const lines = questionSet.questions
+    .map((item) => {
+      const answer = (answers[item.id] ?? "").trim();
+      if (!answer) return null;
+      return `- ${item.question}\n  Answer: ${answer}`;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  return lines.length ? `Refiner clarification answers:\n${lines.join("\n")}` : "";
+}
+
+function buildRefineClarificationAnswers(questionSet: RefineQuestionSet, answers: Record<string, string>): RefineClarificationAnswer[] {
+  return questionSet.questions
+    .map((item) => ({
+      id: item.id,
+      question: item.question,
+      answer: (answers[item.id] ?? "").trim(),
+    }))
+    .filter((item) => item.answer.length > 0);
+}
+
+function appendRefineClarificationContext(currentContext: string, clarificationContext: string) {
+  const current = currentContext.trim();
+  const clarification = clarificationContext.trim();
+  if (!clarification) return currentContext;
+  return current ? `${current}\n\n${clarification}` : clarification;
 }
 
 function formatPersona(audience: Audience) {

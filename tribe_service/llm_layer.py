@@ -763,11 +763,28 @@ def _format_refine_suggestions(suggestions: list[str] | None) -> str:
     return "\n".join(f"{idx + 1}. {item}" for idx, item in enumerate(cleaned))
 
 
+def _format_refine_clarification_answers(clarification_answers: list[dict[str, Any]] | None) -> str:
+    cleaned: list[str] = []
+    for item in clarification_answers or []:
+        if not isinstance(item, dict):
+            continue
+        question = _clean_llm_string(item.get("question"), max_len=500)
+        answer = _clean_llm_string(item.get("answer"), max_len=1000)
+        if question and answer:
+            cleaned.append(f"- {question}\n  Answer: {answer}")
+        if len(cleaned) >= 6:
+            break
+    if not cleaned:
+        return "- None."
+    return "\n".join(cleaned)
+
+
 def _build_refine_prompt(
     message: str,
     persona: str,
     platform: str,
     suggestions: list[str] | None,
+    clarification_answers: list[dict[str, Any]] | None = None,
 ) -> str:
     return f"""Platform: {platform.strip()}
 Recipient persona:
@@ -775,6 +792,9 @@ Recipient persona:
 
 Current message:
 {message.strip()}
+
+Clarification answers already provided:
+{_format_refine_clarification_answers(clarification_answers)}
 
 Score-lift repair brief:
 {_format_refine_suggestions(suggestions)}
@@ -784,10 +804,14 @@ Rewrite objective:
 - First repair the weakest persuasion facets and neural signals in the brief.
 - Make the opener persona-specific, the value claim concrete, the proof more credible, and the CTA lower-friction.
 - Prefer specific, verifiable detail already present in the draft. Do not invent fake customers, metrics, dates, or credentials; if proof is missing, create a credible proof path such as a pilot, benchmark, example, or screen-share.
+- Do not invent talk/post topics, service names, before/after baselines, customer names, customer counts, or source-specific observations. If a detail is only generic, keep it generic.
+- If the draft has a one-sided metric, preserve it as one-sided; do not add a "from X to Y" baseline unless X is explicitly provided.
 - Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.
 - Preserve the sender intent, platform fit, and the input language exactly.
 
 Clarification behavior:
+- If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.
+- Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.
 - If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask 1-3 short questions instead of inventing.
 - Ask questions especially when proof, target outcome, decision criterion, likely objection, relationship level, or CTA constraints are missing.
 - If proof is missing but a proof path is enough, you may still rewrite using a pilot/demo/benchmark/screen-share path.
@@ -875,6 +899,7 @@ def refine_pitch_message(
     platform: str,
     suggestions: list[str] | None = None,
     *,
+    clarification_answers: list[dict[str, Any]] | None = None,
     openrouter_model: str | None = None,
 ) -> dict[str, Any]:
     """Rewrite a pitch, or ask targeted clarifying questions, without TRIBE re-scoring."""
@@ -882,7 +907,7 @@ def refine_pitch_message(
     if not _openrouter_enabled(selected_model):
         raise RuntimeError("OpenRouter API key is missing; LLM refine is unavailable.")
 
-    prompt = _build_refine_prompt(message, persona, platform, suggestions)
+    prompt = _build_refine_prompt(message, persona, platform, suggestions, clarification_answers)
     try:
         payload = {
             "model": selected_model,

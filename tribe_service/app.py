@@ -412,6 +412,7 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
             persona=request.persona,
             platform=request.platform,
             suggestions=request.suggestions,
+            clarification_answers=[item.model_dump() for item in request.clarification_answers],
             openrouter_model=request.open_router_model,
         )
         return PitchRefineResponse(**result).model_dump()

@@ -64,10 +64,16 @@ def test_refine_request_accepts_suggestions_and_model_alias():
         persona="Valid persona",
         platform="Email",
         suggestions=["Make the CTA easier"],
+        clarificationAnswers=[{
+            "id": "proof",
+            "question": "Can we name this customer?",
+            "answer": "No, use a screen-share proof path.",
+        }],
         openRouterModel="anthropic/claude-sonnet-4.6",
     )
     assert req.platform == "email"
     assert req.suggestions == ["Make the CTA easier"]
+    assert req.clarification_answers[0].answer == "No, use a screen-share proof path."
     assert req.open_router_model == "anthropic/claude-sonnet-4.6"
 
 def test_refine_response_defaults_to_llm_methodology():

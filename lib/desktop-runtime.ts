@@ -158,6 +158,11 @@ export async function refinePitchOnDesktop(request: {
   persona: string;
   platform: string;
   suggestions: string[];
+  clarificationAnswers?: Array<{
+    id: string;
+    question: string;
+    answer: string;
+  }>;
 }): Promise<{
   refinedMessage?: string;
   model?: string;

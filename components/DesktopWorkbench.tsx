@@ -79,6 +79,7 @@ type RankRow = {
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
+const APP_VERSION = "0.1.10";
 const ROUTES: Route[] = ["workspace", "runtime", "setup", "settings"];
 
 const SAMPLE_PITCH = `Hey Jordan - saw your post about the Athena migration going live last week, congrats. I know you mentioned the team was stretched thin on the observability side afterwards.
@@ -859,7 +860,7 @@ function TopBar({
       <div className="pc-brand">
         <Logo />
         <strong>PitchCheck</strong>
-        <span className="mono">v0.1.6</span>
+        <span className="mono">v{APP_VERSION}</span>
       </div>
       <nav className="pc-tabs nodrag" aria-label="Primary">
         {ROUTES.map((item) => (
@@ -945,6 +946,8 @@ function WorkspaceView({
 
         {refinedPitch ? (
           <DiffView refinedPitch={refinedPitch} />
+        ) : refineQuestions ? (
+          <RefineQuestionsEditorPanel questionSet={refineQuestions} />
         ) : (
           <div className="pc-text-well">
             <div className="pc-gutter" aria-hidden="true">
@@ -964,6 +967,10 @@ function WorkspaceView({
           {refinedPitch ? (
             <span className="pc-keyhint">
               <span>Review the candidate rewrite before re-score</span>
+            </span>
+          ) : refineQuestions ? (
+            <span className="pc-keyhint">
+              <span>Answer these questions in the profile or draft, then refine again</span>
             </span>
           ) : (
             <span className="pc-keyhint">
@@ -986,19 +993,29 @@ function WorkspaceView({
               </Button>
             </>
           )}
-          {!refinedPitch && needsSetup && <span className="pc-muted">Runtime setup is incomplete.</span>}
-          {!refinedPitch && needsConnect && <span className="pc-muted">Runtime offline.</span>}
-          {!refinedPitch && (needsSetup || needsConnect) && (
+          {refineQuestions && !refinedPitch && (
+            <>
+              <Button variant="ghost" onClick={onDiscardRefine}>
+                Back to draft
+              </Button>
+              <Button variant="primary" loading={refining} disabled={refining} onClick={onRefine} icon={<Icon name="spark" />}>
+                {refining ? "Refining..." : "Refine again"}
+              </Button>
+            </>
+          )}
+          {!refinedPitch && !refineQuestions && needsSetup && <span className="pc-muted">Runtime setup is incomplete.</span>}
+          {!refinedPitch && !refineQuestions && needsConnect && <span className="pc-muted">Runtime offline.</span>}
+          {!refinedPitch && !refineQuestions && (needsSetup || needsConnect) && (
             <Button variant="secondary" onClick={onConnect} icon={<Icon name="bolt" />}>
               Connect runtime
             </Button>
           )}
-          {!refinedPitch && (state === "connecting" || state === "deploying") && (
+          {!refinedPitch && !refineQuestions && (state === "connecting" || state === "deploying") && (
             <Button variant="secondary" loading disabled>
               {state === "deploying" ? "Deploying..." : "Connecting..."}
             </Button>
           )}
-          {!refinedPitch && (state === "connected" || state === "scoring") && (
+          {!refinedPitch && !refineQuestions && (state === "connected" || state === "scoring") && (
             <Button variant="primary" loading={scoring} disabled={!canScore || scoring || refining} onClick={onScore} icon={<Icon name="spark" />}>
               {scoring ? "Scoring..." : "Score message"}
             </Button>
@@ -1637,6 +1654,44 @@ function RefineQuestionsPanel({ questionSet }: { questionSet: RefineQuestionSet 
             <p>{note}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function RefineQuestionsEditorPanel({ questionSet }: { questionSet: RefineQuestionSet }) {
+  return (
+    <div className="pc-refine-questions-main">
+      <div className="pc-refine-questions-card">
+        <HeaderLine title="Refiner needs context" right={questionSet.model} />
+        <div className="pc-suggestions">
+          {questionSet.questions.map((item, index) => (
+            <div key={`${item.id}-${index}`}>
+              <span className="mono">{String(index + 1).padStart(2, "0")}</span>
+              <p>
+                <strong>{item.label || "Question"}: </strong>
+                {item.question}
+                {item.why ? <small>{item.why}</small> : null}
+              </p>
+            </div>
+          ))}
+        </div>
+        {(questionSet.safetyNotes ?? []).length > 0 && (
+          <div className="pc-refine-safety">
+            <HeaderLine title="Safety notes" right={`${questionSet.safetyNotes?.length ?? 0} checks`} />
+            <div className="pc-suggestions">
+              {(questionSet.safetyNotes ?? []).map((note, index) => (
+                <div key={`main-safety-${index}`}>
+                  <span className="mono">OK</span>
+                  <p>{note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <p className="pc-refine-question-hint">
+          Add the missing context to the recipient profile or draft, then run refine again.
+        </p>
       </div>
     </div>
   );

@@ -4,6 +4,13 @@ import DesktopWorkbench from "@/components/DesktopWorkbench";
 import type { PitchScoreReport } from "@/shared/types";
 
 const mockFetch = vi.fn();
+const tauriMocks = vi.hoisted(() => ({
+  invoke: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: tauriMocks.invoke,
+}));
 
 const mockReport: PitchScoreReport = {
   persuasion_score: 76,
@@ -44,6 +51,8 @@ describe("DesktopWorkbench", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
     mockFetch.mockReset();
+    tauriMocks.invoke.mockReset();
+    delete window.__TAURI_INTERNALS__;
     vi.stubGlobal("fetch", mockFetch);
   });
 
@@ -103,5 +112,61 @@ describe("DesktopWorkbench", () => {
     await waitFor(() => expect(screen.getByText("After . refined")).toBeDefined());
     expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & re-evaluate" })).toBeDefined();
+  });
+
+  it("shows desktop refiner clarification questions in the main editor", async () => {
+    window.__TAURI_INTERNALS__ = {};
+    tauriMocks.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_app_config") {
+        return {
+          openRouterApiKey: "sk-test",
+          openRouterModel: "anthropic/claude-haiku-4.5",
+          openRouterRefinerModel: "anthropic/claude-haiku-4.5",
+        };
+      }
+      if (command === "get_runtime_status") {
+        return {
+          mode: "pitchserver",
+          connected: true,
+          service_url: "http://127.0.0.1:18090",
+          local_gpu: { available: true },
+          image: "ghcr.io/aytzey/pitchcheck-tribe:latest",
+        };
+      }
+      if (command === "get_setup_status") {
+        return {
+          platform: "linux",
+          ready_for_local: true,
+          ready_for_cloud: true,
+          steps: [],
+        };
+      }
+      if (command === "score_pitch") {
+        return { report: mockReport };
+      }
+      if (command === "refine_pitch") {
+        return {
+          needsClarification: true,
+          model: "anthropic/claude-haiku-4.5",
+          questions: [
+            "Does Jordan's team currently use OpenTelemetry, or would adoption be a prerequisite?",
+          ],
+          safetyNotes: ["No invented metrics, timelines, or credentials will be added."],
+        };
+      }
+      throw new Error(`unexpected command ${command}`);
+    });
+
+    render(<DesktopWorkbench />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Score message/ }));
+    expect(await screen.findByText("Variant re-rank")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
+
+    expect(await screen.findByText("Refiner needs context")).toBeDefined();
+    expect(screen.getAllByText(/Does Jordan's team currently use OpenTelemetry/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("After . refined")).toBeNull();
+    expect(screen.getByRole("button", { name: /Refine again/ })).toBeDefined();
   });
 });

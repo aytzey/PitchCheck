@@ -163,12 +163,15 @@ export async function refinePitchOnDesktop(request: {
   model?: string;
   methodology?: string;
   needsClarification?: boolean;
-  questions?: Array<{
-    id: string;
-    label: string;
-    question: string;
-    why?: string;
-  }>;
+  questions?: Array<
+    | string
+    | {
+        id: string;
+        label: string;
+        question: string;
+        why?: string;
+      }
+  >;
   safetyNotes?: string[];
   persuasionProfile?: unknown;
   baselineScore?: number;
@@ -182,12 +185,15 @@ export async function refinePitchOnDesktop(request: {
     model?: string;
     methodology?: string;
     needsClarification?: boolean;
-    questions?: Array<{
-      id: string;
-      label: string;
-      question: string;
-      why?: string;
-    }>;
+    questions?: Array<
+      | string
+      | {
+          id: string;
+          label: string;
+          question: string;
+          why?: string;
+        }
+    >;
     safetyNotes?: string[];
     persuasionProfile?: unknown;
     baselineScore?: number;

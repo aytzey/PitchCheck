@@ -670,7 +670,17 @@ async fn refine_pitch(
                                 let mut refined_message =
                                     refine_string_field(&body, "refined_message", "refinedMessage");
                                 let questions = refine_questions(&body);
-                                if refined_message.is_some() || questions.is_some() {
+                                let explicit_needs_clarification =
+                                    refine_bool_field(
+                                        &body,
+                                        "needs_clarification",
+                                        "needsClarification",
+                                    )
+                                    .unwrap_or(false);
+                                if refined_message.is_some()
+                                    || questions.is_some()
+                                    || explicit_needs_clarification
+                                {
                                     let response_model = body
                                         .get("model")
                                         .and_then(Value::as_str)
@@ -680,14 +690,8 @@ async fn refine_pitch(
                                         .get("methodology")
                                         .and_then(Value::as_str)
                                         .map(str::to_string);
-                                    let needs_clarification =
-                                        refine_bool_field(
-                                            &body,
-                                            "needs_clarification",
-                                            "needsClarification",
-                                        )
-                                        .unwrap_or(false)
-                                            || (refined_message.is_none() && questions.is_some());
+                                    let needs_clarification = explicit_needs_clarification
+                                        || (refined_message.is_none() && questions.is_some());
                                     if needs_clarification {
                                         refined_message = None;
                                     }
@@ -819,13 +823,14 @@ async fn refine_pitch(
                 "refinedMessage",
             );
             let questions = refine_questions(&parsed);
-            if refined_message.is_some() || questions.is_some() {
-                let needs_clarification = refine_bool_field(
+            let explicit_needs_clarification = refine_bool_field(
                     &parsed,
                     "needs_clarification",
                     "needsClarification",
                 )
-                .unwrap_or(false)
+                .unwrap_or(false);
+            if refined_message.is_some() || questions.is_some() || explicit_needs_clarification {
+                let needs_clarification = explicit_needs_clarification
                     || (refined_message.is_none() && questions.is_some());
                 if needs_clarification {
                     refined_message = None;
@@ -1176,7 +1181,21 @@ fn refine_questions(body: &Value) -> Option<Vec<RefineQuestion>> {
         .map(|items| {
             items
                 .iter()
-                .filter_map(|item| {
+                .enumerate()
+                .filter_map(|(index, item)| {
+                    if let Some(question) = item
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                    {
+                        return Some(RefineQuestion {
+                            id: format!("question_{}", index + 1),
+                            label: format!("Question {}", index + 1),
+                            question: question.to_string(),
+                            why: String::new(),
+                        });
+                    }
+
                     let question = item
                         .get("question")
                         .and_then(Value::as_str)
@@ -1187,15 +1206,15 @@ fn refine_questions(body: &Value) -> Option<Vec<RefineQuestion>> {
                         .and_then(Value::as_str)
                         .map(str::trim)
                         .filter(|value| !value.is_empty())
-                        .unwrap_or("question")
-                        .to_string();
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("question_{}", index + 1));
                     let label = item
                         .get("label")
                         .and_then(Value::as_str)
                         .map(str::trim)
                         .filter(|value| !value.is_empty())
-                        .unwrap_or("Question")
-                        .to_string();
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("Question {}", index + 1));
                     let why = item
                         .get("why")
                         .and_then(Value::as_str)
@@ -3035,6 +3054,33 @@ mod tests {
         assert_eq!(value["new_username"], "new-user");
         assert_eq!(value["new_password"], "new-pass");
         assert!(value.get("currentPassword").is_none());
+    }
+
+    #[test]
+    fn refine_questions_accepts_string_items() {
+        let value = json!({
+            "needs_clarification": true,
+            "questions": [
+                "Do we have permission to name this customer?",
+                {
+                    "id": "proof",
+                    "label": "Proof",
+                    "question": "Should the proof path be a screen-share instead?",
+                    "why": "Avoids unverified social proof."
+                }
+            ]
+        });
+
+        let questions = refine_questions(&value).expect("questions");
+        assert_eq!(questions.len(), 2);
+        assert_eq!(questions[0].id, "question_1");
+        assert_eq!(questions[0].label, "Question 1");
+        assert_eq!(
+            questions[0].question,
+            "Do we have permission to name this customer?"
+        );
+        assert_eq!(questions[1].id, "proof");
+        assert_eq!(questions[1].why, "Avoids unverified social proof.");
     }
 
     #[test]

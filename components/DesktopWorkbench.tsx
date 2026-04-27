@@ -600,15 +600,19 @@ export default function DesktopWorkbench() {
           platform: medium.id,
           suggestions: refineBrief,
         });
-        const questions = (data.questions ?? []).filter((item) => item.question.trim());
-        if (data.needsClarification && questions.length) {
+        const questions = normaliseRefineQuestions(data.questions);
+        if (data.needsClarification) {
           setRefinedPitch(null);
-          setRefineQuestions({
-            model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
-            questions,
-            safetyNotes: data.safetyNotes,
-          });
-          setRuntimeMessage("Refiner needs a little more context before rewriting.");
+          if (questions.length) {
+            setRefineQuestions({
+              model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+              questions,
+              safetyNotes: data.safetyNotes,
+            });
+            setRuntimeMessage("Refiner needs a little more context before rewriting.");
+          } else {
+            throw new Error("Refiner asked for clarification but returned no readable questions.");
+          }
           return;
         }
         if (!data.refinedMessage) throw new Error(data.error || "Refine failed.");
@@ -2693,6 +2697,37 @@ function applyDesktopConfig(
   setters.setMaxHourlyPrice(config.maxHourlyPrice ?? 0.45);
   setters.setPreferInterruptible(config.preferInterruptible ?? true);
   setters.setConfigPath(config.configPath);
+}
+
+function normaliseRefineQuestions(value: unknown): RefineQuestion[] {
+  if (!Array.isArray(value)) return [];
+  const questions: RefineQuestion[] = [];
+  for (const [index, item] of value.entries()) {
+    if (typeof item === "string") {
+      const question = item.trim();
+      if (question) {
+        questions.push({
+          id: `question_${index + 1}`,
+          label: `Question ${index + 1}`,
+          question,
+          why: "",
+        });
+      }
+    } else if (item && typeof item === "object") {
+      const record = item as Partial<RefineQuestion>;
+      const question = typeof record.question === "string" ? record.question.trim() : "";
+      if (question) {
+        questions.push({
+          id: typeof record.id === "string" && record.id.trim() ? record.id.trim() : `question_${index + 1}`,
+          label: typeof record.label === "string" && record.label.trim() ? record.label.trim() : `Question ${index + 1}`,
+          question,
+          why: typeof record.why === "string" ? record.why.trim() : "",
+        });
+      }
+    }
+    if (questions.length >= 3) break;
+  }
+  return questions;
 }
 
 function formatPersona(audience: Audience) {

@@ -96,9 +96,9 @@ describe("DesktopWorkbench", () => {
     fireEvent.click(screen.getByRole("button", { name: /Score message/ }));
 
     expect(await screen.findByText("Variant re-rank")).toBeDefined();
-    expect(screen.getByRole("button", { name: /Refine & re-score/ })).toBeDefined();
+    expect(screen.getByRole("button", { name: /Refine draft/ })).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: /Refine & re-score/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
 
     await waitFor(() => expect(screen.getByText("After . refined")).toBeDefined());
     expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();

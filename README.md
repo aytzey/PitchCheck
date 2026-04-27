@@ -79,27 +79,29 @@ These get ratio-normalized against `global_mean_abs` and mapped through calibrat
 | Encoding Potential | Hippocampal/temporal memory encoding | arc, sustain, peak, focus |
 | Cognitive Friction | dlPFC/control-load analogue | inverse of sustain, focus, spread |
 
-Scores are compressed to [8, 92] to avoid false confidence at extremes. Cognitive friction is inverted — a high number means high friction, which is bad.
+Scores are compressed to [8, 92] to avoid false confidence at extremes. Cognitive friction is inverted — a high number means high friction, which is bad. A prediction-quality gate then shrinks the final score toward neutral when the TRIBE output is near-zero, flat, too short, or too low-resolution to support a strong claim.
 
-The final score does not use these signals directly as proof of persuasion. PitchCheck first builds five evidence-weighted neuro-persuasive axes:
+The final score is calibrated from these signals through five TRIBE-derived neuro-persuasive axes:
 
 | Axis | What it means |
 |------|---------------|
-| Self-value fit | Whether the pitch connects the offer to the persona's role, value, and decision frame |
-| Reward/affect motivation | Whether benefits, outcomes, and affective language create motivational pull |
-| Social cognition/sharing | Whether the message has social/narrative potential; explicit social proof still requires text evidence |
-| Encoding and attention | Whether the message has early salience and concrete hooks likely to be remembered |
-| Processing fluency | Whether the reader can understand and act without unnecessary cognitive load |
+| Self-value fit | mPFC/vmPFC/PCC self- and value-processing analogue |
+| Reward/affect motivation | Ventral-striatum/OFC/affective valuation analogue |
+| Social cognition/sharing | TPJ/dmPFC/default-network social cognition analogue |
+| Encoding and attention | Memory/attention/salience analogue |
+| Processing fluency | Inverse cognitive-control/friction analogue |
 
 ### 3. Neural Output → LLM Interpretation
 
-The raw signals and prediction summary go to an LLM (Claude via [OpenRouter](https://openrouter.ai)) along with the recipient persona and channel context. The LLM produces the verdict, narrative, strength/risk analysis, and rewrite suggestions.
+The raw signals and prediction summary go to an LLM (Claude Sonnet via [OpenRouter](https://openrouter.ai)) along with the recipient persona and channel context. The LLM produces the verdict, narrative, strength/risk analysis, and rewrite suggestions.
 
-PitchCheck now also runs a deterministic persuasion-evidence audit before the LLM result is accepted. It checks concrete metrics, value proposition, argument quality, social proof, authority, urgency, reciprocity/risk reversal, CTA specificity, audience-term overlap, platform fit, clarity, and prompt-injection/score-gaming language. The final score is calibrated against this audit plus TRIBE-predicted axes, so malformed JSON, overconfident LLM scores, unsupported neural overclaims, and adversarial text cannot directly force a high persuasion score.
+PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The final score is determined by TRIBE-predicted fMRI response geometry; the pitch text and persona are given to the LLM only as untrusted semantic context for interpretation and rewrite advice. Any LLM score is retained only as audit metadata and clamped to the neural band before display.
 
-The neuroscience layer follows a conservative triangulation rule from consumer-neuroscience and neuroforecasting work: TRIBE output is useful evidence, but it is not treated as recipient-level measured fMRI. Region labels are interpretive anchors, and reverse-inference risk is exposed through confidence reasons and scientific caveats.
+Repeated TRIBE predictions are cached in-process, but OpenRouter prompt/output caps and fast-model routing are intentionally disabled; quality is preferred over latency/cost.
 
-Research basis for the calibration layer includes Falk et al. on MPFC/self-value signals predicting health behavior change ([2011](https://doi.org/10.1037/a0022259), [2016](https://doi.org/10.1093/scan/nsv108)), Venkatraman et al. on fMRI predicting market-level advertising response ([2015](https://doi.org/10.1509/jmr.13.0593)), Scholz et al. on value/self/social signals and information sharing ([2017](https://doi.org/10.1073/pnas.1615259114)), Chan et al. on temporal neural signals of ad liking ([2023](https://doi.org/10.1177/00222437231194319)), Cohen et al. on reward vs. mentalizing predictors of persuasiveness by narrative type ([2024](https://doi.org/10.1038/s41598-024-62341-3)), and Cao & Reimann on triangulation and reverse-inference limits ([2020](https://doi.org/10.3389/fpsyg.2020.550204)).
+The neuroscience layer follows a conservative triangulation rule from consumer-neuroscience and neuroforecasting work: TRIBE output is useful evidence, but it is not treated as recipient-level measured fMRI. Region labels are interpretive anchors, reverse-inference risk is exposed through confidence reasons and scientific caveats, and weak prediction matrices lower both confidence and score extremity.
+
+Research basis for the calibration layer includes Falk et al. on neural responses predicting persuasion-induced behavior change ([2010](https://pmc.ncbi.nlm.nih.gov/articles/PMC3027351/)), neural focus groups predicting population-level media effects ([2012](https://pmc.ncbi.nlm.nih.gov/articles/PMC3725133/)), and MPFC/self-value signals predicting health behavior change and campaign response ([2011](https://doi.org/10.1037/a0022259), [2016](https://doi.org/10.1093/scan/nsv108)); Venkatraman et al. on fMRI predicting market-level advertising response ([2015](https://doi.org/10.1509/jmr.13.0593)); Scholz et al. on value/self/social signals and information sharing ([2017](https://doi.org/10.1177/0956797617695073)); Chan, Scholz et al. on cross-cultural neural prediction of information sharing ([2023](https://doi.org/10.1073/pnas.2313175120)); Chan et al. on temporal neural signals of ad liking ([2024](https://doi.org/10.1177/00222437231194319)); Cohen et al. on reward vs. mentalizing predictors of persuasiveness by narrative type ([2024](https://doi.org/10.1038/s41598-024-62341-3)); Scholz, Chan & Falk et al. on a 16-study message-effectiveness mega-analysis ([2025](https://doi.org/10.1093/pnasnexus/pgaf287)); Cao & Reimann on triangulation and reverse-inference limits ([2020](https://doi.org/10.3389/fpsyg.2020.550204)); and TRIBE v2 as an in-silico fMRI foundation model ([GitHub](https://github.com/facebookresearch/tribev2), [Hugging Face](https://huggingface.co/facebook/tribev2)).
 
 This layer is optional — scoring works without an OpenRouter key, you just won't get the written interpretation.
 
@@ -253,11 +255,13 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | Variable | Default | What it does |
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
-| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | Which model interprets neural output |
-| `OPENROUTER_REFINER_MODEL` | `OPENROUTER_MODEL` | Which model generates rewrite candidates in the desktop app |
+| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | High-quality model for interpreting neural output |
+| `OPENROUTER_REFINER_MODEL` | `OPENROUTER_MODEL` | Which model generates LLM rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout; prompt/output caps are not applied |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |
 | `TRIBE_ALLOW_MOCK` | `0` | Deterministic mock for tests |
+| `TRIBE_PREDICTION_CACHE_SIZE` | `8` | In-memory LRU cache for repeated TRIBE text predictions |
 | `TRIBE_SCORE_TIMEOUT_SECONDS` | `900` | Timeout (first run downloads ~8GB of weights) |
 
 <details>

@@ -1,9 +1,13 @@
 import os
+import asyncio
+import threading
+import time
 os.environ["TRIBE_ALLOW_MOCK"] = "1"
 os.environ.pop("OPENROUTER_API_KEY", None)
 
 import pytest
 from fastapi.testclient import TestClient
+import tribe_service.app as service_app
 from tribe_service.app import app
 
 client = TestClient(app)
@@ -51,9 +55,13 @@ class TestScore:
         assert isinstance(report["persuasion_evidence"], dict)
         assert isinstance(report["robustness"], dict)
         assert 0 <= report["robustness"]["confidence"] <= 1
+        assert 0 < report["robustness"]["prediction_quality_weight"] <= 1
         assert isinstance(report["robustness"]["neuro_axes"], dict)
         assert "self_value" in report["robustness"]["neuro_axes"]
         assert isinstance(report["robustness"]["scientific_caveats"], list)
+        assert report["fmri_output"]["prediction_subject_basis"] == "average_subject"
+        assert report["fmri_output"]["cortical_mesh"] == "fsaverage5"
+        assert "calibration_quality" in report["persuasion_evidence"]
         assert report["platform"] == "general"
 
     def test_with_platform(self):
@@ -123,6 +131,123 @@ class TestScore:
         assert unload.status_code == 200
         assert unload.json()["ok"] is True
         assert client.get("/health").json()["pipeline"]["model_loaded"] is False
+
+    def test_queue_timeout_is_reported_separately(self, monkeypatch):
+        async def run_case():
+            score_lock = asyncio.Semaphore(1)
+            await score_lock.acquire()
+            monkeypatch.setattr(service_app, "_score_lock", score_lock)
+            monkeypatch.setattr(service_app, "TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS", 0.01)
+
+            with pytest.raises(service_app.ScoreQueueTimeoutError):
+                await service_app._score_text_with_backpressure("valid pitch message")
+
+            score_lock.release()
+
+        asyncio.run(run_case())
+
+    def test_run_timeout_keeps_pipeline_active_until_worker_finishes(self, monkeypatch):
+        finished = threading.Event()
+
+        def slow_score_text(_: str):
+            time.sleep(0.05)
+            finished.set()
+            return [[1.0]]
+
+        monkeypatch.setattr(service_app, "_active_scores", 0)
+        monkeypatch.setattr(service_app, "score_text", slow_score_text)
+        monkeypatch.setattr(service_app, "TRIBE_SCORE_TIMEOUT_SECONDS", 0.01)
+        monkeypatch.setattr(service_app, "TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS", 0.05)
+
+        async def run_case():
+            monkeypatch.setattr(service_app, "_score_lock", asyncio.Semaphore(1))
+
+            with pytest.raises(service_app.ScoreRunTimeoutError):
+                await service_app._score_text_with_backpressure("valid pitch message")
+
+            assert (await service_app._pipeline_status())["active_scores"] == 1
+            assert finished.wait(1.0)
+            for _ in range(20):
+                if (await service_app._pipeline_status())["active_scores"] == 0:
+                    break
+                await asyncio.sleep(0.01)
+            assert (await service_app._pipeline_status())["active_scores"] == 0
+
+        asyncio.run(run_case())
+
+    def test_refine_uses_llm_without_tribe_rescore(self, monkeypatch):
+        def fail_score_text(_: str):
+            raise AssertionError("/refine should not call TRIBE scoring")
+
+        def fake_refine_pitch_message(**kwargs):
+            assert kwargs["suggestions"] == ["Make the CTA easier"]
+            return {
+                "refined_message": "Improved message with a lower-friction CTA.",
+                "model": "test-refiner",
+                "methodology": "llm_semantic_refine_no_tribe_rescore",
+            }
+
+        monkeypatch.setattr(service_app, "score_text", fail_score_text)
+        monkeypatch.setattr(service_app, "refine_pitch_message", fake_refine_pitch_message)
+
+        res = client.post("/refine", json={
+            "message": "Our platform reduces deployment time by 80% for enterprise teams",
+            "persona": "CTO at a mid-stage startup, technical background",
+            "platform": "email",
+            "suggestions": ["Make the CTA easier"],
+        })
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["refined_message"] == "Improved message with a lower-friction CTA."
+        assert data["model"] == "test-refiner"
+        assert data["methodology"] == "llm_semantic_refine_no_tribe_rescore"
+
+    def test_refine_can_return_clarifying_questions(self, monkeypatch):
+        def fake_refine_pitch_message(**kwargs):
+            return {
+                "refined_message": None,
+                "model": "test-refiner",
+                "needs_clarification": True,
+                "questions": [{
+                    "id": "proof",
+                    "label": "Proof",
+                    "question": "Which verified proof can we mention?",
+                    "why": "Avoids invented claims.",
+                }],
+                "safety_notes": ["No unverified claims added"],
+                "persuasion_profile": {"proof_threshold": "high"},
+                "methodology": "llm_semantic_refine_with_optional_clarifying_questions",
+            }
+
+        monkeypatch.setattr(service_app, "refine_pitch_message", fake_refine_pitch_message)
+
+        res = client.post("/refine", json={
+            "message": "Our platform reduces deployment time by 80% for enterprise teams",
+            "persona": "CTO at a mid-stage startup, technical background",
+            "suggestions": ["Add proof"],
+        })
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["refined_message"] is None
+        assert data["needs_clarification"] is True
+        assert data["questions"][0]["id"] == "proof"
+        assert data["safety_notes"] == ["No unverified claims added"]
+
+    def test_refine_reports_missing_openrouter_key(self, monkeypatch):
+        def fake_refine_pitch_message(**kwargs):
+            raise RuntimeError("OpenRouter API key is missing; LLM refine is unavailable.")
+
+        monkeypatch.setattr(service_app, "refine_pitch_message", fake_refine_pitch_message)
+
+        res = client.post("/refine", json={
+            "message": "Our platform reduces deployment time by 80% for enterprise teams",
+            "persona": "CTO at a mid-stage startup, technical background",
+        })
+
+        assert res.status_code == 503
+        assert "OpenRouter API key is missing" in res.json()["detail"]
 
 
 class TestPitchServerAuth:

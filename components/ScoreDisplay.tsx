@@ -64,9 +64,10 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
           {report.robustness && (
             <div className="panel p-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Robustness</h3>
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                 <Metric label="Neuro axes" value={Math.round(report.robustness.neural_score)} />
-                <Metric label="Text" value={Math.round(report.robustness.text_score)} />
+                <Metric label="Neural prior" value={Math.round(report.robustness.neural_prior_score ?? report.robustness.evidence_score)} />
+                <Metric label="Quality" value={`${Math.round((report.robustness.prediction_quality_weight ?? 1) * 100)}%`} />
                 <Metric label="Confidence" value={`${Math.round(report.robustness.confidence * 100)}%`} />
               </div>
               {neuroAxes.length > 0 && (
@@ -101,13 +102,13 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
           )}
           {report.persuasion_evidence && (
             <div className="panel p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Persuasion Evidence</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Semantic Context</h3>
               <p className="text-xs text-[var(--color-muted)]">
-                Strategies: {(report.persuasion_evidence.detected_strategies ?? []).slice(0, 6).join(", ") || "none detected"}
+                Text heuristics are disabled; message and persona are used only as untrusted semantic context for LLM interpretation.
               </p>
-              {(report.persuasion_evidence.missing_elements ?? []).length > 0 && (
+              {report.persuasion_evidence.methodology && (
                 <p className="mt-2 text-xs text-[var(--color-warning)]">
-                  Missing: {(report.persuasion_evidence.missing_elements ?? []).slice(0, 4).join(", ")}
+                  {report.persuasion_evidence.methodology.replaceAll("_", " ")}
                 </p>
               )}
             </div>

@@ -12,12 +12,30 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from tribe_service import native_core
+
+
+def _env_int(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float, minimum: float) -> float:
+    try:
+        return max(minimum, float(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
 
 TRIBE_MODEL_ID = os.getenv("TRIBE_MODEL_ID", "facebook/tribev2")
 TRIBE_DEVICE = os.getenv("TRIBE_DEVICE", "auto").strip().lower()
@@ -30,13 +48,19 @@ TRIBE_DIRECT_TEXT_LANGUAGE = os.getenv("TRIBE_DIRECT_TEXT_LANGUAGE", "english")
 TRIBE_CACHE_DIR = Path(os.getenv("TRIBE_CACHE_DIR", "/models")).resolve()
 TRIBE_TEXT_MODEL = os.getenv("TRIBE_TEXT_MODEL", "NousResearch/Hermes-3-Llama-3.2-3B")
 TRIBE_TEXT_BATCH_SIZE = os.getenv("TRIBE_TEXT_BATCH_SIZE", "auto").strip().lower()
-TRIBE_TEXT_CUDA_MIN_TOTAL_GB = float(os.getenv("TRIBE_TEXT_CUDA_MIN_TOTAL_GB", "7"))
-TRIBE_TEXT_CUDA_MIN_FREE_GB = float(os.getenv("TRIBE_TEXT_CUDA_MIN_FREE_GB", "5"))
+TRIBE_TEXT_CUDA_MIN_TOTAL_GB = _env_float("TRIBE_TEXT_CUDA_MIN_TOTAL_GB", 7.0, 0.0)
+TRIBE_TEXT_CUDA_MIN_FREE_GB = _env_float("TRIBE_TEXT_CUDA_MIN_FREE_GB", 5.0, 0.0)
 TRIBE_OOM_FALLBACK_TEXT_DEVICE = os.getenv("TRIBE_OOM_FALLBACK_TEXT_DEVICE", "cpu").strip().lower()
 if TRIBE_OOM_FALLBACK_TEXT_DEVICE in {"0", "false", "none", "off"}:
     TRIBE_OOM_FALLBACK_TEXT_DEVICE = ""
-TRIBE_OOM_FALLBACK_TEXT_BATCH_SIZE = max(1, int(os.getenv("TRIBE_OOM_FALLBACK_TEXT_BATCH_SIZE", "1")))
+TRIBE_OOM_FALLBACK_TEXT_BATCH_SIZE = _env_int("TRIBE_OOM_FALLBACK_TEXT_BATCH_SIZE", 1, 1)
 TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE = os.getenv("TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE", "0") == "1"
+TRIBE_PREDICTION_CACHE_SIZE = _env_int("TRIBE_PREDICTION_CACHE_SIZE", 8, 0)
+TRIBE_PREDICTION_CACHE_MAX_BYTES = _env_int(
+    "TRIBE_PREDICTION_CACHE_MAX_BYTES",
+    512 * 1024 * 1024,
+    0,
+)
 TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB = os.getenv("TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB", "auto").strip().lower()
 TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB = os.getenv("TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB", "32").strip()
 TRIBE_ACCELERATE_OFFLOAD_FOLDER = Path(
@@ -49,11 +73,24 @@ LOGGER = logging.getLogger(__name__)
 
 
 def clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
-    return max(lo, min(hi, value))
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return lo
+    if not np.isfinite(numeric):
+        return lo
+    return max(lo, min(hi, numeric))
 
 
 def safe_ratio(numerator: float, denominator: float, default: float = 0.0) -> float:
-    return numerator / denominator if abs(denominator) > 1e-9 else default
+    try:
+        num = float(numerator)
+        denom = float(denominator)
+    except (TypeError, ValueError):
+        return default
+    if not np.isfinite(num) or not np.isfinite(denom) or abs(denom) <= 1e-9:
+        return default
+    return num / denom
 
 
 def band_score(value: float, lo: float, hi: float) -> float:
@@ -69,10 +106,14 @@ def weighted_signal(
     ceiling: float = 92.0,
 ) -> float:
     """Weighted average of (score, weight) pairs → compressed to [floor, ceiling]."""
-    total_weight = sum(w for _, w in scores)
+    sanitized = [
+        (clamp(score), max(0.0, clamp(weight, 0.0, 1_000_000.0)))
+        for score, weight in scores
+    ]
+    total_weight = sum(w for _, w in sanitized)
     if total_weight < 1e-9:
         return 50.0
-    raw = sum(s * w for s, w in scores) / total_weight
+    raw = sum(s * w for s, w in sanitized) / total_weight
     # Compress to avoid extreme scores that erode trust
     compressed = floor + (ceiling - floor) * (clamp(raw) / 100.0)
     return clamp(compressed)
@@ -100,8 +141,8 @@ class _MockModel:
 
 WHISPERX_CUDA_COMPUTE_TYPE = os.getenv("WHISPERX_CUDA_COMPUTE_TYPE", "float16")
 WHISPERX_CPU_COMPUTE_TYPE = os.getenv("WHISPERX_CPU_COMPUTE_TYPE", "float32")
-WHISPERX_CUDA_BATCH_SIZE = max(1, int(os.getenv("WHISPERX_CUDA_BATCH_SIZE", "16")))
-WHISPERX_CPU_BATCH_SIZE = max(1, int(os.getenv("WHISPERX_CPU_BATCH_SIZE", "4")))
+WHISPERX_CUDA_BATCH_SIZE = _env_int("WHISPERX_CUDA_BATCH_SIZE", 16, 1)
+WHISPERX_CPU_BATCH_SIZE = _env_int("WHISPERX_CPU_BATCH_SIZE", 4, 1)
 
 
 def _resolve_device() -> str:
@@ -389,9 +430,16 @@ _runtime_text_batch_size_override: int | None = None
 _loaded_runtime_config: dict[str, Any] = {}
 _last_score_metrics: dict[str, Any] = {}
 _last_score_lock = threading.Lock()
+_prediction_cache: "OrderedDict[str, np.ndarray]" = OrderedDict()
+_prediction_cache_bytes = 0
+_prediction_cache_lock = threading.Lock()
 
 DIRECT_TEXT_TIMING_BASIS = "synthetic_word_order"
 REAL_TIME_TIMING_BASIS = "real_time_seconds"
+TRIBE_PREDICTION_SUBJECT_BASIS = "average_subject"
+TRIBE_CORTICAL_MESH = "fsaverage5"
+TRIBE_HEMODYNAMIC_LAG_SECONDS = 5.0
+TRIBE_RESPONSE_KIND = "tribe_predicted_fmri_analogue"
 
 
 def _round_seconds(value: float) -> float:
@@ -484,6 +532,71 @@ def _timing_metadata_for_input_mode(text_input_mode: str | None = None) -> dict[
     }
 
 
+def _prediction_cache_key(message: str) -> str:
+    payload = json.dumps(
+        {
+            "message": message,
+            "model_id": TRIBE_MODEL_ID,
+            "text_model": TRIBE_TEXT_MODEL,
+            "text_input_mode": TRIBE_TEXT_INPUT_MODE,
+            "direct_text_language": TRIBE_DIRECT_TEXT_LANGUAGE,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _cached_prediction(message: str) -> np.ndarray | None:
+    if TRIBE_PREDICTION_CACHE_SIZE <= 0:
+        return None
+    key = _prediction_cache_key(message)
+    with _prediction_cache_lock:
+        cached = _prediction_cache.get(key)
+        if cached is None:
+            return None
+        _prediction_cache.move_to_end(key)
+        return cached.copy()
+
+
+def _store_prediction(message: str, predictions: np.ndarray) -> None:
+    if TRIBE_PREDICTION_CACHE_SIZE <= 0:
+        return
+    key = _prediction_cache_key(message)
+    prediction = np.asarray(predictions, dtype=np.float32).copy()
+    if TRIBE_PREDICTION_CACHE_MAX_BYTES and prediction.nbytes > TRIBE_PREDICTION_CACHE_MAX_BYTES:
+        LOGGER.info(
+            "Skipping prediction cache entry because it is larger than cache budget: bytes=%s budget=%s",
+            prediction.nbytes,
+            TRIBE_PREDICTION_CACHE_MAX_BYTES,
+        )
+        return
+    global _prediction_cache_bytes
+    with _prediction_cache_lock:
+        previous = _prediction_cache.pop(key, None)
+        if previous is not None:
+            _prediction_cache_bytes = max(0, _prediction_cache_bytes - int(previous.nbytes))
+        _prediction_cache[key] = prediction
+        _prediction_cache_bytes += int(prediction.nbytes)
+        _prediction_cache.move_to_end(key)
+        while (
+            len(_prediction_cache) > TRIBE_PREDICTION_CACHE_SIZE
+            or (
+                TRIBE_PREDICTION_CACHE_MAX_BYTES
+                and _prediction_cache_bytes > TRIBE_PREDICTION_CACHE_MAX_BYTES
+            )
+        ):
+            _, evicted = _prediction_cache.popitem(last=False)
+            _prediction_cache_bytes = max(0, _prediction_cache_bytes - int(evicted.nbytes))
+
+
+def _clear_prediction_cache() -> None:
+    global _prediction_cache_bytes
+    with _prediction_cache_lock:
+        _prediction_cache.clear()
+        _prediction_cache_bytes = 0
+
+
 def _load_model() -> Any:
     global _model, _loaded_runtime_config
     if _model is not None:
@@ -570,10 +683,19 @@ def is_model_loaded() -> bool:
 
 
 def runtime_config() -> dict[str, Any]:
+    with _prediction_cache_lock:
+        prediction_cache_entries = len(_prediction_cache)
+        prediction_cache_bytes = _prediction_cache_bytes
     return {
         "configured_device": TRIBE_DEVICE,
         "configured_text_device": TRIBE_TEXT_DEVICE,
         "configured_oom_fallback_text_devices": _parse_oom_fallback_devices(),
+        "prediction_cache_size": TRIBE_PREDICTION_CACHE_SIZE,
+        "prediction_cache_entries": prediction_cache_entries,
+        "prediction_cache_max_bytes": TRIBE_PREDICTION_CACHE_MAX_BYTES,
+        "prediction_cache_bytes": prediction_cache_bytes,
+        "rust_core_available": native_core.available(),
+        "rust_numeric_enabled": native_core.numeric_enabled(),
         "loaded": dict(_loaded_runtime_config),
         "model_loaded": is_model_loaded(),
         "last_score": last_score_metrics(),
@@ -588,6 +710,7 @@ def unload_model(*, text_device: str | None = None, text_batch_size: int | None 
         _runtime_text_device_override = text_device
         _runtime_text_batch_size_override = text_batch_size
         _loaded_runtime_config = {}
+        _clear_prediction_cache()
     del old_model
     _release_cuda_cache()
 
@@ -759,6 +882,30 @@ def _score_text_once(message: str, *, retry_index: int) -> tuple[np.ndarray, dic
 
 def score_text(message: str) -> np.ndarray:
     """Run TRIBE text scoring with limited-VRAM recovery."""
+    cached = _cached_prediction(message)
+    if cached is not None:
+        metrics = {
+            "ok": True,
+            "scored_at": _now_iso(),
+            "cache_hit": True,
+            "fallback_used": False,
+            "input_chars": len(message),
+            "word_count": len(_WORD_RE.findall(message)),
+            "segments": int(cached.shape[0]) if cached.ndim >= 1 else 0,
+            "voxel_count": int(cached.shape[1]) if cached.ndim >= 2 else 1,
+            **_timing_metadata_for_input_mode(TRIBE_TEXT_INPUT_MODE),
+            "model_load_seconds": 0.0,
+            "event_build_seconds": 0.0,
+            "predict_seconds": 0.0,
+            "total_seconds": 0.0,
+            "runtime": dict(_loaded_runtime_config),
+            "cuda_memory_gb": _cuda_memory_metrics_gb(),
+            "failed_attempts": [],
+        }
+        _set_last_score_metrics(metrics)
+        LOGGER.info("TRIBE score metrics: %s", json.dumps(metrics, sort_keys=True))
+        return cached
+
     fallback_devices = _parse_oom_fallback_devices()
     failed_attempts: list[dict[str, Any]] = []
     retry_index = 0
@@ -767,7 +914,9 @@ def score_text(message: str) -> np.ndarray:
         attempt_start = time.perf_counter()
         try:
             predictions, metrics = _score_text_once(message, retry_index=retry_index)
+            _store_prediction(message, predictions)
             metrics["failed_attempts"] = failed_attempts
+            metrics["cache_hit"] = False
             _set_last_score_metrics(metrics)
             LOGGER.info("TRIBE score metrics: %s", json.dumps(metrics, sort_keys=True))
             return predictions
@@ -841,25 +990,15 @@ def _coerce_prediction_matrix(predictions: np.ndarray) -> np.ndarray:
     keeps all downstream feature math deterministic and prevents malformed model
     output from leaking noisy scores into the persuasion layer.
     """
-    arr = np.asarray(predictions, dtype=np.float32)
-    if arr.ndim == 0:
-        raise ValueError("Prediction matrix must contain at least one segment")
-    if arr.ndim == 1:
-        arr = arr.reshape(1, -1)
-    if arr.ndim > 2:
-        arr = arr.reshape(arr.shape[0], -1)
-    if arr.size == 0 or arr.shape[0] == 0 or arr.shape[1] == 0:
-        raise ValueError("Prediction matrix is empty")
-    return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    return native_core.coerce_prediction_matrix(predictions)
 
 
-def extract_features(predictions: np.ndarray) -> dict[str, float]:
+def _extract_features_from_matrix(predictions: np.ndarray) -> dict[str, float]:
     """Extract 10 raw features from TRIBE prediction matrix.
 
     Aligned with isthisviral's extract_feature_vector: uses quartile splits,
     ratio-based focus/spatial/arc, and fraction-based sustain/spread.
     """
-    predictions = _coerce_prediction_matrix(predictions)
     abs_preds = np.abs(predictions)
     n_segments = abs_preds.shape[0]
     n_voxels = abs_preds.shape[1] if abs_preds.ndim > 1 else 1
@@ -887,9 +1026,10 @@ def extract_features(predictions: np.ndarray) -> dict[str, float]:
     spatial_spread = float((spatial_means > spatial_means.mean()).mean()) if n_voxels > 1 else 0.0
 
     # Focus ratio: top-10% voxel mean / global mean (isthisviral formula)
-    sorted_spatial = np.sort(spatial_means)[::-1]
     top_k = max(1, n_voxels // 10)
-    focus_ratio = safe_ratio(float(sorted_spatial[:top_k].mean()), global_mean_abs, 1.0)
+    top_start = max(0, n_voxels - top_k)
+    top_spatial = np.partition(spatial_means, top_start)[top_start:]
+    focus_ratio = safe_ratio(float(top_spatial.mean()), global_mean_abs, 1.0)
 
     # Sustain ratio: fraction of segments above mean activation
     sustain_ratio = float((temporal_means >= temporal_means.mean()).mean()) if n_segments > 1 else 0.5
@@ -918,9 +1058,21 @@ def extract_features(predictions: np.ndarray) -> dict[str, float]:
     }
 
 
+def extract_features(predictions: np.ndarray) -> dict[str, float]:
+    predictions = _coerce_prediction_matrix(predictions)
+    try:
+        native_features = native_core.extract_features(predictions)
+    except Exception as exc:
+        LOGGER.warning("Rust feature extraction failed; using Python fallback: %s", exc)
+        native_features = None
+    if native_features is not None:
+        return native_features
+    return _extract_features_from_matrix(predictions)
+
+
 # ── fMRI Summary Output ──
 
-def summarize_fmri_output(
+def _summarize_fmri_output_from_matrix(
     predictions: np.ndarray,
     *,
     text_input_mode: str | None = None,
@@ -930,7 +1082,6 @@ def summarize_fmri_output(
     Returns temporal trace, peaks, and top voxel data — same pattern
     as isthisviral's summarize_fmri_output.
     """
-    predictions = _coerce_prediction_matrix(predictions)
     abs_preds = np.abs(predictions)
     n_segments = abs_preds.shape[0]
     n_voxels = abs_preds.shape[1] if abs_preds.ndim > 1 else 1
@@ -944,7 +1095,11 @@ def summarize_fmri_output(
     # Top 6 most-activated voxels (by mean across all segments)
     spatial_means = abs_preds.mean(axis=0)
     top_n = min(6, n_voxels)
-    top_indices = np.argsort(spatial_means)[::-1][:top_n]
+    if top_n == n_voxels:
+        top_indices = np.argsort(spatial_means)[::-1]
+    else:
+        candidate_indices = np.argpartition(spatial_means, -top_n)[-top_n:]
+        top_indices = candidate_indices[np.argsort(spatial_means[candidate_indices])[::-1]]
     top_voxel_indices = top_indices.tolist()
     top_voxel_values = spatial_means[top_indices].tolist()
 
@@ -957,8 +1112,32 @@ def summarize_fmri_output(
         "temporal_peaks": [round(v, 4) for v in temporal_peaks],
         "top_voxel_indices": top_voxel_indices,
         "top_voxel_values": [round(v, 4) for v in top_voxel_values],
+        "response_kind": TRIBE_RESPONSE_KIND,
+        "prediction_subject_basis": TRIBE_PREDICTION_SUBJECT_BASIS,
+        "cortical_mesh": TRIBE_CORTICAL_MESH,
+        "hemodynamic_lag_seconds": TRIBE_HEMODYNAMIC_LAG_SECONDS,
         **_timing_metadata_for_input_mode(text_input_mode),
     }
+
+
+def summarize_fmri_output(
+    predictions: np.ndarray,
+    *,
+    text_input_mode: str | None = None,
+) -> dict[str, Any]:
+    predictions = _coerce_prediction_matrix(predictions)
+    mode = text_input_mode or TRIBE_TEXT_INPUT_MODE
+    try:
+        native_summary = native_core.summarize_fmri_output(predictions, mode)
+    except Exception as exc:
+        LOGGER.warning("Rust fMRI summary failed; using Python fallback: %s", exc)
+        native_summary = None
+    if native_summary is not None:
+        return native_summary
+    return _summarize_fmri_output_from_matrix(
+        predictions,
+        text_input_mode=text_input_mode,
+    )
 
 
 # ── Persuasion signal derivation ──
@@ -982,25 +1161,32 @@ PERSUASION_SIGNAL_LABELS = {
 }
 
 
-def derive_persuasion_signals(raw_features: dict[str, float]) -> dict[str, float]:
-    """Map raw TRIBE features into 6 persuasion-relevant neural signals (0-100).
+def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> dict[str, float]:
+    """Python fallback for mapping raw TRIBE features to neural signals.
 
     Uses ratio-normalized inputs (divided by global_mean_abs) like isthisviral,
     making scores robust to overall activation magnitude differences.
     Band ranges tuned to ratio-normalized values from real TRIBE outputs.
     """
-    gma = max(raw_features.get("global_mean_abs", 0.01), 1e-9)
+    def feature(key: str, default: float) -> float:
+        try:
+            value = float(raw_features.get(key, default))
+        except (TypeError, ValueError):
+            return default
+        return value if np.isfinite(value) else default
+
+    gma = max(feature("global_mean_abs", 0.01), 1e-9)
 
     # Ratio-normalize all features (isthisviral pattern)
-    peak_r = raw_features.get("global_peak_abs", 0.0) / gma
-    ts_r = raw_features.get("temporal_std", 0.0) / gma
-    early_r = raw_features.get("early_mean", 0.0) / gma
-    late_r = raw_features.get("late_mean", 0.0) / gma
-    delta_r = raw_features.get("max_temporal_delta", 0.0) / gma
-    ss = raw_features.get("spatial_spread", 0.0)       # already a fraction (0-1)
-    fr = raw_features.get("focus_ratio", 1.0)           # already a ratio
-    sr = raw_features.get("sustain_ratio", 0.5)         # already a fraction (0-1)
-    ar = raw_features.get("arc_ratio", 0.0)             # range/mean ratio
+    peak_r = max(0.0, feature("global_peak_abs", 0.0)) / gma
+    ts_r = max(0.0, feature("temporal_std", 0.0)) / gma
+    early_r = max(0.0, feature("early_mean", 0.0)) / gma
+    late_r = max(0.0, feature("late_mean", 0.0)) / gma
+    delta_r = max(0.0, feature("max_temporal_delta", 0.0)) / gma
+    ss = clamp(feature("spatial_spread", 0.0), 0.0, 1.0)  # already a fraction
+    fr = max(0.0, feature("focus_ratio", 1.0))            # already a ratio
+    sr = clamp(feature("sustain_ratio", 0.5), 0.0, 1.0)   # already a fraction
+    ar = max(0.0, feature("arc_ratio", 0.0))              # range/mean ratio
 
     # Affective value salience:
     # High peak intensity + temporal variation = predicted reward/affect response.
@@ -1069,3 +1255,45 @@ def derive_persuasion_signals(raw_features: dict[str, float]) -> dict[str, float
         "attention_capture": attention_capture,
         "cognitive_friction": cognitive_friction,
     }
+
+
+def derive_persuasion_signals(raw_features: dict[str, float]) -> dict[str, float]:
+    """Map raw TRIBE features into 6 persuasion-relevant neural signals (0-100)."""
+    try:
+        native_signals = native_core.derive_persuasion_signals(raw_features)
+    except Exception as exc:
+        LOGGER.warning("Rust signal derivation failed; using Python fallback: %s", exc)
+        native_signals = None
+    if native_signals is not None:
+        return native_signals
+    return _derive_persuasion_signals_from_features(raw_features)
+
+
+def analyze_predictions(
+    predictions: np.ndarray,
+    *,
+    text_input_mode: str | None = None,
+) -> tuple[dict[str, float], dict[str, Any], dict[str, float]]:
+    """Return raw features, fMRI summary, and neural signals in one pass.
+
+    The Rust core computes all three products from one scan of the prediction
+    matrix.  The Python fallback keeps the same behavior for development,
+    tests, and deployments where the optional native module is not installed.
+    """
+    matrix = _coerce_prediction_matrix(predictions)
+    mode = text_input_mode or TRIBE_TEXT_INPUT_MODE
+    try:
+        native_analysis = native_core.prediction_analysis(matrix, mode)
+    except Exception as exc:
+        LOGGER.warning("Rust prediction analysis failed; using Python fallback: %s", exc)
+        native_analysis = None
+    if native_analysis is not None:
+        return native_analysis
+
+    raw_features = _extract_features_from_matrix(matrix)
+    fmri_summary = _summarize_fmri_output_from_matrix(
+        matrix,
+        text_input_mode=mode,
+    )
+    neural_signals = _derive_persuasion_signals_from_features(raw_features)
+    return raw_features, fmri_summary, neural_signals

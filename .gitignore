@@ -12,6 +12,8 @@ tsconfig.tsbuildinfo
 .worktrees/
 .next-tauri-disabled-api/
 src-tauri/target/
+tribe_service/rust_core/target/
 src-tauri/gen/
 out/*
 !out/.gitkeep
+graphify-out/

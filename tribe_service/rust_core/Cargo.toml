@@ -1,0 +1,17 @@
+[package]
+name = "pitchcheck-core"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+
+[lib]
+name = "_pitchcheck_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+numpy = "0.22"
+pyo3 = "0.22"
+
+[features]
+default = []
+extension-module = ["pyo3/extension-module"]

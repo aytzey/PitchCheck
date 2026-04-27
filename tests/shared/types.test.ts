@@ -31,6 +31,19 @@ describe("shared/types", () => {
     expect(isPitchScoreReport({})).toBe(false);
     expect(isPitchScoreReport({ persuasion_score: 150, verdict: "x", breakdown: [], neural_signals: [], strengths: [], risks: [] })).toBe(false);
     expect(isPitchScoreReport({ persuasion_score: "not a number" })).toBe(false);
+    expect(isPitchScoreReport({
+      persuasion_score: 75,
+      verdict: "Good pitch",
+      narrative: "Analysis here",
+      breakdown: [{ key: "clarity", label: "Clarity", score: "80", explanation: "Clear" }],
+      neural_signals: [],
+      strengths: [],
+      risks: [],
+      rewrite_suggestions: [],
+      persona_summary: "CTO",
+      platform: "email",
+      scored_at: new Date().toISOString(),
+    })).toBe(false);
   });
 
   it("BREAKDOWN_KEYS has 5 entries", () => {

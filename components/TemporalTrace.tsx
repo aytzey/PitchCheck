@@ -12,6 +12,10 @@ export default function TemporalTrace({ fmri }: Props) {
   const maxVal = Math.max(...temporal_trace, 0.001);
   const peakIdx = temporal_trace.indexOf(Math.max(...temporal_trace));
   const isSynthetic = fmri.temporal_trace_basis === "synthetic_word_order";
+  const subjectBasis =
+    fmri.prediction_subject_basis === "average_subject"
+      ? "average-subject"
+      : fmri.prediction_subject_basis;
 
   // Segment labels: opener, body, close
   function segmentLabel(i: number, total: number): string {
@@ -28,6 +32,7 @@ export default function TemporalTrace({ fmri }: Props) {
       </h3>
       <p className="text-xs text-[var(--color-faint)] mb-4">
         {segments} temporal segments analyzed on {voxel_count.toLocaleString()} cortical vertices
+        {" "}({subjectBasis ?? "TRIBE"} prediction{fmri.cortical_mesh ? `, ${fmri.cortical_mesh}` : ""})
         &mdash; peak at segment {peakIdx + 1}/{segments} ({segmentLabel(peakIdx, segments)})
         {isSynthetic ? " (Direct text mode uses ordered text segments, not elapsed seconds)" : ""}
       </p>

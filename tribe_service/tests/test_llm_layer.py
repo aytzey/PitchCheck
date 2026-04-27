@@ -5,13 +5,13 @@ import json
 from unittest.mock import patch, MagicMock
 
 import httpx
-import pytest
 
 from tribe_service.llm_layer import (
     _build_user_prompt,
-    _call_openrouter,
-    _generate_fallback,
+    _generate_neural_report,
+    _openrouter_payload,
     interpret_persuasion,
+    refine_pitch_message,
 )
 
 # ── Fixtures ──
@@ -120,7 +120,11 @@ class TestValidResponseParsed:
         assert 0 <= result["persuasion_score"] <= 100
         assert result["robustness"]["llm_score"] == 78
         assert round(result["robustness"]["final_score"]) == result["persuasion_score"]
-        assert "llm_score_clamped_to_evidence_band" in result["robustness"]["guardrails_applied"]
+        assert result["robustness"]["final_score"] == result["robustness"]["evidence_score"]
+        assert "final_score_neural_only" in result["robustness"]["guardrails_applied"]
+        assert result["robustness"]["text_score"] is None
+        assert result["robustness"]["prompt_injection_risk"] is None
+        assert result["robustness"]["calibration_basis"].endswith("text heuristics disabled")
         assert result["verdict"] == "Compelling pitch with strong social proof"
         assert "narrative" in result
         assert "persona_summary" in result
@@ -135,12 +139,12 @@ class TestValidResponseParsed:
         assert len(result["rewrite_suggestions"]) >= 1
 
 
-class TestFallbackWithoutApiKey:
-    """With no OPENROUTER_API_KEY -> returns complete fallback report."""
+class TestNeuralOnlyWithoutApiKey:
+    """With no OPENROUTER_API_KEY -> returns complete neural-only report."""
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", False)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "")
-    def test_fallback_without_api_key(self):
+    def test_neural_only_without_api_key(self):
         result = interpret_persuasion(
             SAMPLE_MESSAGE,
             SAMPLE_PERSONA,
@@ -171,13 +175,87 @@ class TestFallbackWithoutApiKey:
         assert len(result["rewrite_suggestions"]) >= 1
 
 
-class TestMalformedJsonFallback:
-    """Mock OpenRouter returning broken JSON -> returns fallback."""
+class TestRefinePitchMessage:
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_refine_pitch_message_returns_clean_rewrite(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response("```text\nBetter pitch text.\n```")
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Reduce cognitive friction"],
+        )
+
+        assert result["refined_message"] == "Better pitch text."
+        assert result["model"] == "anthropic/refiner-test"
+        assert result["methodology"] == "llm_semantic_refine_no_tribe_rescore"
+        request_body = mock_post.call_args.kwargs["json"]
+        assert request_body["temperature"] == 0.35
+        assert request_body["response_format"] == {"type": "json_object"}
+        assert "untrusted input" in request_body["messages"][0]["content"]
+        assert "Reduce cognitive friction" in request_body["messages"][1]["content"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_refine_pitch_message_can_ask_clarifying_questions(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({
+            "needs_clarification": True,
+            "questions": [
+                {
+                    "id": "proof",
+                    "label": "Proof",
+                    "question": "Which customer or metric is verified enough to mention?",
+                    "why": "Avoids inventing social proof.",
+                }
+            ],
+            "refined_message": None,
+            "persuasion_profile": {
+                "target_values": ["risk reduction"],
+                "likely_objections": ["unclear ROI"],
+                "proof_threshold": "high",
+                "route": "central",
+                "cta_style": "proof-first",
+            },
+            "safety_notes": ["No unverified claims added"],
+        }))
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Add proof"],
+        )
+
+        assert result["needs_clarification"] is True
+        assert result["refined_message"] is None
+        assert result["questions"][0]["id"] == "proof"
+        assert result["safety_notes"] == ["No unverified claims added"]
+        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", False)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "")
+    def test_refine_pitch_message_requires_openrouter_key(self):
+        try:
+            refine_pitch_message(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [])
+        except RuntimeError as exc:
+            assert "OpenRouter API key is missing" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
+class TestMalformedJsonNeuralOnlyReport:
+    """Mock OpenRouter returning broken JSON -> returns neural-only report."""
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_malformed_json_falls_back(self, mock_post: MagicMock):
+    def test_malformed_json_uses_neural_only_report(self, mock_post: MagicMock):
         mock_post.return_value = _mock_openrouter_response(
             "this is not valid json at all {{{broken"
         )
@@ -190,7 +268,6 @@ class TestMalformedJsonFallback:
             SAMPLE_RAW_FEATURES,
         )
 
-        # Should get a complete fallback report
         assert "persuasion_score" in result
         assert isinstance(result["persuasion_score"], int)
         assert "verdict" in result
@@ -232,8 +309,8 @@ class TestPromptIncludesPersonaAndMessage:
         assert SAMPLE_PLATFORM in user_content
         assert "same language as the Pitch Message" in user_content
         assert "UNTRUSTED DATA" in user_content or "Untrusted Input Payload" in user_content
-        assert "Deterministic Persuasion Evidence Audit" in user_content
-        assert "Evidence-Weighted Neuro-Persuasion Axes" in user_content
+        assert "Deterministic Persuasion Evidence Audit" not in user_content
+        assert "TRIBE-derived" in user_content or "Neuro-Persuasion Axes" in user_content
         assert "TRIBE-predicted analogues" in user_content
         assert "not measured fMRI" in user_content
 
@@ -258,6 +335,7 @@ class TestPromptIncludesPersonaAndMessage:
         request_body = call_args.kwargs.get("json") or call_args[1].get("json")
 
         assert request_body["model"] == "openai/gpt-5.4"
+        assert "max_tokens" not in request_body
 
 
 class TestPromptIncludesNeuralSignals:
@@ -309,6 +387,32 @@ class TestPromptLabelsSyntheticTrace:
         assert "Peak predicted response" in prompt
 
 
+class TestPromptLimitsRemoved:
+    def test_long_input_is_not_compacted(self):
+        long_message = "Opening. " + ("middle detail " * 1200) + "Final CTA."
+        prompt = _build_user_prompt(
+            long_message,
+            "VP Engineering " * 300,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            fmri_summary=SAMPLE_SYNTHETIC_FMRI_SUMMARY,
+        )
+
+        assert long_message in prompt
+        assert "middle omitted to control LLM latency/cost" not in prompt
+
+    def test_openrouter_payload_has_no_completion_cap(self):
+        payload = _openrouter_payload(
+            "prompt",
+            model="anthropic/claude-sonnet-4.6",
+            temperature=0.2,
+            json_mode=True,
+        )
+
+        assert payload["model"] == "anthropic/claude-sonnet-4.6"
+        assert "max_tokens" not in payload
+
+
 class TestRobustCalibration:
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
@@ -329,9 +433,11 @@ class TestRobustCalibration:
             SAMPLE_RAW_FEATURES,
         )
 
-        assert result["robustness"]["prompt_injection_risk"] >= 35
+        assert result["robustness"]["prompt_injection_risk"] is None
         assert result["persuasion_score"] < 90
-        assert "prompt_injection_risk_downweighted_llm" in result["robustness"]["guardrails_applied"]
+        assert "llm_score_clamped_to_neural_band" in result["robustness"]["guardrails_applied"]
+        assert result["robustness"]["raw_llm_score"] == 100
+        assert result["robustness"]["llm_score_adjusted"] is True
         assert result["robustness"]["neuro_axes"]["self_value"]["score"] <= 100
         assert "reverse_inference_caveat_applied" in result["robustness"]["confidence_reasons"]
 
@@ -354,20 +460,87 @@ class TestRobustCalibration:
         assert result["verdict"] == VALID_LLM_RESPONSE["verdict"]
         assert result["robustness"]["llm_score"] == VALID_LLM_RESPONSE["persuasion_score"]
 
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_breakdown_scores_are_clamped_to_neural_axes(self, mock_post: MagicMock):
+        inflated = dict(
+            VALID_LLM_RESPONSE,
+            persuasion_score=100,
+            breakdown=[
+                {**item, "score": 100}
+                for item in VALID_LLM_RESPONSE["breakdown"]
+            ],
+        )
+        mock_post.return_value = _mock_openrouter_response(json.dumps(inflated))
 
-class TestDeterministicFallbackRisks:
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        assert max(item["score"] for item in result["breakdown"]) < 85
+        assert "breakdown_scores_clamped_to_neural_axes" in result["robustness"]["guardrails_applied"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", False)
+    def test_low_quality_prediction_shrinks_final_score(self):
+        strong_signals = {
+            "emotional_engagement": 92.0,
+            "personal_relevance": 90.0,
+            "social_proof_potential": 88.0,
+            "memorability": 86.0,
+            "attention_capture": 91.0,
+            "cognitive_friction": 12.0,
+        }
+        weak_raw_features = dict(
+            SAMPLE_RAW_FEATURES,
+            global_mean_abs=0.0,
+            global_peak_abs=0.0,
+            temporal_std=0.0,
+            arc_ratio=0.0,
+        )
+        weak_fmri = dict(
+            SAMPLE_SYNTHETIC_FMRI_SUMMARY,
+            segments=1,
+            voxel_count=20,
+            global_mean_abs=0.0,
+            global_peak_abs=0.0,
+            temporal_trace=[0.0],
+            temporal_peaks=[0.0],
+        )
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            strong_signals,
+            weak_raw_features,
+            weak_fmri,
+        )
+
+        robustness = result["robustness"]
+        assert robustness["prediction_quality_weight"] == 0.35
+        assert "score_shrunk_for_prediction_quality" in robustness["guardrails_applied"]
+        assert abs(robustness["final_score"] - 50) < abs(robustness["neural_score"] - 50)
+        assert robustness["confidence"] < 0.60
+
+
+class TestDeterministicNeuralReportRisks:
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", False)
     def test_attention_capture_risk_uses_low_score_direction(self):
         strong_attention = dict(SAMPLE_NEURAL_SIGNALS, attention_capture=90.0)
         weak_attention = dict(SAMPLE_NEURAL_SIGNALS, attention_capture=10.0)
 
-        strong_result = _generate_fallback(
+        strong_result = _generate_neural_report(
             SAMPLE_MESSAGE,
             SAMPLE_PERSONA,
             SAMPLE_PLATFORM,
             strong_attention,
         )
-        weak_result = _generate_fallback(
+        weak_result = _generate_neural_report(
             SAMPLE_MESSAGE,
             SAMPLE_PERSONA,
             SAMPLE_PLATFORM,

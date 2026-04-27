@@ -1,0 +1,8 @@
+graphify-out/
+node_modules/
+.venv/
+src-tauri/target/
+tribe_service/rust_core/target/
+.next/
+dist/
+out/

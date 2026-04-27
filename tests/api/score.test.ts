@@ -16,24 +16,49 @@ function makeRequest(body: unknown): Request {
   });
 }
 
+function makeReport(score = 75, platform = "email") {
+  return {
+    persuasion_score: score,
+    verdict: "Accepted",
+    narrative: "Accepted",
+    breakdown: [],
+    neural_signals: [],
+    strengths: [],
+    risks: [],
+    rewrite_suggestions: [],
+    persona_summary: "Persona",
+    platform,
+    scored_at: new Date().toISOString(),
+  };
+}
+
+function setEnv(name: string, value: string | undefined) {
+  const env = process.env as Record<string, string | undefined>;
+  if (value === undefined) {
+    delete env[name];
+    return;
+  }
+  env[name] = value;
+}
+
 describe("POST /api/score", () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalApiKey = process.env.SCORE_API_KEY;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.SCORE_API_KEY = originalApiKey;
+    setEnv("NODE_ENV", originalNodeEnv);
+    setEnv("SCORE_API_KEY", originalApiKey);
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.SCORE_API_KEY = originalApiKey;
+    setEnv("NODE_ENV", originalNodeEnv);
+    setEnv("SCORE_API_KEY", originalApiKey);
   });
 
   it("returns 503 in production when SCORE_API_KEY is not configured", async () => {
-    process.env.NODE_ENV = "production";
-    delete process.env.SCORE_API_KEY;
+    setEnv("NODE_ENV", "production");
+    setEnv("SCORE_API_KEY", undefined);
 
     const res = await POST(
       makeRequest({
@@ -46,8 +71,8 @@ describe("POST /api/score", () => {
   });
 
   it("returns 401 in production when API key is missing", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.SCORE_API_KEY = "test-key";
+    setEnv("NODE_ENV", "production");
+    setEnv("SCORE_API_KEY", "test-key");
 
     const res = await POST(
       makeRequest({
@@ -86,19 +111,7 @@ describe("POST /api/score", () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({
-        persuasion_score: 75,
-        verdict: "Strong pitch",
-        narrative: "Good analysis",
-        breakdown: [],
-        neural_signals: [],
-        strengths: ["A"],
-        risks: ["B"],
-        rewrite_suggestions: [],
-        persona_summary: "CTO",
-        platform: "email",
-        scored_at: new Date().toISOString(),
-      }),
+      json: async () => ({ report: makeReport(75, "email") }),
     });
 
     const res = await POST(
@@ -112,26 +125,36 @@ describe("POST /api/score", () => {
 
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.persuasion_score).toBe(75);
+    expect(data.report.persuasion_score).toBe(75);
+  });
+
+  it("normalizes platform casing and drops invalid model ids", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ report: makeReport(72, "linkedin") }),
+    });
+
+    const res = await POST(
+      makeRequest({
+        message: "Our platform reduces deployment time by 80%",
+        persona: "CTO at startup, technical",
+        platform: "LinkedIn",
+        openRouterModel: "bad model\ninjected",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const forwarded = JSON.parse(String(mockFetch.mock.calls[0][1]?.body));
+    expect(forwarded.platform).toBe("linkedin");
+    expect(forwarded.openRouterModel).toBeUndefined();
   });
 
   it("does not reject long message or persona text before proxying", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({
-        persuasion_score: 70,
-        verdict: "Accepted",
-        narrative: "Long-form pitch accepted",
-        breakdown: [],
-        neural_signals: [],
-        strengths: [],
-        risks: [],
-        rewrite_suggestions: [],
-        persona_summary: "Long persona",
-        platform: "email",
-        scored_at: new Date().toISOString(),
-      }),
+      json: async () => ({ report: makeReport(70, "email") }),
     });
 
     const res = await POST(
@@ -147,6 +170,49 @@ describe("POST /api/score", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const forwarded = JSON.parse(String(mockFetch.mock.calls[0][1]?.body));
     expect(forwarded.openRouterModel).toBe("openai/gpt-5.4");
+  });
+
+  it("rejects oversized message text before proxying", async () => {
+    const res = await POST(
+      makeRequest({
+        message: "A".repeat(30_001),
+        persona: "CTO at startup, technical",
+      }),
+    );
+
+    expect(res.status).toBe(413);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized request bodies before parsing full JSON", async () => {
+    const res = await POST(
+      makeRequest({
+        message: "Our platform reduces deployment time by 80%",
+        persona: "CTO at startup, technical",
+        ignoredPadding: "A".repeat(140_000),
+      }),
+    );
+
+    expect(res.status).toBe(413);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed successful TRIBE responses", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ report: { persuasion_score: "bad" } }),
+    });
+
+    const res = await POST(
+      makeRequest({
+        message: "Our platform reduces deployment time by 80%",
+        persona: "CTO at startup, technical",
+      }),
+    );
+
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toContain("invalid report");
   });
 
   it("returns 503 when TRIBE service is down", async () => {

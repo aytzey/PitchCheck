@@ -1,3 +1,31 @@
+FROM python:3.11-slim AS rust-core-builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PATH=/root/.cargo/bin:$PATH
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
+  ca-certificates \
+  curl \
+  pkg-config \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+  | sh -s -- -y --profile minimal --default-toolchain stable
+
+RUN pip install --upgrade pip setuptools wheel && \
+  pip install "maturin>=1.7,<2"
+
+COPY tribe_service/rust_core ./rust_core
+
+RUN maturin build \
+  --manifest-path rust_core/Cargo.toml \
+  --release \
+  --features extension-module \
+  -o /wheels
+
 FROM python:3.11-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -27,6 +55,11 @@ RUN ln -sf /usr/local/bin/uv /usr/bin/uv && \
   ln -sf /usr/local/bin/uvx /usr/bin/uvx
 
 RUN pip install -r requirements.txt
+
+COPY --from=rust-core-builder /wheels /tmp/pitchcheck-wheels
+
+RUN pip install /tmp/pitchcheck-wheels/*.whl && \
+  rm -rf /tmp/pitchcheck-wheels
 
 RUN pip install --upgrade \
   git+https://github.com/huggingface/transformers.git@9914a3641f7aaaabb0bcdfcd73a54a1cfa70c3e7

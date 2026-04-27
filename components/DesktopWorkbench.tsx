@@ -20,7 +20,7 @@ import {
   type SetupStatus,
   type SetupStep,
 } from "@/lib/desktop-runtime";
-import { type FmriOutput, type PitchScoreReport, type Platform } from "@/shared/types";
+import { isPitchScoreReport, type FmriOutput, type PitchScoreReport, type Platform } from "@/shared/types";
 
 type Route = "workspace" | "runtime" | "setup" | "settings";
 type RuntimeKind = "local" | "vast" | "pitchserver";
@@ -53,6 +53,21 @@ type RefinedPitch = {
   after: string;
   model: string;
   applied: string[];
+  methodology?: string;
+  improvement?: number;
+};
+
+type RefineQuestion = {
+  id: string;
+  label: string;
+  question: string;
+  why?: string;
+};
+
+type RefineQuestionSet = {
+  model: string;
+  questions: RefineQuestion[];
+  safetyNotes?: string[];
 };
 
 type RankRow = {
@@ -201,6 +216,7 @@ export default function DesktopWorkbench() {
   const [scoring, setScoring] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refinedPitch, setRefinedPitch] = useState<RefinedPitch | null>(null);
+  const [refineQuestions, setRefineQuestions] = useState<RefineQuestionSet | null>(null);
   const [message, setMessage] = useState(SAMPLE_PITCH);
   const [audience, setAudience] = useState<Audience>(DEFAULT_AUDIENCE);
   const [medium, setMedium] = useState<Medium>(MEDIUMS[0]);
@@ -502,6 +518,7 @@ export default function DesktopWorkbench() {
 
     setScoring(true);
     setRefinedPitch(null);
+    setRefineQuestions(null);
     setError(null);
     if (desktopMode) {
       setRuntimeMessage(
@@ -518,8 +535,10 @@ export default function DesktopWorkbench() {
           platform: medium.id,
           openRouterModel,
         });
-        if (!data.report) throw new Error(data.error || "Scoring failed.");
-        setReport(data.report as PitchScoreReport);
+        if (!isPitchScoreReport(data.report)) {
+          throw new Error(data.error || "Scoring service returned an invalid report.");
+        }
+        setReport(data.report);
         setRuntimeMessage("Analysis complete.");
       } else {
         const res = await fetch("/api/score", {
@@ -533,7 +552,10 @@ export default function DesktopWorkbench() {
           }),
         });
         const data = (await res.json()) as { report?: PitchScoreReport; error?: string };
-        if (!res.ok || !data.report) throw new Error(data.error || "Scoring failed.");
+        if (!res.ok) throw new Error(data.error || "Scoring failed.");
+        if (!isPitchScoreReport(data.report)) {
+          throw new Error(data.error || "Scoring service returned an invalid report.");
+        }
         setReport(data.report);
       }
     } catch (caught) {
@@ -561,6 +583,7 @@ export default function DesktopWorkbench() {
     const refineBrief = extractRefineBrief(report);
     setRefining(true);
     setError(null);
+    setRefineQuestions(null);
     try {
       if (desktopMode) {
         const data = await refinePitchOnDesktop({
@@ -569,12 +592,25 @@ export default function DesktopWorkbench() {
           platform: medium.id,
           suggestions: refineBrief,
         });
+        const questions = (data.questions ?? []).filter((item) => item.question.trim());
+        if (data.needsClarification && questions.length) {
+          setRefinedPitch(null);
+          setRefineQuestions({
+            model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+            questions,
+            safetyNotes: data.safetyNotes,
+          });
+          setRuntimeMessage("Refiner needs a little more context before rewriting.");
+          return;
+        }
         if (!data.refinedMessage) throw new Error(data.error || "Refine failed.");
         setRefinedPitch({
           before: source,
           after: data.refinedMessage.trim(),
           model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
           applied: refineBrief,
+          methodology: data.methodology,
+          improvement: data.improvement,
         });
       } else {
         setRefinedPitch({
@@ -606,6 +642,7 @@ export default function DesktopWorkbench() {
     const nextMessage = refinedPitch.after;
     setMessage(nextMessage);
     setRefinedPitch(null);
+    setRefineQuestions(null);
     void handleScore(nextMessage);
   }, [handleScore, refinedPitch]);
 
@@ -613,6 +650,7 @@ export default function DesktopWorkbench() {
     if (!refinedPitch) return;
     setMessage(refinedPitch.after);
     setRefinedPitch(null);
+    setRefineQuestions(null);
   }, [refinedPitch]);
 
   useEffect(() => {
@@ -642,6 +680,7 @@ export default function DesktopWorkbench() {
           setMessage={(nextMessage) => {
             setMessage(nextMessage);
             setRefinedPitch(null);
+            setRefineQuestions(null);
           }}
           report={report}
           error={error}
@@ -649,17 +688,22 @@ export default function DesktopWorkbench() {
           scoring={scoring}
           refining={refining}
           refinedPitch={refinedPitch}
+          refineQuestions={refineQuestions}
           canScore={canScore}
           onScore={handleScore}
           onRefine={handleRefine}
           onAcceptRefine={handleAcceptRefine}
           onAcceptRefineForEditing={handleAcceptRefineForEditing}
-          onDiscardRefine={() => setRefinedPitch(null)}
+          onDiscardRefine={() => {
+            setRefinedPitch(null);
+            setRefineQuestions(null);
+          }}
           onClear={() => {
             setMessage("");
             setReport(null);
             setError(null);
             setRefinedPitch(null);
+            setRefineQuestions(null);
           }}
           onConnect={handleConnect}
         />
@@ -833,6 +877,7 @@ function WorkspaceView({
   scoring,
   refining,
   refinedPitch,
+  refineQuestions,
   canScore,
   onScore,
   onRefine,
@@ -856,6 +901,7 @@ function WorkspaceView({
   scoring: boolean;
   refining: boolean;
   refinedPitch: RefinedPitch | null;
+  refineQuestions: RefineQuestionSet | null;
   canScore: boolean;
   onScore: () => void;
   onRefine: () => void;
@@ -967,6 +1013,7 @@ function WorkspaceView({
               openRouterModel={openRouterModel}
               refining={refining}
               refinedPitch={refinedPitch}
+              refineQuestions={refineQuestions}
               onRefine={onRefine}
             />
           )}
@@ -990,7 +1037,11 @@ function DiffView({ refinedPitch }: { refinedPitch: RefinedPitch }) {
       <div className="pc-diff-pane after">
         <div className="pc-diff-head">
           <span className="label">After . refined</span>
-          <span className="mono">{refinedPitch.model}</span>
+          <span className="mono">
+            {typeof refinedPitch.improvement === "number"
+              ? `${refinedPitch.model} . ${refinedPitch.improvement >= 0 ? "+" : ""}${refinedPitch.improvement}`
+              : refinedPitch.model}
+          </span>
         </div>
         <p>{refinedPitch.after}</p>
       </div>
@@ -1428,6 +1479,7 @@ function ResultView({
   openRouterModel,
   refining,
   refinedPitch,
+  refineQuestions,
   onRefine,
 }: {
   report: PitchScoreReport;
@@ -1437,11 +1489,12 @@ function ResultView({
   openRouterModel: string;
   refining: boolean;
   refinedPitch: RefinedPitch | null;
+  refineQuestions: RefineQuestionSet | null;
   onRefine: () => void;
 }) {
   const score = Math.round(report.persuasion_score);
-  const fmri = report.fmri_output ?? fallbackFmri(score);
-  const signals = report.neural_signals.length ? report.neural_signals : fallbackSignals(score);
+  const fmri = report.fmri_output;
+  const signals = report.neural_signals;
   const breakdown = report.breakdown.map((item) => ({
     label: item.label,
     value: Math.round(item.score),
@@ -1462,7 +1515,7 @@ function ResultView({
         tokens={Math.ceil(message.length / 4.2)}
         model={openRouterModel || DEFAULT_OPENROUTER_MODEL}
       />
-      <NeuralSignalsGrid signals={signals} />
+      {signals.length > 0 && <NeuralSignalsGrid signals={signals} />}
       {(report.robustness || report.persuasion_evidence) && (
         <RobustnessPanel report={report} />
       )}
@@ -1475,6 +1528,7 @@ function ResultView({
         </div>
       </div>
       <VariantRankPanel score={score} refinedPitch={refinedPitch} />
+      {refineQuestions && <RefineQuestionsPanel questionSet={refineQuestions} />}
       <div>
         <HeaderLine title="Suggestions" right={`${suggestions.length} fixes`} />
         <div className="pc-suggestions">
@@ -1497,12 +1551,12 @@ function ResultView({
         <div className="pc-refine-head">
           <span className="label">Auto-refine</span>
           <Button variant="primary" loading={refining} disabled={refining} onClick={onRefine} icon={<Icon name="spark" />}>
-            {refining ? "Refining..." : refinedPitch ? "Refine again" : "Refine & re-score"}
+            {refining ? "Refining..." : refinedPitch ? "Refine again" : "Refine draft"}
           </Button>
         </div>
         <p>
           Rewrite this for <strong>{audience.name || "recipient"}</strong> with the strongest suggestions, review the diff,
-          then accept it to re-score and re-rank the variants.
+          then accept it to run a fresh TRIBE score on the revised draft.
         </p>
       </div>
     </div>
@@ -1510,12 +1564,11 @@ function ResultView({
 }
 
 function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch: RefinedPitch | null }) {
-  const projectedLift = refinedPitch ? Math.max(4, Math.min(14, refinedPitch.applied.length * 3)) : 0;
   const rows = [
     refinedPitch && {
       label: "Refined candidate",
-      score: Math.min(98, score + projectedLift),
-      note: "Projected until accepted",
+      score,
+      note: "Pending TRIBE re-score after accept",
       tone: "warn" as Tone,
     },
     {
@@ -1551,6 +1604,32 @@ function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch
   );
 }
 
+function RefineQuestionsPanel({ questionSet }: { questionSet: RefineQuestionSet }) {
+  return (
+    <div>
+      <HeaderLine title="Refiner questions" right={questionSet.model} />
+      <div className="pc-suggestions">
+        {questionSet.questions.map((item, index) => (
+          <div key={`${item.id}-${index}`}>
+            <span className="mono">{String(index + 1).padStart(2, "0")}</span>
+            <p>
+              <strong>{item.label || "Question"}: </strong>
+              {item.question}
+              {item.why ? <small>{item.why}</small> : null}
+            </p>
+          </div>
+        ))}
+        {(questionSet.safetyNotes ?? []).map((note, index) => (
+          <div key={`safety-${index}`}>
+            <span className="mono">OK</span>
+            <p>{note}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function isRankRow(row: RankRow | false | null): row is RankRow {
   return Boolean(row);
 }
@@ -1569,13 +1648,40 @@ function BrainPanel({
   score: number;
   verdict: string;
   confidence: number;
-  fmri: FmriOutput;
+  fmri: FmriOutput | null | undefined;
   signals: PitchScoreReport["neural_signals"];
   runtime: RuntimeKind;
   latencyMs: number;
   tokens: number;
   model: string;
 }) {
+  if (!fmri || !fmri.temporal_trace.length) {
+    return (
+      <div className="pc-brain-panel">
+        <CornerMarks />
+        <div className="pc-brain-head">
+          <span className="led warn" />
+          <span className="mono">TRIBE . FMRI RESPONSE PREDICTION</span>
+          <strong className="mono">NO RESPONSE MATRIX</strong>
+        </div>
+        <div className="pc-brain-hero">
+          <div className="pc-score-stack">
+            <ScoreHalo score={score} confidence={confidence} />
+            <div className="pc-verdict">
+              <span className="label">Verdict</span>
+              <strong>{verdict}</strong>
+            </div>
+          </div>
+        </div>
+        <div className="pc-brain-meta mono">
+          <span>MODEL {model}</span>
+          <span>RUNTIME {runtime}</span>
+          <span>TRIBE output unavailable</span>
+        </div>
+      </div>
+    );
+  }
+
   const usesSyntheticTrace = fmri.temporal_trace_basis === "synthetic_word_order";
   const traceTitle = usesSyntheticTrace ? "Engagement trace" : "Engagement timeline";
   const traceUnit = usesSyntheticTrace ? "Mean predicted response / ordered segment" : "Mean predicted response / time segment";
@@ -1778,8 +1884,6 @@ function NeuralSignalsGrid({ signals }: { signals: PitchScoreReport["neural_sign
 function RobustnessPanel({ report }: { report: PitchScoreReport }) {
   const robustness = report.robustness;
   const evidence = report.persuasion_evidence;
-  const strategies = (evidence?.detected_strategies ?? []).slice(0, 5);
-  const missing = (evidence?.missing_elements ?? []).slice(0, 3);
   const neuroAxes = robustness?.neuro_axes ? Object.entries(robustness.neuro_axes) : [];
   const warnings = [...(robustness?.warnings ?? []), ...(evidence?.warnings ?? [])]
     .filter((item, index, all) => all.indexOf(item) === index)
@@ -1789,7 +1893,7 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
     <div>
       <HeaderLine
         title="Robustness calibration"
-        right={robustness ? `${Math.round(robustness.confidence * 100)}% confidence` : "deterministic audit"}
+        right={robustness ? `${Math.round(robustness.confidence * 100)}% confidence` : "neural calibration"}
       />
       <div className="pc-rank-list">
         {robustness && (
@@ -1797,8 +1901,14 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
             <div className="pc-rank-row">
               <span className="mono">NEU</span>
               <strong>Neuro-axis evidence</strong>
-              <small>TRIBE-predicted analogues + text support</small>
+              <small>TRIBE-predicted fMRI analogues only</small>
               <b className={`mono score-${toneFromScore(robustness.neural_score)}`}>{Math.round(robustness.neural_score)}</b>
+            </div>
+            <div className="pc-rank-row">
+              <span className="mono">QLT</span>
+              <strong>Prediction quality</strong>
+              <small>Low-quality TRIBE output shrinks the final score toward neutral</small>
+              <b className="mono score-warn">{Math.round((robustness.prediction_quality_weight ?? 1) * 100)}%</b>
             </div>
             {neuroAxes.slice(0, 5).map(([key, axis]) => (
               <div className="pc-rank-row" key={key}>
@@ -1810,18 +1920,18 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
             ))}
             <div className="pc-rank-row">
               <span className="mono">TXT</span>
-              <strong>Text evidence</strong>
-              <small>Proof, CTA, audience fit, clarity</small>
-              <b className={`mono score-${toneFromScore(robustness.text_score)}`}>{Math.round(robustness.text_score)}</b>
+              <strong>Text heuristics disabled</strong>
+              <small>Message/persona are semantic LLM context, not scoring features</small>
+              <b className="mono score-warn">off</b>
             </div>
           </>
         )}
         {evidence && (
           <div className="pc-rank-row">
-            <span className="mono">CUE</span>
-            <strong>{strategies.length ? strategies.join(", ") : "No strong persuasion cue"}</strong>
-            <small>{missing.length ? `Missing: ${missing.join(", ")}` : "No major deterministic gap"}</small>
-            <b className={`mono score-${toneFromScore(evidence.overall_text_score)}`}>{Math.round(evidence.overall_text_score)}</b>
+            <span className="mono">SEM</span>
+            <strong>Semantic context only</strong>
+            <small>{evidence.methodology ?? "Text audit removed from calibration"}</small>
+            <b className="mono score-warn">off</b>
           </div>
         )}
         {warnings.map((warning) => (
@@ -2671,17 +2781,12 @@ function extractRefineBrief(report: PitchScoreReport) {
     })
     .slice(0, 3)
     .map((item) => `Weak neural signal - ${item.label} (${Math.round(item.score)}/100): ${neuralRepairTactic(item.key)}`);
-  const evidence = report.persuasion_evidence;
-  const missingElements = (evidence?.missing_elements ?? [])
-    .slice(0, 3)
-    .map((item) => `Missing persuasion element: ${item}. Add it without inventing unverifiable facts.`);
   const risks = report.risks.slice(0, 3).map((risk) => `Risk to fix: ${risk}`);
 
   return [
     ...rewriteGuidance,
     ...weakFacets,
     ...weakSignals,
-    ...missingElements,
     ...risks,
   ]
     .map((item) => item.trim())
@@ -2690,23 +2795,14 @@ function extractRefineBrief(report: PitchScoreReport) {
 }
 
 function facetRepairTactic(key: string, label: string) {
-  const normalized = `${key} ${label}`.toLowerCase();
-  if (/clarity|friction/.test(normalized)) {
-    return "Shorten long sentences, remove vague words, make the value proposition instantly scannable, and keep one clear next step.";
-  }
-  if (/credibility|proof|trust/.test(normalized)) {
-    return "Add concrete proof already supported by the draft: customer type, measurable outcome, benchmark, implementation detail, or a low-risk pilot proof path.";
-  }
-  if (/personal|fit|relevance/.test(normalized)) {
-    return "Tie the opener and value claim to the recipient's role, current context, pain, and decision criteria.";
-  }
-  if (/urgency|attention/.test(normalized)) {
-    return "Make the cost of waiting or timing reason explicit, then connect it to a specific CTA.";
-  }
-  if (/emotion|resonance|reward/.test(normalized)) {
-    return "Translate the feature into an outcome the recipient wants, such as saved time, less risk, status, confidence, or reduced workload.";
-  }
-  return "Make the weak point more concrete, more persona-specific, and easier to act on.";
+  const tactics: Record<string, string> = {
+    clarity: "Reduce processing load: make the value proposition instantly scannable and keep one clear next step.",
+    credibility: "Improve the semantic trust read without inventing facts: use verifiable details already present or ask for a low-risk validation step.",
+    emotional_resonance: "Translate the offer into the persona's desired outcome so the reward/affect analogue has a stronger target.",
+    personalization_fit: "Tie the opener and value claim to the recipient's role, current context, pain, and decision criteria.",
+    urgency: "Make the timing reason semantically clear, then connect it to a specific low-friction action.",
+  };
+  return tactics[key] ?? `Improve ${label.toLowerCase()} using the weakest TRIBE signal and persona semantics.`;
 }
 
 function neuralRepairTactic(key: string) {
@@ -2761,35 +2857,4 @@ function toneFromScore(score: number): Tone {
 
 function confidenceFromScore(score: number) {
   return Math.max(0.55, Math.min(0.96, 0.62 + score / 300));
-}
-
-function fallbackFmri(score: number): FmriOutput {
-  const base = Math.max(0.08, score / 500);
-  const trace = [0.86, 1, 0.9, 0.74, 0.66, 0.71, 0.82, 0.88, 0.81, 0.69, 0.6, 0.56].map((value) => value * base);
-  return {
-    segments: 12,
-    voxel_count: 60784,
-    global_mean_abs: base,
-    global_peak_abs: base * 7.8,
-    temporal_trace: trace,
-    temporal_peaks: trace.map((value, index) => value * (4.6 + (index % 3) * 0.3)),
-    top_voxel_indices: [8421, 12044, 31207, 40918, 52114, 58002],
-    top_voxel_values: [0.284, 0.241, 0.218, 0.204, 0.189, 0.176].map((value) => value * (score / 75)),
-  };
-}
-
-function fallbackSignals(score: number): PitchScoreReport["neural_signals"] {
-  return [
-    ["emotional_engagement", "Affective value salience", score - 2],
-    ["personal_relevance", "Self-value relevance", score + 4],
-    ["social_proof_potential", "Social cognition / sharing", score - 9],
-    ["memorability", "Encoding potential", score - 5],
-    ["attention_capture", "Early attention salience", score + 1],
-    ["cognitive_friction", "Cognitive friction", Math.max(18, 100 - score)],
-  ].map(([key, label, value]) => ({
-    key: String(key),
-    label: String(label),
-    score: Math.max(0, Math.min(100, Number(value))),
-    direction: "neutral" as const,
-  }));
 }

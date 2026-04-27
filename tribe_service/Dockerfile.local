@@ -5,4 +5,12 @@ COPY tribe_service /app/tribe_service
 
 RUN python -m pip install --no-cache-dir "accelerate>=1.11"
 
+RUN if command -v cargo >/dev/null 2>&1; then \
+      python -m pip install --no-cache-dir "maturin>=1.7,<2" && \
+      cd /app/tribe_service/rust_core && \
+      python -m maturin develop --release --features extension-module; \
+    else \
+      echo "cargo not available; using Python post-processing fallback"; \
+    fi
+
 RUN python /app/tribe_service/patch_tribev2_whisperx.py || true

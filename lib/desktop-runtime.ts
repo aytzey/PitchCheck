@@ -158,11 +158,44 @@ export async function refinePitchOnDesktop(request: {
   persona: string;
   platform: string;
   suggestions: string[];
-}): Promise<{ refinedMessage?: string; model?: string; error?: string }> {
-  return invokeDesktop<{ refinedMessage?: string; model?: string; error?: string }>(
-    "refine_pitch",
-    { request },
-  );
+}): Promise<{
+  refinedMessage?: string;
+  model?: string;
+  methodology?: string;
+  needsClarification?: boolean;
+  questions?: Array<{
+    id: string;
+    label: string;
+    question: string;
+    why?: string;
+  }>;
+  safetyNotes?: string[];
+  persuasionProfile?: unknown;
+  baselineScore?: number;
+  bestScore?: number;
+  improvement?: number;
+  selectedIndex?: number;
+  error?: string;
+}> {
+  return invokeDesktop<{
+    refinedMessage?: string;
+    model?: string;
+    methodology?: string;
+    needsClarification?: boolean;
+    questions?: Array<{
+      id: string;
+      label: string;
+      question: string;
+      why?: string;
+    }>;
+    safetyNotes?: string[];
+    persuasionProfile?: unknown;
+    baselineScore?: number;
+    bestScore?: number;
+    improvement?: number;
+    selectedIndex?: number;
+    error?: string;
+  }>("refine_pitch", { request });
 }
 
 export async function checkDesktopTribeHealth(): Promise<unknown> {

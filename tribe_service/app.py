@@ -16,6 +16,8 @@ from starlette.concurrency import run_in_threadpool
 from tribe_service.schemas import (
     AuthChangePasswordRequest,
     AuthLoginRequest,
+    PitchRefineRequest,
+    PitchRefineResponse,
     PitchScoreRequest,
     PitchScoreReport,
     BreakdownSection,
@@ -25,9 +27,7 @@ from tribe_service.schemas import (
 )
 from tribe_service.engine import (
     score_text,
-    extract_features,
-    derive_persuasion_signals,
-    summarize_fmri_output,
+    analyze_predictions,
     is_model_loaded,
     runtime_config,
     unload_model,
@@ -38,6 +38,7 @@ from tribe_service.engine import (
 )
 from tribe_service.llm_layer import (
     interpret_persuasion,
+    refine_pitch_message,
     OPENROUTER_ENABLED,
 )
 from tribe_service.auth import (
@@ -49,17 +50,73 @@ from tribe_service.auth import (
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-TRIBE_SCORE_TIMEOUT_SECONDS = float(os.getenv("TRIBE_SCORE_TIMEOUT_SECONDS", "900"))
-TRIBE_MAX_SCORE_CONCURRENCY = max(1, int(os.getenv("TRIBE_MAX_SCORE_CONCURRENCY", "1")))
-TRIBE_IDLE_UNLOAD_SECONDS = max(0.0, float(os.getenv("TRIBE_IDLE_UNLOAD_SECONDS", "600")))
 
-app = FastAPI(title="PitchScore TRIBE Service", docs_url="/docs", redoc_url=None)
+
+def _env_int(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float, minimum: float) -> float:
+    try:
+        return max(minimum, float(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+TRIBE_SCORE_TIMEOUT_SECONDS = _env_float("TRIBE_SCORE_TIMEOUT_SECONDS", 900.0, 1.0)
+TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS = _env_float("TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS", 30.0, 0.1)
+TRIBE_MAX_SCORE_CONCURRENCY = _env_int("TRIBE_MAX_SCORE_CONCURRENCY", 1, 1)
+TRIBE_IDLE_UNLOAD_SECONDS = _env_float("TRIBE_IDLE_UNLOAD_SECONDS", 600.0, 0.0)
+
 _score_lock = asyncio.Semaphore(TRIBE_MAX_SCORE_CONCURRENCY)
 _bearer = HTTPBearer(auto_error=False)
 _pipeline_lock = asyncio.Lock()
 _active_scores = 0
 _last_runtime_activity = time.monotonic()
 _idle_unload_task: asyncio.Task | None = None
+
+
+class ScoreQueueTimeoutError(TimeoutError):
+    """Raised when a score request cannot enter the bounded queue in time."""
+
+
+class ScoreRunTimeoutError(TimeoutError):
+    """Raised when TRIBE keeps running past the client-facing timeout."""
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _idle_unload_task
+    LOGGER.info(
+        "PitchScore TRIBE service starting - model=%s device=%s openrouter=%s auth=%s idle_unload=%ss",
+        TRIBE_MODEL_ID,
+        TRIBE_DEVICE,
+        OPENROUTER_ENABLED,
+        AUTH_STORE.status(),
+        TRIBE_IDLE_UNLOAD_SECONDS,
+    )
+    if TRIBE_IDLE_UNLOAD_SECONDS > 0:
+        _idle_unload_task = asyncio.create_task(_idle_unload_loop())
+    try:
+        yield
+    finally:
+        if _idle_unload_task:
+            _idle_unload_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await _idle_unload_task
+            _idle_unload_task = None
+        await _unload_pipeline("shutdown")
+
+
+app = FastAPI(
+    title="PitchScore TRIBE Service",
+    docs_url="/docs",
+    redoc_url=None,
+    lifespan=lifespan,
+)
 
 # CORS
 app.add_middleware(
@@ -138,6 +195,47 @@ async def _unload_pipeline(reason: str) -> dict:
         }
 
 
+def _release_timed_out_score_resources(task: asyncio.Task) -> None:
+    try:
+        exception = task.exception()
+    except asyncio.CancelledError:
+        exception = None
+    if exception is not None:
+        LOGGER.warning(
+            "Timed-out TRIBE score finished with %s",
+            exception.__class__.__name__,
+        )
+    _score_lock.release()
+    asyncio.create_task(_finish_runtime_activity())
+
+
+async def _score_text_with_backpressure(message: str):
+    try:
+        await asyncio.wait_for(
+            _score_lock.acquire(),
+            timeout=TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        raise ScoreQueueTimeoutError from exc
+
+    await _begin_runtime_activity()
+    score_task = asyncio.create_task(run_in_threadpool(score_text, message))
+    release_now = True
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(score_task),
+            timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        release_now = False
+        score_task.add_done_callback(_release_timed_out_score_resources)
+        raise ScoreRunTimeoutError from exc
+    finally:
+        if release_now:
+            _score_lock.release()
+            await _finish_runtime_activity()
+
+
 async def _idle_unload_loop() -> None:
     if TRIBE_IDLE_UNLOAD_SECONDS <= 0:
         return
@@ -174,6 +272,7 @@ async def health():
         "pipeline": await _pipeline_status(),
         "runtime": runtime_config(),
         "max_score_concurrency": TRIBE_MAX_SCORE_CONCURRENCY,
+        "score_queue_timeout_seconds": TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS,
         "openrouter_enabled": OPENROUTER_ENABLED,
     }
 
@@ -205,27 +304,19 @@ async def auth_change_password(
 @app.post("/score")
 async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)):
     """Score a sales pitch for persuasion effectiveness against a target persona."""
-    await _begin_runtime_activity()
     try:
         # 1. Run TRIBE text scoring
-        async with _score_lock:
-            predictions = await asyncio.wait_for(
-                run_in_threadpool(score_text, request.message),
-                timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
-            )
+        predictions = await _score_text_with_backpressure(request.message)
 
-        # 2. Extract raw features + fMRI summary
-        raw_features = extract_features(predictions)
-        fmri_data = summarize_fmri_output(
+        # 2. Extract raw features, fMRI summary, and neural signals.
+        raw_features, fmri_data, neural_signals = analyze_predictions(
             predictions,
             text_input_mode=TRIBE_TEXT_INPUT_MODE,
         )
 
-        # 3. Derive persuasion signals
-        neural_signals = derive_persuasion_signals(raw_features)
-
-        # 4. LLM interpretation (or fallback) — include fMRI temporal trace
-        llm_result = interpret_persuasion(
+        # 3. LLM interpretation or deterministic neural-only report.
+        llm_result = await run_in_threadpool(
+            interpret_persuasion,
             message=request.message,
             persona=request.persona,
             platform=request.platform,
@@ -235,7 +326,7 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             openrouter_model=request.open_router_model,
         )
 
-        # 5. Assemble PitchScoreReport
+        # 4. Assemble PitchScoreReport
         breakdown = [
             BreakdownSection(
                 key=b["key"],
@@ -285,11 +376,23 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
 
         return {"report": report.model_dump()}
 
-    except asyncio.TimeoutError:
-        LOGGER.exception("Scoring timed out")
+    except ScoreQueueTimeoutError:
+        LOGGER.warning("Scoring queue timed out")
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Scoring service is busy. Try again shortly or increase "
+                "TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS."
+            ),
+        )
+    except ScoreRunTimeoutError:
+        LOGGER.exception("Scoring timed out while TRIBE continues cleanup in the background")
         raise HTTPException(
             status_code=504,
-            detail="Scoring timed out while running TRIBE. Try a shorter message or reconnect the runtime.",
+            detail=(
+                "Scoring timed out while running TRIBE. "
+                "Try again shortly, use a shorter message, or reconnect the runtime."
+            ),
         )
     except Exception:
         LOGGER.exception("Scoring failed")
@@ -297,34 +400,30 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             status_code=500,
             detail="Scoring failed while running TRIBE. Check service logs for the internal error code.",
         )
-    finally:
-        await _finish_runtime_activity()
+
+
+@app.post("/refine")
+async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_auth)):
+    """Rewrite a pitch with the configured LLM refiner without TRIBE candidate re-scoring."""
+    try:
+        result = await run_in_threadpool(
+            refine_pitch_message,
+            message=request.message,
+            persona=request.persona,
+            platform=request.platform,
+            suggestions=request.suggestions,
+            openrouter_model=request.open_router_model,
+        )
+        return PitchRefineResponse(**result).model_dump()
+    except RuntimeError as exc:
+        detail = str(exc)
+        status_code = 503 if "API key is missing" in detail else 502
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except Exception:
+        LOGGER.exception("Refine failed")
+        raise HTTPException(status_code=500, detail="Refine failed while calling the LLM refiner.")
 
 
 @app.post("/runtime/unload")
 async def unload_runtime(_: str = Depends(require_auth)):
     return await _unload_pipeline("requested")
-
-
-@app.on_event("startup")
-async def startup():
-    global _idle_unload_task
-    LOGGER.info(
-        "PitchScore TRIBE service starting — model=%s device=%s openrouter=%s auth=%s idle_unload=%ss",
-        TRIBE_MODEL_ID,
-        TRIBE_DEVICE,
-        OPENROUTER_ENABLED,
-        AUTH_STORE.status(),
-        TRIBE_IDLE_UNLOAD_SECONDS,
-    )
-    if TRIBE_IDLE_UNLOAD_SECONDS > 0:
-        _idle_unload_task = asyncio.create_task(_idle_unload_loop())
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    if _idle_unload_task:
-        _idle_unload_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await _idle_unload_task
-    await _unload_pipeline("shutdown")

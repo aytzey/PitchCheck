@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   getSetupStatus,
   isDesktopRuntime,
@@ -11,6 +11,10 @@ import {
 
 interface Props {
   image?: string;
+}
+
+function subscribeDesktopRuntime() {
+  return () => undefined;
 }
 
 function statusClass(status: SetupStep["status"]) {
@@ -42,16 +46,18 @@ function statusLabel(status: SetupStep["status"]) {
 }
 
 export default function SetupWizard({ image }: Props) {
-  const [desktop, setDesktop] = useState(false);
+  const desktop = useSyncExternalStore(
+    subscribeDesktopRuntime,
+    isDesktopRuntime,
+    () => false,
+  );
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const isDesktop = isDesktopRuntime();
-    setDesktop(isDesktop);
-    if (!isDesktop) return;
+    if (!desktop) return;
 
     getSetupStatus(image)
       .then((next) => {
@@ -62,7 +68,7 @@ export default function SetupWizard({ image }: Props) {
         setMessage(error instanceof Error ? error.message : String(error));
         setOpen(true);
       });
-  }, [image]);
+  }, [desktop, image]);
 
   const progress = useMemo(() => {
     if (!status?.steps.length) return 0;

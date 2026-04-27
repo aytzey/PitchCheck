@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   connectDesktopRuntime,
   disconnectDesktopRuntime,
@@ -15,12 +15,20 @@ interface Props {
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 
+function subscribeDesktopRuntime() {
+  return () => undefined;
+}
+
 function formatPrice(value?: number) {
   return typeof value === "number" ? `$${value.toFixed(3)}/hr` : "n/a";
 }
 
 export default function DesktopConnectionPanel({ onStatusChange }: Props) {
-  const [desktop, setDesktop] = useState(false);
+  const desktop = useSyncExternalStore(
+    subscribeDesktopRuntime,
+    isDesktopRuntime,
+    () => false,
+  );
   const [status, setStatus] = useState<DesktopRuntimeStatus | null>(null);
   const [vastApiKey, setVastApiKey] = useState("");
   const [image, setImage] = useState(DEFAULT_IMAGE);
@@ -31,9 +39,7 @@ export default function DesktopConnectionPanel({ onStatusChange }: Props) {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const isDesktop = isDesktopRuntime();
-    setDesktop(isDesktop);
-    if (!isDesktop) return;
+    if (!desktop) return;
 
     getDesktopRuntimeStatus()
       .then((nextStatus) => {
@@ -46,7 +52,7 @@ export default function DesktopConnectionPanel({ onStatusChange }: Props) {
         setMessage(msg);
         onStatusChange?.(null);
       });
-  }, [onStatusChange]);
+  }, [desktop, onStatusChange]);
 
   const sourceLabel = useMemo(() => {
     if (!status?.connected) return "Disconnected";

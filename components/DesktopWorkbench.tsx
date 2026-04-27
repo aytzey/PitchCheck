@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import AutoUpdatePrompt from "@/components/AutoUpdatePrompt";
 import {
   changePitchServerCredentials,
@@ -200,11 +200,19 @@ const SULCI_LINES = [
   "M 100 60 Q 110 90 110 130",
 ];
 
+function subscribeDesktopRuntime() {
+  return () => undefined;
+}
+
 export default function DesktopWorkbench() {
   const [route, setRoute] = useState<Route>(() =>
     typeof window === "undefined" ? "workspace" : routeFromHash(window.location.hash),
   );
-  const [desktopMode, setDesktopMode] = useState(false);
+  const desktopMode = useSyncExternalStore(
+    subscribeDesktopRuntime,
+    isDesktopRuntime,
+    () => false,
+  );
   const [desktopStatus, setDesktopStatus] = useState<DesktopRuntimeStatus | null>(null);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>("local");
@@ -253,9 +261,7 @@ export default function DesktopWorkbench() {
   }, [image]);
 
   useEffect(() => {
-    const desktop = isDesktopRuntime();
-    setDesktopMode(desktop);
-    if (!desktop) return;
+    if (!desktopMode) return;
 
     getDesktopAppConfig()
       .then((config) => {
@@ -274,13 +280,16 @@ export default function DesktopWorkbench() {
       .catch((caught: unknown) => {
         setRuntimeMessage(readError(caught));
       });
-    refreshDesktop().catch((caught: unknown) => {
-      setRuntimeMessage(readError(caught));
-    });
-    refreshSetup().catch((caught: unknown) => {
-      setRuntimeMessage(readError(caught));
-    });
-  }, [refreshDesktop, refreshSetup]);
+    const statusTimer = window.setTimeout(() => {
+      refreshDesktop().catch((caught: unknown) => {
+        setRuntimeMessage(readError(caught));
+      });
+      refreshSetup().catch((caught: unknown) => {
+        setRuntimeMessage(readError(caught));
+      });
+    }, 0);
+    return () => window.clearTimeout(statusTimer);
+  }, [desktopMode, refreshDesktop, refreshSetup]);
 
   useEffect(() => {
     const syncRoute = () => setRoute(routeFromHash(window.location.hash));
@@ -300,11 +309,9 @@ export default function DesktopWorkbench() {
 
   useEffect(() => {
     if (busyAction !== "connect" || runtimeKind === "local") {
-      setDeployStep(0);
       return;
     }
 
-    setDeployStep(0);
     const id = window.setInterval(() => {
       setDeployStep((current) => Math.min(current + 1, DEPLOY_STEPS.length - 1));
     }, 1300);
@@ -379,6 +386,7 @@ export default function DesktopWorkbench() {
     }
 
     setBusyAction("connect");
+    setDeployStep(0);
     setError(null);
     setRuntimeMessage(
       runtimeKind === "vast"
@@ -469,6 +477,7 @@ export default function DesktopWorkbench() {
     }
 
     setBusyAction("connect");
+    setDeployStep(0);
     setError(null);
     setRuntimeMessage("Updating PitchServer login...");
     try {
@@ -492,8 +501,7 @@ export default function DesktopWorkbench() {
     }
   }, [
     desktopMode,
-    desktopStatus?.connected,
-    desktopStatus?.mode,
+    desktopStatus,
     pitchServerNewPassword,
     pitchServerNewUsername,
     pitchServerPassword,

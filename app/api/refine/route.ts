@@ -4,6 +4,7 @@ import { platformValues, type Platform } from "@/shared/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const OPENROUTER_MODEL_RE = /^[A-Za-z0-9._:/@+-]{1,160}$/;
 const MAX_MESSAGE_CHARS = parseEnvInt("PITCHCHECK_MAX_MESSAGE_CHARS", 30_000, 10);
 const MAX_PERSONA_CHARS = parseEnvInt("PITCHCHECK_MAX_PERSONA_CHARS", 5_000, 5);
 const MAX_REQUEST_BODY_BYTES = parseEnvInt(
@@ -126,12 +127,19 @@ export async function POST(request: Request) {
       ? normalizedPlatform
       : "general";
 
+    const sanitizedOpenRouterModel =
+      typeof body.openRouterModel === "string" &&
+      OPENROUTER_MODEL_RE.test(body.openRouterModel.trim())
+        ? body.openRouterModel.trim()
+        : undefined;
+
     const result = await refinePitch({
       message: trimmedMessage,
       persona: trimmedPersona,
       platform: validPlatform,
       suggestions: sanitizeSuggestions(body.suggestions),
       clarificationAnswers: sanitizeClarificationAnswers(body.clarificationAnswers),
+      openRouterModel: sanitizedOpenRouterModel,
     });
 
     if (!result.ok) {

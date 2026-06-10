@@ -67,6 +67,7 @@ VALID_LLM_RESPONSE = {
             "title": "Open inside their cost problem",
             "do": "Start with the budget pressure this persona faces, then introduce the proof.",
             "because": "Engagement is weakest in the opener and this persona is cost-driven.",
+            "principle": "self-relevance (Falk et al. 2010)",
         },
     ],
     "breakdown": [
@@ -154,6 +155,7 @@ class TestValidResponseParsed:
         assert len(result["rewrite_suggestions"]) >= 1
         assert result["top_moves"][0]["title"] == "Open inside their cost problem"
         assert result["top_moves"][0]["priority"] == 1
+        assert result["top_moves"][0]["principle"] == "self-relevance (Falk et al. 2010)"
 
 
 class TestNeuralOnlyWithoutApiKey:
@@ -457,6 +459,8 @@ class TestRefinePitchMessage:
         assert "LinkedIn DM" in prompt
         assert "Persuasion doctrine" in prompt
         assert "Specificity is credibility" in prompt
+        assert "Evidence base" in prompt
+        assert "Carpenter 2013" in prompt
         assert "THREE candidate rewrites" in prompt
         assert "Final self-check before answering" in prompt
 
@@ -519,6 +523,9 @@ class TestPromptIncludesPersonaAndMessage:
         system_content = messages[0]["content"]
         assert "Persuasion doctrine" in system_content
         assert "Specificity is credibility" in system_content
+        assert "Evidence base" in system_content
+        assert "Falk et al." in system_content
+        assert "Tversky & Kahneman" in system_content
         assert SAMPLE_MESSAGE in user_content
         assert SAMPLE_PERSONA in user_content
         assert SAMPLE_PLATFORM in user_content

@@ -106,6 +106,7 @@ export interface TopMove {
   title: string;        // short imperative
   do: string;           // concrete change, ideally paste-ready copy
   because: string;      // plain-language reason
+  principle?: string;   // research principle it rests on, e.g. "loss aversion"
 }
 
 // Semantic context-fit diagnostics from the LLM (bounded by the neural band)

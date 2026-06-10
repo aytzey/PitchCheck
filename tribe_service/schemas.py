@@ -120,6 +120,7 @@ class TopMove(BaseModel):
     title: str
     do: str
     because: str = ""
+    principle: str = ""  # research principle the move rests on, e.g. "loss aversion"
 
 class FmriOutput(BaseModel):
     """fMRI summary from TRIBE — temporal trace and top voxel data."""

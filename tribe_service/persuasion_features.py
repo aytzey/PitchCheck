@@ -93,6 +93,41 @@ RESEARCH_SOURCES = [
         "url": "https://github.com/facebookresearch/tribev2",
         "finding": "TRIBE v2 predicts average-subject fMRI response analogues on the fsaverage5 cortical mesh.",
     },
+    {
+        "key": "petty_cacioppo_1986_elm",
+        "citation": "Petty & Cacioppo 1986",
+        "title": "The Elaboration Likelihood Model of persuasion",
+        "url": "https://doi.org/10.1016/S0065-2601(08)60214-2",
+        "finding": "High-elaboration audiences respond to argument quality; low-elaboration audiences respond to peripheral cues.",
+    },
+    {
+        "key": "tversky_kahneman_1981_framing",
+        "citation": "Tversky & Kahneman 1981",
+        "title": "The framing of decisions and the psychology of choice",
+        "url": "https://doi.org/10.1126/science.7455683",
+        "finding": "Loss frames weigh roughly twice as heavily as equivalent gain frames in decisions.",
+    },
+    {
+        "key": "goldstein_cialdini_2008_social_norms",
+        "citation": "Goldstein, Cialdini & Griskevicius 2008",
+        "title": "A room with a viewpoint: using social norms to motivate conservation",
+        "url": "https://doi.org/10.1086/586910",
+        "finding": "Social proof from similar others outperforms generic social proof.",
+    },
+    {
+        "key": "carpenter_2013_but_you_are_free",
+        "citation": "Carpenter 2013",
+        "title": "A meta-analysis of the effectiveness of the 'but you are free' technique",
+        "url": "https://doi.org/10.1080/03637751.2012.727941",
+        "finding": "Explicitly preserving the recipient's freedom to refuse reliably increases compliance.",
+    },
+    {
+        "key": "matz_2017_psychological_targeting",
+        "citation": "Matz et al. 2017",
+        "title": "Psychological targeting as an effective approach to digital mass persuasion",
+        "url": "https://doi.org/10.1073/pnas.1710966114",
+        "finding": "Messages matched to the recipient's psychological profile outperform mismatched messages.",
+    },
 ]
 
 RESEARCH_BASIS = [

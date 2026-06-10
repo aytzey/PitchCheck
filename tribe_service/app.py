@@ -364,6 +364,7 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
                 title=str(m.get("title", "")),
                 do=str(m.get("do", "")),
                 because=str(m.get("because", "")),
+                principle=str(m.get("principle", "")),
             )
             for i, m in enumerate(llm_result.get("top_moves", [])[:3])
             if isinstance(m, dict) and m.get("title") and m.get("do")

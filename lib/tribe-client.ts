@@ -76,6 +76,7 @@ export async function refinePitch(request: {
   platform: string;
   suggestions?: string[];
   clarificationAnswers?: Array<{ id: string; question: string; answer: string }>;
+  openRouterModel?: string;
 }): Promise<TribeScoreResponse> {
   try {
     const { response, data } = await fetchJsonWithTimeout(

@@ -36,8 +36,11 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
                 <div>
                   <p className="text-sm font-semibold text-[var(--color-ink)]">{move.title}</p>
                   <p className="text-sm text-[var(--color-muted)]">{move.do}</p>
-                  {move.because && (
-                    <p className="mt-0.5 text-xs text-[var(--color-faint)]">{move.because}</p>
+                  {(move.because || move.principle) && (
+                    <p className="mt-0.5 text-xs text-[var(--color-faint)]">
+                      {move.because}
+                      {move.principle ? ` — ${move.principle}` : ""}
+                    </p>
                   )}
                 </div>
               </li>

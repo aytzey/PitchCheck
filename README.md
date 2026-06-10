@@ -40,7 +40,7 @@ PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookr
 - **Top moves** — the 1-3 highest-leverage changes, ranked by expected impact on whether the reader acts
 - **Rewrite suggestions** — before/after alternatives with reasoning
 
-Every judgment and rewrite is held to a built-in persuasion doctrine: open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs.
+Every judgment and rewrite is held to a built-in persuasion doctrine — open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs — backed by an evidence annex from published persuasion science: self-relevance and neural message effectiveness (Falk et al. 2010/2016; Scholz, Chan & Falk 2025), route matching (Petty & Cacioppo's Elaboration Likelihood Model), loss aversion and framing (Tversky & Kahneman 1981), similar-other social proof (Goldstein, Cialdini & Griskevicius 2008), reactance and the "but you are free" effect (Carpenter 2013 meta-analysis), processing fluency (Alter & Oppenheimer), precise-number credibility (Janiszewski & Uy 2008), psychological targeting (Matz et al. 2017), and the commitment gradient (Freedman & Fraser 1966). Each top move names the principle it rests on.
 
 The whole loop takes a few seconds. Write, score, tweak, re-score.
 

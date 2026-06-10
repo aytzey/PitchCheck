@@ -161,6 +161,23 @@ PERSUASION_DOCTRINE = """Persuasion doctrine — hold every judgment and every r
 10. Lead with strength. The most compelling moment of the draft becomes the opener or the spine of the rewrite; never bury it."""
 
 
+# Evidence base behind the doctrine: published findings the model must apply
+# when judging and rewriting. Citing the principle by name in explanations
+# raises both quality and trust; the findings themselves change what a good
+# rewrite looks like for a given persona.
+PERSUASION_RESEARCH_ANNEX = """Evidence base — apply these findings; when a move rests on one, name the principle briefly:
+- Self-relevance drives action: neural self/value responses to a message predict real behavior change better than self-report (Falk et al. 2010, 2016; 16-study mega-analysis, Scholz, Chan & Falk 2025). Application: frame the opener and the benefit inside the reader's own goals, not the product.
+- Route matching (Elaboration Likelihood Model, Petty & Cacioppo): high-motivation, expert readers are persuaded by argument quality (central route); low-involvement readers by cues — familiarity, liking, social proof (peripheral route). Application: pick the route from the persona, then commit to it.
+- Loss aversion and framing (Tversky & Kahneman): losses loom roughly twice as large as gains. Application: prevention-minded personas (risk, security, ops, compliance) respond to avoided-loss frames; promotion-minded personas (growth, founders) to gain frames. Match the frame (regulatory fit, Higgins).
+- Social proof persuades when it comes from similar others (Goldstein, Cialdini & Griskevicius 2008). Application: name peers of the same role or category — never generic crowds, and only when true.
+- Reactance (Brehm): perceived pressure triggers pushback; explicitly preserving freedom ("no worries if not") reliably increases compliance (but-you-are-free effect, Carpenter 2013 meta-analysis). Application: make no easy to say; never stack urgency.
+- Processing fluency: messages that are easier to read are judged more true and more likable (Alter & Oppenheimer); concrete claims are remembered and believed more than abstract ones. Application: short sentences, concrete verbs, one idea.
+- Precise numbers beat round ones for credibility (Janiszewski & Uy 2008). Application: keep "10 minutes" over "fast"; never round a precise figure the draft already has.
+- Message-persona matching: ads matched to the recipient's psychology outperform mismatched ones (Matz et al. 2017, PNAS). Application: mirror the persona's vocabulary, decision criteria, and risk posture.
+- Commitment gradient (Freedman & Fraser): a small first yes outperforms a large first ask with cold audiences. Application: for cold outreach, ask for a look or a one-word reply, not a meeting.
+- Costly fabrication: discovered false proof destroys trust permanently and any score gain is fake. Application: the proof hierarchy in the doctrine is a hard boundary."""
+
+
 def _segment_excerpts(message: str, n_segments: int, max_chars: int = 140) -> list[str]:
     """Map temporal-trace segments to approximate text spans of the pitch.
 
@@ -228,6 +245,8 @@ You analyze the neural evidence plus the semantic meaning of the pitch. Your job
 
 {PERSUASION_DOCTRINE}
 
+{PERSUASION_RESEARCH_ANNEX}
+
 Output language rules:
 - Write every user-facing string (verdict, narrative, strengths, risks, rewrites, top moves, context-fit notes) in plain, decisive language a salesperson instantly understands. No hedging filler.
 - Keep neuroscience jargon out of user-facing strings: say "attention drops in the middle, where the message turns to product features" rather than naming axes or signals. The structured fields carry the technical evidence.
@@ -249,6 +268,7 @@ Semantic analysis protocol — before scoring, reason through:
 3. Persuasion route: is the message betting on central-route processing (arguments, evidence) or peripheral cues (familiarity, social proof, tone), and does that bet match the persona's likely elaboration level?
 4. Channel fit: judge length, structure, opener, and CTA against the channel norms supplied in the prompt, not against generic copywriting taste.
 5. CTA friction: how much effort, commitment, or social risk does the requested next step demand, and is that proportional to the trust the message has earned?
+6. Framing fit: would this persona respond better to a gain frame or an avoided-loss frame, and which one does the pitch actually use?
 Ground every strength, risk, and rewrite in this protocol plus the temporal segment map, citing the specific part of the pitch it refers to.
 
 TRIBE-derived neuro-persuasion axes:
@@ -381,7 +401,7 @@ Return JSON with this exact shape:
   "narrative": "<2-3 sentence expert analysis in plain language, citing where in the pitch the evidence concentrates, without claiming measured brain activation>",
   "persona_summary": "<psychological profile of this persona: decision drivers, biases, communication preferences>",
   "top_moves": [
-    {{"priority": 1, "title": "<short imperative, e.g. 'Open inside her migration problem'>", "do": "<the concrete change — ideally paste-ready replacement copy>", "because": "<one plain-language sentence tying it to evidence and this persona>"}}
+    {{"priority": 1, "title": "<short imperative, e.g. 'Open inside her migration problem'>", "do": "<the concrete change — ideally paste-ready replacement copy>", "because": "<one plain-language sentence tying it to evidence and this persona>", "principle": "<the research principle it rests on, e.g. 'self-relevance (Falk et al.)' or 'loss aversion', or empty string>"}}
   ],
   "context_fit": {{
     "persona_pain_alignment": {{"score": <0-100>, "note": "<does the message hit a pain/goal this persona actually has right now?>"}},
@@ -789,10 +809,8 @@ def _generate_neural_report(
     turkish = _looks_turkish(message)
 
     ee = neural_signals.get("emotional_engagement", 50.0)
-    pr = neural_signals.get("personal_relevance", 50.0)
     sp = neural_signals.get("social_proof_potential", 50.0)
     ac = neural_signals.get("attention_capture", 50.0)
-    cf = neural_signals.get("cognitive_friction", 50.0)
     mem = neural_signals.get("memorability", 50.0)
 
     strengths_candidates = [
@@ -897,21 +915,25 @@ def _generate_neural_report(
                 "title": "Mesajı alıcının dünyasından başlat",
                 "do": "Açılış cümlesini gönderenin ürünüyle değil, alıcının şu anki problemi veya hedefiyle başlat.",
                 "because": "Kanıt, mesajın kişisel alaka tarafının en zayıf halka olduğunu gösteriyor.",
+                "principle": "öz-alaka (Falk vd. 2010)",
             }),
             (neuro_axes["processing_fluency"]["score"], {
                 "title": "Tek fikre indir, cümleleri kısalt",
                 "do": "Metni tek bir ana fikre indir; her cümleyi kısalt ve tek, düşük eforlu bir sonraki adım bırak.",
                 "because": "Yoğun bir okuyucu mesajı tek geçişte kavrayamazsa aksiyon almaz.",
+                "principle": "işleme akıcılığı (Alter & Oppenheimer)",
             }),
             (neuro_axes["reward_affect"]["score"], {
                 "title": "Somut bir kazanç söyle",
                 "do": "Vaadi alıcının diliyle tek somut sonuca çevir: ne kazanır, ne zamandan veya dertten kurtulur.",
                 "because": "Sıfatlar değil, tek bir somut sonuç motivasyon yaratır.",
+                "principle": "somutluk ve kesin rakam etkisi",
             }),
             (neuro_axes["encoding_attention"]["score"], {
                 "title": "En güçlü anı öne taşı",
                 "do": "Taslağın en güçlü cümlesini bul ve açılışa taşı; girizgahı sil.",
                 "because": "Dikkat en çok ilk saniyelerde kazanılır ya da kaybedilir.",
+                "principle": "öncelik etkisi / dikkat",
             }),
         ]
     else:
@@ -920,21 +942,25 @@ def _generate_neural_report(
                 "title": "Open inside the reader's world",
                 "do": "Rewrite the first sentence to start from the recipient's current problem or goal, not the sender's product.",
                 "because": "The evidence shows personal relevance is the weakest link of this draft.",
+                "principle": "self-relevance (Falk et al. 2010)",
             }),
             (neuro_axes["processing_fluency"]["score"], {
                 "title": "Cut to one idea",
                 "do": "Reduce the message to a single core idea, shorten every sentence, and leave exactly one low-effort next step.",
                 "because": "A busy reader who can't get it in one pass won't act on it.",
+                "principle": "processing fluency (Alter & Oppenheimer)",
             }),
             (neuro_axes["reward_affect"]["score"], {
                 "title": "Name a concrete win",
                 "do": "Translate the promise into one concrete outcome in the reader's terms: what they gain or stop losing.",
                 "because": "One specific result motivates; adjectives don't.",
+                "principle": "concreteness / precise numbers",
             }),
             (neuro_axes["encoding_attention"]["score"], {
                 "title": "Lead with your strongest moment",
                 "do": "Find the strongest sentence in the draft and move it to the opener; delete the warm-up.",
                 "because": "Attention is won or lost in the first seconds.",
+                "principle": "primacy of attention",
             }),
         ]
     top_moves = [
@@ -1082,12 +1108,14 @@ def _normalise_top_moves(value: Any, baseline: list[dict[str, Any]] | None = Non
         title = _clean_llm_string(item.get("title"), max_len=120)
         do = _clean_llm_string(item.get("do"), max_len=700)
         because = _clean_llm_string(item.get("because"), max_len=400)
+        principle = _clean_llm_string(item.get("principle"), max_len=120)
         if title and do:
             cleaned.append({
                 "priority": len(cleaned) + 1,
                 "title": title,
                 "do": do,
                 "because": because,
+                "principle": principle,
             })
         if len(cleaned) >= 3:
             break
@@ -1150,6 +1178,8 @@ Channel norms for this platform:
 
 {PERSUASION_DOCTRINE}
 
+{PERSUASION_RESEARCH_ANNEX}
+
 Recipient persona:
 {persona.strip()}
 
@@ -1174,9 +1204,10 @@ Rewrite objective:
 
 Rewrite process — do this internally before answering:
 1. Build the persona's decision model: what they optimize for, their default objection to a message like this, and the proof threshold they need before acting.
-2. Draft THREE candidate rewrites with genuinely different strategies (for example: outcome-led, problem/insight-led, proof-led). Do not output the drafts.
-3. Score each candidate 1-10 against this rubric: persona-specific opener; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel-norm fit; fluency (a busy reader gets it in one pass); zero invented facts.
-4. Take the highest-scoring candidate, fix its single weakest rubric item, and output only that final version.
+2. Pick the persuasion route (argument-led vs cue-led) and the frame (gain vs avoided-loss) that fit this persona, per the evidence base above.
+3. Draft THREE candidate rewrites with genuinely different strategies (for example: outcome-led, problem/insight-led, proof-led). Do not output the drafts.
+4. Score each candidate 1-10 against this rubric: persona-specific opener; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel-norm fit; fluency (a busy reader gets it in one pass); route and frame match the persona; zero invented facts; no reactance triggers (pressure, stacked urgency, guilt).
+5. Take the highest-scoring candidate, fix its single weakest rubric item, and output only that final version.
 
 Final self-check before answering:
 - No invented facts, names, metrics, dates, or baselines anywhere.
@@ -1349,6 +1380,8 @@ Channel norms for this platform:
 
 {PERSUASION_DOCTRINE}
 
+{PERSUASION_RESEARCH_ANNEX}
+
 Recipient persona:
 {persona.strip()}
 
@@ -1370,12 +1403,13 @@ Critique checklist — evaluate the candidate rewrite against each item:
 6. Fluency: a busy reader gets the point in one pass; every sentence earns its place?
 7. Brief coverage: are the weakest items in the repair brief visibly repaired, and the strongest part of the original preserved?
 8. Language: identical language and register as the original pitch?
+9. Psychology: does the rewrite use the route (argument-led vs cue-led) and frame (gain vs avoided-loss) that fit this persona, and is it free of reactance triggers (pressure, stacked urgency, guilt)?
 
 If any item fails, produce a final version that fixes it while keeping what already works. If everything passes, keep the rewrite as-is.
 
 Return only valid JSON with this exact shape:
 {{
-  "verdict": "improved" or "kept",
+  "verdict": "<improved|kept>",
   "remaining_issues_fixed": ["<short description of each fix made, or empty list>"],
   "final_message": "<the final pitch text — the improved version, or the unchanged candidate rewrite>"
 }}"""

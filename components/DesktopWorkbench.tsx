@@ -661,6 +661,7 @@ export default function DesktopWorkbench() {
             platform: medium.id,
             suggestions: refineBrief,
             clarificationAnswers: options?.clarificationAnswers ?? [],
+            openRouterModel: openRouterRefinerModel || undefined,
           }),
         });
         const data = (await res.json()) as {
@@ -1727,7 +1728,12 @@ function TopMovesPanel({ moves }: { moves: TopMove[] }) {
             <p>
               <strong>{move.title}. </strong>
               {move.do}
-              {move.because ? <small>{move.because}</small> : null}
+              {(move.because || move.principle) ? (
+                <small>
+                  {move.because}
+                  {move.principle ? ` — ${move.principle}` : ""}
+                </small>
+              ) : null}
             </p>
           </div>
         ))}

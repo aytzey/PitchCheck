@@ -74,6 +74,32 @@ export interface NeuroAxisReport {
   unsupported_by_text?: boolean;
 }
 
+// One citation-anchored link between TRIBE geometry and a published finding
+export interface ResearchSynthesisItem {
+  key: string;
+  kind: "gap" | "strength" | "pattern";
+  axis?: string;
+  observation: string;
+  finding: string;
+  citation: string;
+  source_keys?: string[];
+  lever: string;
+}
+
+export interface ResearchSynthesis {
+  items: ResearchSynthesisItem[];
+  temporal_archetype?: {
+    key: string;
+    label: string;
+    implication: string;
+    lever: string;
+    citation: string;
+    source_keys?: string[];
+  } | null;
+  route_hint?: string;
+  basis?: string;
+}
+
 // Robustness/calibration metadata for the final persuasion score
 export interface RobustnessReport {
   neural_prior_score?: number;
@@ -95,6 +121,7 @@ export interface RobustnessReport {
   guardrails_applied: string[];
   warnings: string[];
   neuro_axes?: Record<string, NeuroAxisReport>;
+  research_synthesis?: ResearchSynthesis | null;
   confidence_reasons?: string[];
   scientific_caveats?: string[];
   calibration_basis: string;

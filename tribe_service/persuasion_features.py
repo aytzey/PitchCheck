@@ -128,6 +128,13 @@ RESEARCH_SOURCES = [
         "url": "https://doi.org/10.1073/pnas.1710966114",
         "finding": "Messages matched to the recipient's psychological profile outperform mismatched messages.",
     },
+    {
+        "key": "alter_oppenheimer_2009_fluency",
+        "citation": "Alter & Oppenheimer 2009",
+        "title": "Uniting the tribes of fluency to form a metacognitive nation",
+        "url": "https://doi.org/10.1177/1088868309341564",
+        "finding": "Easier-to-process messages are judged more true, more likable, and less risky.",
+    },
 ]
 
 RESEARCH_BASIS = [

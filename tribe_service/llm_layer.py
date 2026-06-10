@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from tribe_service import native_core
+from tribe_service.research_synthesis import synthesize_research_findings
 from tribe_service.persuasion_features import (
     analyze_persuasion_text,
     calibration_confidence,
@@ -367,6 +368,10 @@ Judge structure, length, opener, and CTA against these norms.
 
 ## Evidence-Weighted Neuro-Persuasion Axes
 {_json_dumps(neuro_axes)}
+
+## Neural × Research Synthesis (deterministic, citation-anchored)
+{_json_dumps(synthesize_research_findings(neuro_axes, fmri_summary))}
+Read this synthesis as pre-digested evidence linking THIS pitch's TRIBE geometry to published findings. Verify each item against the segment map and the pitch text; your top moves should normally execute the strongest levers listed here unless the text clearly contradicts them.
 
 ## Calibration Prior
 {_json_dumps({
@@ -1550,6 +1555,7 @@ def _calibrate_result(
     persuasion_evidence: dict[str, Any],
     llm_used: bool,
     llm_model: str | None = None,
+    fmri_summary: dict | None = None,
 ) -> dict[str, Any]:
     neural_prior_score = neural_score_from_signals(neural_signals)
     neuro_axes = neuro_axes_from_analysis(neural_signals, persuasion_evidence)
@@ -1625,6 +1631,7 @@ def _calibrate_result(
         "guardrails_applied": guardrails,
         "warnings": persuasion_evidence.get("warnings", []),
         "neuro_axes": neuro_axes,
+        "research_synthesis": synthesize_research_findings(neuro_axes, fmri_summary),
         "confidence_reasons": confidence_reasons(neural_score, 50.0, persuasion_evidence, neuro_axes),
         "scientific_caveats": scientific_caveats(),
         "calibration_basis": "TRIBE-predicted neural prior anchors the final score; the band-clamped LLM context-fit read contributes a bounded semantic blend; text heuristics disabled",
@@ -1679,6 +1686,7 @@ def interpret_persuasion(
                 persuasion_evidence=persuasion_evidence,
                 llm_used=True,
                 llm_model=selected_model,
+                fmri_summary=fmri_summary,
             )
         except Exception as exc:  # Defensive: never let LLM shape errors fail scoring.
             LOGGER.warning("LLM result validation failed: %s — using neural-only report", exc)
@@ -1689,4 +1697,5 @@ def interpret_persuasion(
         persuasion_evidence=persuasion_evidence,
         llm_used=False,
         llm_model=selected_model,
+        fmri_summary=fmri_summary,
     )

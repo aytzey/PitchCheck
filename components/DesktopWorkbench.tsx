@@ -27,6 +27,7 @@ import {
   type FmriOutput,
   type PitchScoreReport,
   type Platform,
+  type ResearchSynthesis,
   type TopMove,
 } from "@/shared/types";
 
@@ -1692,6 +1693,9 @@ function ResultView({
             </div>
           </div>
           {report.context_fit && <ContextFitPanel fit={report.context_fit} />}
+          {report.robustness?.research_synthesis && (
+            <ResearchSynthesisPanel synthesis={report.robustness.research_synthesis} />
+          )}
           {suggestions.length > 0 && (
             <div>
               <HeaderLine title="More suggestions" right={`${suggestions.length} fixes`} />
@@ -1788,6 +1792,43 @@ function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ResearchSynthesisPanel({ synthesis }: { synthesis: ResearchSynthesis }) {
+  const items = synthesis.items ?? [];
+  const archetype = synthesis.temporal_archetype;
+  if (!items.length && !archetype) return null;
+  return (
+    <div>
+      <HeaderLine title="Research synthesis" right="TRIBE × published findings" />
+      <div className="pc-suggestions">
+        {archetype && (
+          <div key={archetype.key}>
+            <span className="mono">TRC</span>
+            <p>
+              <strong>{archetype.label}. </strong>
+              {archetype.lever}
+              <small>
+                {archetype.implication} — {archetype.citation}
+              </small>
+            </p>
+          </div>
+        )}
+        {items.map((item) => (
+          <div key={item.key}>
+            <span className="mono">{item.kind === "gap" ? "FIX" : item.kind === "strength" ? "KEEP" : "USE"}</span>
+            <p>
+              <strong>{item.observation} </strong>
+              {item.lever}
+              <small>
+                {item.finding} — {item.citation}
+              </small>
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -3175,11 +3216,27 @@ function extractContextFitBrief(report: PitchScoreReport) {
   return lines;
 }
 
+function extractResearchBrief(report: PitchScoreReport) {
+  const synthesis = report.robustness?.research_synthesis;
+  if (!synthesis) return [];
+  const lines: string[] = [];
+  if (synthesis.temporal_archetype) {
+    lines.push(
+      `Research lever (${synthesis.temporal_archetype.citation}) - ${synthesis.temporal_archetype.label}: ${synthesis.temporal_archetype.lever}`,
+    );
+  }
+  for (const item of (synthesis.items ?? []).filter((entry) => entry.kind !== "strength").slice(0, 2)) {
+    lines.push(`Research lever (${item.citation}) - ${item.observation} ${item.lever}`);
+  }
+  return lines.slice(0, 3);
+}
+
 function extractRefineBrief(report: PitchScoreReport, source: string) {
   const baseline = `Baseline persuasion score ${Math.round(report.persuasion_score)}/100 - "${report.verdict}". The rewrite must beat this baseline, not paraphrase it.`;
   const topMoves = (report.top_moves ?? []).map(
     (move) => `Top move - ${move.title}: ${move.do}${move.because ? ` (${move.because})` : ""}`,
   );
+  const research = extractResearchBrief(report);
   const temporal = extractTemporalBrief(report, source);
   const contextFit = extractContextFitBrief(report);
   const rewriteGuidance = report.rewrite_suggestions
@@ -3208,6 +3265,7 @@ function extractRefineBrief(report: PitchScoreReport, source: string) {
   return [
     baseline,
     ...topMoves,
+    ...research,
     ...temporal,
     ...contextFit,
     ...rewriteGuidance,

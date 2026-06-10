@@ -156,6 +156,9 @@ class TestValidResponseParsed:
         assert result["top_moves"][0]["title"] == "Open inside their cost problem"
         assert result["top_moves"][0]["priority"] == 1
         assert result["top_moves"][0]["principle"] == "self-relevance (Falk et al. 2010)"
+        synthesis = result["robustness"]["research_synthesis"]
+        assert isinstance(synthesis["items"], list)
+        assert synthesis["route_hint"] in {"balanced", "reward_led", "social_led"}
 
 
 class TestNeuralOnlyWithoutApiKey:
@@ -529,6 +532,7 @@ class TestPromptIncludesPersonaAndMessage:
         assert SAMPLE_MESSAGE in user_content
         assert SAMPLE_PERSONA in user_content
         assert SAMPLE_PLATFORM in user_content
+        assert "Neural × Research Synthesis" in user_content
         assert "same language as the Pitch Message" in user_content
         assert "UNTRUSTED DATA" in user_content or "Untrusted Input Payload" in user_content
         assert "Deterministic Persuasion Evidence Audit" not in user_content

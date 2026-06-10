@@ -100,6 +100,14 @@ export interface RobustnessReport {
   calibration_basis: string;
 }
 
+// One of the 1-3 highest-leverage changes, ranked by expected impact
+export interface TopMove {
+  priority: number;     // 1-3
+  title: string;        // short imperative
+  do: string;           // concrete change, ideally paste-ready copy
+  because: string;      // plain-language reason
+}
+
 // Semantic context-fit diagnostics from the LLM (bounded by the neural band)
 export interface ContextFitFacet {
   score: number;        // 0-100
@@ -127,6 +135,7 @@ export interface PitchScoreReport {
   risks: string[];                  // 3 risks
   rewrite_suggestions: RewriteSuggestion[]; // 2-3 suggestions
   persona_summary: string;          // LLM's understanding of the persona
+  top_moves?: TopMove[];            // 1-3 highest-leverage changes, ranked
   context_fit?: ContextFitReport | null; // semantic context-fit diagnostics
   fmri_output?: FmriOutput | null;  // fMRI summary from TRIBE
   persuasion_evidence?: PersuasionEvidence | null; // Neural-only compatibility metadata

@@ -36,8 +36,11 @@ PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookr
 - **Six neural signals** — affective value salience, early attention salience, self-value relevance, social cognition/sharing, encoding potential, cognitive friction
 - **Neuro-persuasive axes** — self/value fit, reward/affect, social cognition, encoding/attention, processing fluency
 - **Segment-by-segment engagement timeline** — where the reader tunes in, where they drop off
-- **Verdict and narrative** — an LLM reads the neural output and explains what's working and what isn't
+- **Verdict and narrative** — an LLM reads the neural output and explains what's working and what isn't, in plain language
+- **Top moves** — the 1-3 highest-leverage changes, ranked by expected impact on whether the reader acts
 - **Rewrite suggestions** — before/after alternatives with reasoning
+
+Every judgment and rewrite is held to a built-in persuasion doctrine: open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs.
 
 The whole loop takes a few seconds. Write, score, tweak, re-score.
 

@@ -1128,6 +1128,63 @@ textarea {
   padding: 12px;
 }
 
+.pc-narrative p {
+  border-left: 2px solid var(--ok);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 2px 0 2px 12px;
+}
+
+.pc-suggestions p small {
+  color: var(--fg-dim);
+  display: block;
+  font-size: 10.5px;
+  margin-top: 3px;
+}
+
+.pc-deepdive {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.pc-deepdive > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  list-style: none;
+  user-select: none;
+}
+
+.pc-deepdive > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pc-deepdive > summary .mono {
+  color: var(--fg-faint);
+  font-size: 10.5px;
+}
+
+.pc-deepdive > summary::after {
+  color: var(--fg-faint);
+  content: "+";
+  font-size: 14px;
+}
+
+.pc-deepdive[open] > summary::after {
+  content: "−";
+}
+
+.pc-deepdive-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 14px;
+}
+
 .pc-refine-head {
   align-items: center;
   display: flex;

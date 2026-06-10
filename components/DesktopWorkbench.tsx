@@ -27,6 +27,7 @@ import {
   type FmriOutput,
   type PitchScoreReport,
   type Platform,
+  type TopMove,
 } from "@/shared/types";
 
 type Route = "workspace" | "runtime" | "setup" | "settings";
@@ -1656,39 +1657,12 @@ function ResultView({
         runtime={runtimeKind}
         model={openRouterModel || DEFAULT_OPENROUTER_MODEL}
       />
-      {signals.length > 0 && <NeuralSignalsGrid signals={signals} />}
-      {(report.robustness || report.persuasion_evidence) && (
-        <RobustnessPanel report={report} />
+      {report.narrative && (
+        <div className="pc-narrative">
+          <p>{report.narrative}</p>
+        </div>
       )}
-      <div>
-        <HeaderLine title="Writing facets" right="LLM interpreted" />
-        <div className="pc-facet-list">
-          {breakdown.map((facet, index) => (
-            <FacetRow key={facet.label} facet={facet} last={index === breakdown.length - 1} />
-          ))}
-        </div>
-      </div>
-      {report.context_fit && <ContextFitPanel fit={report.context_fit} />}
-      <VariantRankPanel score={score} refinedPitch={refinedPitch} />
-      {refineQuestions && <RefineQuestionsPanel questionSet={refineQuestions} />}
-      <div>
-        <HeaderLine title="Suggestions" right={`${suggestions.length} fixes`} />
-        <div className="pc-suggestions">
-          {suggestions.length ? (
-            suggestions.map((suggestion, index) => (
-              <div key={index}>
-                <span className="mono">{String(index + 1).padStart(2, "0")}</span>
-                <p>{suggestion}</p>
-              </div>
-            ))
-          ) : (
-            <div>
-              <span className="mono">00</span>
-              <p>{report.narrative}</p>
-            </div>
-          )}
-        </div>
-      </div>
+      <TopMovesPanel moves={report.top_moves ?? []} />
       <div className="pc-refine">
         <div className="pc-refine-head">
           <span className="label">Auto-refine</span>
@@ -1697,9 +1671,66 @@ function ResultView({
           </Button>
         </div>
         <p>
-          Rewrite this for <strong>{audience.name || "recipient"}</strong> with the strongest suggestions, review the diff,
+          Rewrite this for <strong>{audience.name || "recipient"}</strong> applying the top moves, review the diff,
           then accept it to run a fresh TRIBE score on the revised draft.
         </p>
+      </div>
+      {refineQuestions && <RefineQuestionsPanel questionSet={refineQuestions} />}
+      <details className="pc-deepdive">
+        <summary>
+          <span className="label">Deep dive</span>
+          <span className="mono">facets . context fit . neural evidence</span>
+        </summary>
+        <div className="pc-deepdive-body">
+          <div>
+            <HeaderLine title="Writing facets" right="LLM interpreted" />
+            <div className="pc-facet-list">
+              {breakdown.map((facet, index) => (
+                <FacetRow key={facet.label} facet={facet} last={index === breakdown.length - 1} />
+              ))}
+            </div>
+          </div>
+          {report.context_fit && <ContextFitPanel fit={report.context_fit} />}
+          {suggestions.length > 0 && (
+            <div>
+              <HeaderLine title="More suggestions" right={`${suggestions.length} fixes`} />
+              <div className="pc-suggestions">
+                {suggestions.map((suggestion, index) => (
+                  <div key={index}>
+                    <span className="mono">{String(index + 1).padStart(2, "0")}</span>
+                    <p>{suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {signals.length > 0 && <NeuralSignalsGrid signals={signals} />}
+          {(report.robustness || report.persuasion_evidence) && (
+            <RobustnessPanel report={report} />
+          )}
+          <VariantRankPanel score={score} refinedPitch={refinedPitch} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function TopMovesPanel({ moves }: { moves: TopMove[] }) {
+  if (!moves.length) return null;
+  return (
+    <div>
+      <HeaderLine title="Top moves" right="highest leverage first" />
+      <div className="pc-suggestions">
+        {moves.map((move, index) => (
+          <div key={`${move.title}-${index}`}>
+            <span className="mono">{String(move.priority || index + 1).padStart(2, "0")}</span>
+            <p>
+              <strong>{move.title}. </strong>
+              {move.do}
+              {move.because ? <small>{move.because}</small> : null}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -3140,6 +3171,9 @@ function extractContextFitBrief(report: PitchScoreReport) {
 
 function extractRefineBrief(report: PitchScoreReport, source: string) {
   const baseline = `Baseline persuasion score ${Math.round(report.persuasion_score)}/100 - "${report.verdict}". The rewrite must beat this baseline, not paraphrase it.`;
+  const topMoves = (report.top_moves ?? []).map(
+    (move) => `Top move - ${move.title}: ${move.do}${move.because ? ` (${move.because})` : ""}`,
+  );
   const temporal = extractTemporalBrief(report, source);
   const contextFit = extractContextFitBrief(report);
   const rewriteGuidance = report.rewrite_suggestions
@@ -3167,6 +3201,7 @@ function extractRefineBrief(report: PitchScoreReport, source: string) {
 
   return [
     baseline,
+    ...topMoves,
     ...temporal,
     ...contextFit,
     ...rewriteGuidance,

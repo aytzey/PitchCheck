@@ -24,6 +24,7 @@ from tribe_service.schemas import (
     FmriOutput,
     NeuralSignal,
     RewriteSuggestion,
+    TopMove,
 )
 from tribe_service.engine import (
     score_text,
@@ -357,6 +358,17 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             for r in llm_result.get("rewrite_suggestions", [])
         ]
 
+        top_moves = [
+            TopMove(
+                priority=min(3, max(1, int(m.get("priority", i + 1)))),
+                title=str(m.get("title", "")),
+                do=str(m.get("do", "")),
+                because=str(m.get("because", "")),
+            )
+            for i, m in enumerate(llm_result.get("top_moves", [])[:3])
+            if isinstance(m, dict) and m.get("title") and m.get("do")
+        ]
+
         report = PitchScoreReport(
             persuasion_score=max(0, min(100, float(llm_result.get("persuasion_score", 50)))),
             verdict=llm_result.get("verdict", "Analysis complete"),
@@ -367,6 +379,7 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             risks=llm_result.get("risks", [])[:3],
             rewrite_suggestions=rewrite_suggestions,
             persona_summary=llm_result.get("persona_summary", request.persona),
+            top_moves=top_moves,
             context_fit=llm_result.get("context_fit"),
             fmri_output=FmriOutput(**fmri_data),
             persuasion_evidence=llm_result.get("persuasion_evidence"),

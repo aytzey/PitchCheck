@@ -61,6 +61,14 @@ VALID_LLM_RESPONSE = {
     "verdict": "Compelling pitch with strong social proof",
     "narrative": "The pitch leverages social proof effectively. Neural signals indicate high engagement.",
     "persona_summary": "A cost-conscious engineering leader who values proven solutions.",
+    "top_moves": [
+        {
+            "priority": 1,
+            "title": "Open inside their cost problem",
+            "do": "Start with the budget pressure this persona faces, then introduce the proof.",
+            "because": "Engagement is weakest in the opener and this persona is cost-driven.",
+        },
+    ],
     "breakdown": [
         {"key": "emotional_resonance", "label": "Emotional Resonance", "score": 75, "explanation": "Strong emotional activation."},
         {"key": "clarity", "label": "Clarity", "score": 82, "explanation": "Clear and concise messaging."},
@@ -144,6 +152,8 @@ class TestValidResponseParsed:
         assert len(result["risks"]) == 3
         assert isinstance(result["rewrite_suggestions"], list)
         assert len(result["rewrite_suggestions"]) >= 1
+        assert result["top_moves"][0]["title"] == "Open inside their cost problem"
+        assert result["top_moves"][0]["priority"] == 1
 
 
 class TestNeuralOnlyWithoutApiKey:
@@ -180,6 +190,10 @@ class TestNeuralOnlyWithoutApiKey:
         assert len(result["risks"]) >= 1
         assert isinstance(result["rewrite_suggestions"], list)
         assert len(result["rewrite_suggestions"]) >= 1
+        # Neural-only fallback still ranks the highest-leverage moves.
+        assert 1 <= len(result["top_moves"]) <= 3
+        assert result["top_moves"][0]["title"]
+        assert result["top_moves"][0]["do"]
 
 
 class TestRefinePitchMessage:
@@ -441,6 +455,8 @@ class TestRefinePitchMessage:
         prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
         assert "Channel norms for this platform" in prompt
         assert "LinkedIn DM" in prompt
+        assert "Persuasion doctrine" in prompt
+        assert "Specificity is credibility" in prompt
         assert "THREE candidate rewrites" in prompt
         assert "Final self-check before answering" in prompt
 
@@ -500,6 +516,9 @@ class TestPromptIncludesPersonaAndMessage:
         messages = request_body["messages"]
         user_content = messages[1]["content"]
 
+        system_content = messages[0]["content"]
+        assert "Persuasion doctrine" in system_content
+        assert "Specificity is credibility" in system_content
         assert SAMPLE_MESSAGE in user_content
         assert SAMPLE_PERSONA in user_content
         assert SAMPLE_PLATFORM in user_content

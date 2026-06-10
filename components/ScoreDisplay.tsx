@@ -23,6 +23,29 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
         )}
       </div>
 
+      {/* Top moves — the 1-3 highest-leverage changes */}
+      {(report.top_moves ?? []).length > 0 && (
+        <div className="panel p-6 space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-pitch)]">Top Moves</h3>
+          <ol className="space-y-3">
+            {(report.top_moves ?? []).map((move, index) => (
+              <li key={`${move.title}-${index}`} className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--color-pitch-faint)] text-xs font-bold text-[var(--color-pitch)]">
+                  {move.priority || index + 1}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-ink)]">{move.title}</p>
+                  <p className="text-sm text-[var(--color-muted)]">{move.do}</p>
+                  {move.because && (
+                    <p className="mt-0.5 text-xs text-[var(--color-faint)]">{move.because}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {/* Breakdown */}
       {report.breakdown.length > 0 && (
         <div className="panel p-6 space-y-4">

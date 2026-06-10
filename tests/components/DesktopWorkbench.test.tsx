@@ -42,6 +42,14 @@ const mockReport: PitchScoreReport = {
     },
   ],
   persona_summary: "Engineering leader handling a migration",
+  top_moves: [
+    {
+      priority: 1,
+      title: "Open inside her migration problem",
+      do: "Start with the observability gap her team hit after Athena, then offer the dashboard.",
+      because: "Attention is weakest in the opener and she ignores product-first outreach.",
+    },
+  ],
   fmri_output: null,
   platform: "email",
   scored_at: new Date().toISOString(),
@@ -105,6 +113,8 @@ describe("DesktopWorkbench", () => {
     fireEvent.click(screen.getByRole("button", { name: /Score message/ }));
 
     expect(await screen.findByText("Variant re-rank")).toBeDefined();
+    expect(screen.getByText("Top moves")).toBeDefined();
+    expect(screen.getByText(/Open inside her migration problem/)).toBeDefined();
     expect(screen.getByRole("button", { name: /Refine draft/ })).toBeDefined();
 
     mockFetch.mockResolvedValueOnce({

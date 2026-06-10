@@ -28,6 +28,7 @@ import {
   type PitchScoreReport,
   type Platform,
   type ResearchSynthesis,
+  type SegmentLocalization,
   type TopMove,
 } from "@/shared/types";
 
@@ -1693,6 +1694,9 @@ function ResultView({
             </div>
           </div>
           {report.context_fit && <ContextFitPanel fit={report.context_fit} />}
+          {report.robustness?.research_synthesis?.localization && (
+            <SegmentLocalizationPanel localization={report.robustness.research_synthesis.localization} />
+          )}
           {report.robustness?.research_synthesis && (
             <ResearchSynthesisPanel synthesis={report.robustness.research_synthesis} />
           )}
@@ -1792,6 +1796,51 @@ function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SegmentLocalizationPanel({ localization }: { localization: SegmentLocalization }) {
+  const rows: Array<{ tag: string; label: string; text: string; note: string }> = [];
+  if (localization.peak?.text) {
+    rows.push({
+      tag: "PEAK",
+      label: `Strongest moment (${localization.peak.position_pct}% in)`,
+      text: localization.peak.text,
+      note: "Preserve this or move it earlier.",
+    });
+  }
+  if (localization.weakest?.text) {
+    rows.push({
+      tag: "WEAK",
+      label: "Weakest moment",
+      text: localization.weakest.text,
+      note: "Prime rewrite target.",
+    });
+  }
+  if (localization.attention_cliff?.to?.text) {
+    rows.push({
+      tag: "DROP",
+      label: `Attention cliff (${localization.attention_cliff.to.position_pct}% in)`,
+      text: localization.attention_cliff.to.text,
+      note: "Engagement falls hardest into this span.",
+    });
+  }
+  if (!rows.length) return null;
+  return (
+    <div>
+      <HeaderLine title="Where TRIBE reacts" right="located on your text" />
+      <div className="pc-rank-list">
+        {rows.map((row) => (
+          <div className="pc-rank-row" key={row.tag}>
+            <span className="mono">{row.tag}</span>
+            <strong>{row.label}</strong>
+            <small>
+              &ldquo;{row.text}&rdquo; — {row.note}
+            </small>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -3220,6 +3269,17 @@ function extractResearchBrief(report: PitchScoreReport) {
   const synthesis = report.robustness?.research_synthesis;
   if (!synthesis) return [];
   const lines: string[] = [];
+  const loc = synthesis.localization;
+  if (loc?.weakest?.text) {
+    lines.push(
+      `TRIBE-located weakest span (rewrite first): "${loc.weakest.text}".`,
+    );
+  }
+  if (loc?.attention_cliff?.to?.text) {
+    lines.push(
+      `TRIBE-located attention drop into: "${loc.attention_cliff.to.text}". Fix this transition.`,
+    );
+  }
   if (synthesis.temporal_archetype) {
     lines.push(
       `Research lever (${synthesis.temporal_archetype.citation}) - ${synthesis.temporal_archetype.label}: ${synthesis.temporal_archetype.lever}`,
@@ -3228,7 +3288,7 @@ function extractResearchBrief(report: PitchScoreReport) {
   for (const item of (synthesis.items ?? []).filter((entry) => entry.kind !== "strength").slice(0, 2)) {
     lines.push(`Research lever (${item.citation}) - ${item.observation} ${item.lever}`);
   }
-  return lines.slice(0, 3);
+  return lines.slice(0, 4);
 }
 
 function extractRefineBrief(report: PitchScoreReport, source: string) {

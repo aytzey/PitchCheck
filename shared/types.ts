@@ -86,6 +86,30 @@ export interface ResearchSynthesisItem {
   lever: string;
 }
 
+export interface SegmentLocation {
+  segment: number;
+  of: number;
+  position_pct: number;
+  value: number;
+  percentile: number;
+  text: string;
+}
+
+export interface SegmentLocalization {
+  opener: SegmentLocation;
+  opener_strength_percentile: number;
+  closer_strength_percentile: number;
+  peak: SegmentLocation;
+  weakest: SegmentLocation;
+  attention_cliff?: {
+    drop: number;
+    drop_ratio: number;
+    from: SegmentLocation;
+    to: SegmentLocation;
+  } | null;
+  basis?: string;
+}
+
 export interface ResearchSynthesis {
   items: ResearchSynthesisItem[];
   temporal_archetype?: {
@@ -97,6 +121,7 @@ export interface ResearchSynthesis {
     source_keys?: string[];
   } | null;
   route_hint?: string;
+  localization?: SegmentLocalization | null;
   basis?: string;
 }
 

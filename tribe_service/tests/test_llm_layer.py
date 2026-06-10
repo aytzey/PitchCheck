@@ -617,6 +617,9 @@ class TestPromptIncludesContextEvidence:
         assert "strongest predicted response" in prompt
         # Segment 1 of 4 maps to the start of the message.
         assert "Hey Jordan," in prompt
+        # Deterministic localization gives the LLM the spans directly.
+        assert "Deterministic Segment Localization" in prompt
+        assert "Attention cliff" in prompt or "Weakest predicted moment" in prompt
 
     def test_prompt_includes_platform_norms(self):
         prompt = _build_user_prompt(

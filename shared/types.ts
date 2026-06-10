@@ -98,6 +98,22 @@ export interface RobustnessReport {
   calibration_basis: string;
 }
 
+// Semantic context-fit diagnostics from the LLM (bounded by the neural band)
+export interface ContextFitFacet {
+  score: number;        // 0-100
+  note: string;
+}
+
+export interface ContextFitReport {
+  persona_pain_alignment: ContextFitFacet;
+  objection_coverage: ContextFitFacet;
+  proof_credibility: ContextFitFacet;
+  cta_ease: ContextFitFacet;
+  channel_fit: ContextFitFacet;
+  decision_driver: string;
+  top_unaddressed_objection: string;
+}
+
 // Full score report
 export interface PitchScoreReport {
   persuasion_score: number;        // 0-100 overall score
@@ -109,6 +125,7 @@ export interface PitchScoreReport {
   risks: string[];                  // 3 risks
   rewrite_suggestions: RewriteSuggestion[]; // 2-3 suggestions
   persona_summary: string;          // LLM's understanding of the persona
+  context_fit?: ContextFitReport | null; // semantic context-fit diagnostics
   fmri_output?: FmriOutput | null;  // fMRI summary from TRIBE
   persuasion_evidence?: PersuasionEvidence | null; // Neural-only compatibility metadata
   robustness?: RobustnessReport | null; // Score calibration + guardrail metadata

@@ -93,9 +93,9 @@ The final score is calibrated from these signals through five TRIBE-derived neur
 
 ### 3. Neural Output → LLM Interpretation
 
-The raw signals and prediction summary go to an LLM (Claude Sonnet via [OpenRouter](https://openrouter.ai)) along with the recipient persona and channel context. The LLM produces the verdict, narrative, strength/risk analysis, and rewrite suggestions.
+The raw signals and prediction summary go to an LLM (Claude Sonnet via [OpenRouter](https://openrouter.ai)) along with the recipient persona, channel norms for the selected platform, and a segment map that ties each temporal-trace segment to the approximate sentence of the pitch it covers. The LLM produces the verdict, narrative, strength/risk analysis, a structured context-fit read (persona pain alignment, objection coverage, proof credibility, CTA ease, channel fit), and rewrite suggestions.
 
-PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The final score is determined by TRIBE-predicted fMRI response geometry; the pitch text and persona are given to the LLM only as untrusted semantic context for interpretation and rewrite advice. Any LLM score is retained only as audit metadata and clamped to the neural band before display.
+PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The TRIBE-predicted neural prior anchors the final score; the LLM's semantic score is clamped to the neural calibration band and then blended in with a bounded, confidence- and quality-weighted contribution so persona and channel fit genuinely move the score without ever escaping the neural band. Prompt-injection text in the pitch still cannot inflate the score beyond the band clamp.
 
 Repeated TRIBE predictions are cached in-process, but OpenRouter prompt/output caps and fast-model routing are intentionally disabled; quality is preferred over latency/cost.
 
@@ -257,6 +257,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | High-quality model for interpreting neural output |
 | `OPENROUTER_REFINER_MODEL` | `OPENROUTER_MODEL` | Which model generates LLM rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
+| `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.45` | How strongly the band-clamped LLM context-fit score pulls the final score away from the pure neural prior (0 = neural-only) |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout; prompt/output caps are not applied |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |

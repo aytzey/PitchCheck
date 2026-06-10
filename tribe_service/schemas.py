@@ -142,6 +142,7 @@ class PitchScoreReport(BaseModel):
     risks: list[str]
     rewrite_suggestions: list[RewriteSuggestion]
     persona_summary: str
+    context_fit: dict[str, Any] | None = None
     fmri_output: FmriOutput | None = None
     persuasion_evidence: dict[str, Any] | None = None
     robustness: dict[str, Any] | None = None
@@ -162,5 +163,6 @@ class PitchRefineResponse(BaseModel):
     needs_clarification: bool = False
     questions: list[PitchRefineQuestion] = Field(default_factory=list, max_length=3)
     safety_notes: list[str] = Field(default_factory=list, max_length=5)
+    critic_notes: list[str] = Field(default_factory=list, max_length=5)
     persuasion_profile: dict[str, Any] | None = None
     methodology: str = "llm_semantic_refine_no_tribe_rescore"

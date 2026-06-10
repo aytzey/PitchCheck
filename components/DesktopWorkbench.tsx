@@ -20,7 +20,14 @@ import {
   type SetupStatus,
   type SetupStep,
 } from "@/lib/desktop-runtime";
-import { isPitchScoreReport, type FmriOutput, type PitchScoreReport, type Platform } from "@/shared/types";
+import {
+  isPitchScoreReport,
+  type ContextFitFacet,
+  type ContextFitReport,
+  type FmriOutput,
+  type PitchScoreReport,
+  type Platform,
+} from "@/shared/types";
 
 type Route = "workspace" | "runtime" | "setup" | "settings";
 type RuntimeKind = "local" | "vast" | "pitchserver";
@@ -598,7 +605,7 @@ export default function DesktopWorkbench() {
       return;
     }
 
-    const refineBrief = extractRefineBrief(report);
+    const refineBrief = extractRefineBrief(report, source);
     setRefining(true);
     setError(null);
     setRefineQuestions(null);
@@ -1617,6 +1624,7 @@ function ResultView({
           ))}
         </div>
       </div>
+      {report.context_fit && <ContextFitPanel fit={report.context_fit} />}
       <VariantRankPanel score={score} refinedPitch={refinedPitch} />
       {refineQuestions && <RefineQuestionsPanel questionSet={refineQuestions} />}
       <div>
@@ -1649,6 +1657,56 @@ function ResultView({
           then accept it to run a fresh TRIBE score on the revised draft.
         </p>
       </div>
+    </div>
+  );
+}
+
+function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
+  const facets = [
+    { label: "Persona pain alignment", facet: fit.persona_pain_alignment },
+    { label: "Objection coverage", facet: fit.objection_coverage },
+    { label: "Proof credibility", facet: fit.proof_credibility },
+    { label: "CTA ease", facet: fit.cta_ease },
+    { label: "Channel fit", facet: fit.channel_fit },
+  ].filter((item): item is { label: string; facet: ContextFitFacet } =>
+    Boolean(item.facet && typeof item.facet.score === "number"),
+  );
+  if (!facets.length && !fit.decision_driver && !fit.top_unaddressed_objection) return null;
+
+  return (
+    <div>
+      <HeaderLine title="Context fit" right="semantic read" />
+      <div className="pc-facet-list">
+        {facets.map((item, index) => (
+          <FacetRow
+            key={item.label}
+            facet={{ label: item.label, value: Math.round(item.facet.score), note: item.facet.note }}
+            last={index === facets.length - 1}
+          />
+        ))}
+      </div>
+      {(fit.decision_driver || fit.top_unaddressed_objection) && (
+        <div className="pc-suggestions">
+          {fit.decision_driver && (
+            <div>
+              <span className="mono">DD</span>
+              <p>
+                <strong>Decision driver: </strong>
+                {fit.decision_driver}
+              </p>
+            </div>
+          )}
+          {fit.top_unaddressed_objection && (
+            <div>
+              <span className="mono">!!</span>
+              <p>
+                <strong>Open objection: </strong>
+                {fit.top_unaddressed_objection}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2988,7 +3046,65 @@ function extractSuggestions(report: PitchScoreReport) {
     .slice(0, 5);
 }
 
-function extractRefineBrief(report: PitchScoreReport) {
+function segmentExcerptFor(source: string, segmentIndex: number, segmentCount: number, maxChars = 120) {
+  const words = source.split(/\s+/).filter(Boolean);
+  if (!words.length || segmentCount <= 0) return "";
+  const start = Math.floor((segmentIndex * words.length) / segmentCount);
+  const stop = Math.max(start + 1, Math.floor(((segmentIndex + 1) * words.length) / segmentCount));
+  const excerpt = words.slice(start, stop).join(" ").trim();
+  return excerpt.length > maxChars ? `${excerpt.slice(0, maxChars - 1).trimEnd()}…` : excerpt;
+}
+
+function extractTemporalBrief(report: PitchScoreReport, source: string) {
+  const trace = report.fmri_output?.temporal_trace;
+  if (!trace || trace.length < 3 || !source.trim()) return [];
+  const indexed = trace.map((value, index) => ({ value, index }));
+  const sorted = [...indexed].sort((left, right) => left.value - right.value);
+  const weakest = sorted[0];
+  const strongest = sorted[sorted.length - 1];
+  const lines: string[] = [];
+  const weakExcerpt = segmentExcerptFor(source, weakest.index, trace.length);
+  if (weakExcerpt) {
+    lines.push(
+      `Weakest engagement segment (${weakest.index + 1}/${trace.length}) is around: "${weakExcerpt}". Rework, tighten, or cut this part first.`,
+    );
+  }
+  const strongExcerpt = segmentExcerptFor(source, strongest.index, trace.length);
+  if (strongExcerpt && strongest.index !== weakest.index) {
+    lines.push(
+      `Strongest engagement segment (${strongest.index + 1}/${trace.length}) is around: "${strongExcerpt}". Preserve this beat; consider moving it earlier.`,
+    );
+  }
+  return lines;
+}
+
+function extractContextFitBrief(report: PitchScoreReport) {
+  const fit = report.context_fit;
+  if (!fit) return [];
+  const facets: Array<{ label: string; facet: ContextFitFacet | undefined }> = [
+    { label: "Persona pain alignment", facet: fit.persona_pain_alignment },
+    { label: "Objection coverage", facet: fit.objection_coverage },
+    { label: "Proof credibility", facet: fit.proof_credibility },
+    { label: "CTA ease", facet: fit.cta_ease },
+    { label: "Channel fit", facet: fit.channel_fit },
+  ];
+  const lines = facets
+    .filter((item): item is { label: string; facet: ContextFitFacet } =>
+      Boolean(item.facet && typeof item.facet.score === "number" && item.facet.score < 70),
+    )
+    .sort((left, right) => left.facet.score - right.facet.score)
+    .slice(0, 2)
+    .map(({ label, facet }) => `Context-fit gap - ${label} (${Math.round(facet.score)}/100)${facet.note ? `: ${facet.note}` : "."}`);
+  if (fit.top_unaddressed_objection) {
+    lines.push(`Pre-empt this objection without inventing facts: ${fit.top_unaddressed_objection}`);
+  }
+  return lines;
+}
+
+function extractRefineBrief(report: PitchScoreReport, source: string) {
+  const baseline = `Baseline persuasion score ${Math.round(report.persuasion_score)}/100 - "${report.verdict}". The rewrite must beat this baseline, not paraphrase it.`;
+  const temporal = extractTemporalBrief(report, source);
+  const contextFit = extractContextFitBrief(report);
   const rewriteGuidance = report.rewrite_suggestions
     .map((item) => {
       const before = item.before ? ` Replace or improve "${item.before}"` : "";
@@ -3008,11 +3124,14 @@ function extractRefineBrief(report: PitchScoreReport) {
       const rightWeakness = right.key === "cognitive_friction" ? right.score : 100 - right.score;
       return rightWeakness - leftWeakness;
     })
-    .slice(0, 3)
+    .slice(0, 2)
     .map((item) => `Weak neural signal - ${item.label} (${Math.round(item.score)}/100): ${neuralRepairTactic(item.key)}`);
-  const risks = report.risks.slice(0, 3).map((risk) => `Risk to fix: ${risk}`);
+  const risks = report.risks.slice(0, 2).map((risk) => `Risk to fix: ${risk}`);
 
   return [
+    baseline,
+    ...temporal,
+    ...contextFit,
     ...rewriteGuidance,
     ...weakFacets,
     ...weakSignals,

@@ -120,8 +120,15 @@ class TestValidResponseParsed:
         assert 0 <= result["persuasion_score"] <= 100
         assert result["robustness"]["llm_score"] == 78
         assert round(result["robustness"]["final_score"]) == result["persuasion_score"]
-        assert result["robustness"]["final_score"] == result["robustness"]["evidence_score"]
-        assert "final_score_neural_only" in result["robustness"]["guardrails_applied"]
+        # Final score is anchored to the neural prior but pulled toward the
+        # band-clamped semantic read, so it sits between the two.
+        evidence = result["robustness"]["evidence_score"]
+        llm = result["robustness"]["llm_score"]
+        final = result["robustness"]["final_score"]
+        assert min(evidence, llm) <= final <= max(evidence, llm)
+        assert final != evidence
+        assert "final_score_neural_anchored_semantic_blend" in result["robustness"]["guardrails_applied"]
+        assert 0 < result["robustness"]["semantic_blend_weight"] <= 1
         assert result["robustness"]["text_score"] is None
         assert result["robustness"]["prompt_injection_risk"] is None
         assert result["robustness"]["calibration_basis"].endswith("text heuristics disabled")
@@ -258,6 +265,113 @@ class TestRefinePitchMessage:
         else:
             raise AssertionError("Expected RuntimeError")
 
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_critic_pass_improves_stage_one_rewrite(self, mock_post: MagicMock):
+        stage_one = json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Stage one rewrite.",
+            "safety_notes": ["No unverified claims added"],
+        })
+        critic = json.dumps({
+            "verdict": "improved",
+            "remaining_issues_fixed": ["Tightened the CTA to one specific ask"],
+            "final_message": "Final critic-approved rewrite.",
+        })
+        mock_post.side_effect = [
+            _mock_openrouter_response(stage_one),
+            _mock_openrouter_response(critic),
+        ]
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Lower the CTA friction"],
+        )
+
+        assert result["refined_message"] == "Final critic-approved rewrite."
+        assert result["methodology"] == "llm_semantic_refine_two_pass_critic"
+        assert result["critic_notes"] == ["Tightened the CTA to one specific ask"]
+        assert mock_post.call_count == 2
+        critic_prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
+        assert "Candidate rewrite to critique" in critic_prompt
+        assert "Stage one rewrite." in critic_prompt
+        assert "Lower the CTA friction" in critic_prompt
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_critic_pass_failure_keeps_stage_one_rewrite(self, mock_post: MagicMock):
+        stage_one = json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Stage one rewrite.",
+        })
+        mock_post.side_effect = [
+            _mock_openrouter_response(stage_one),
+            httpx.ConnectError("network down"),
+        ]
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Lower the CTA friction"],
+        )
+
+        assert result["refined_message"] == "Stage one rewrite."
+        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_critic_pass_can_be_disabled(self, mock_post: MagicMock):
+        stage_one = json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Stage one rewrite.",
+        })
+        mock_post.return_value = _mock_openrouter_response(stage_one)
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+        )
+
+        assert result["refined_message"] == "Stage one rewrite."
+        assert mock_post.call_count == 1
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_refine_prompt_includes_candidate_protocol_and_channel_norms(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response("Plain rewrite without JSON.")
+
+        refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            "linkedin",
+            ["Make the opener persona-specific"],
+        )
+
+        prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
+        assert "Channel norms for this platform" in prompt
+        assert "LinkedIn DM" in prompt
+        assert "THREE candidate rewrites" in prompt
+        assert "Final self-check before answering" in prompt
+
 
 class TestMalformedJsonNeuralOnlyReport:
     """Mock OpenRouter returning broken JSON -> returns neural-only report."""
@@ -378,6 +492,105 @@ class TestPromptIncludesNeuralSignals:
             assert f"{value:.1f}" in user_content, (
                 f"Signal value {value:.1f} for {key!r} missing from prompt"
             )
+
+
+class TestPromptIncludesContextEvidence:
+    def test_prompt_maps_trace_segments_to_text_spans(self):
+        message = (
+            "Hey Jordan, saw your migration post. "
+            "I built a tool that generates dashboards from your traces. "
+            "A few production teams use it daily. "
+            "Open to a quick screen-share next week?"
+        )
+        prompt = _build_user_prompt(
+            message,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            fmri_summary=SAMPLE_SYNTHETIC_FMRI_SUMMARY,
+        )
+
+        assert "Segment map" in prompt
+        assert "weakest predicted response" in prompt
+        assert "strongest predicted response" in prompt
+        # Segment 1 of 4 maps to the start of the message.
+        assert "Hey Jordan," in prompt
+
+    def test_prompt_includes_platform_norms(self):
+        prompt = _build_user_prompt(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            "linkedin",
+            SAMPLE_NEURAL_SIGNALS,
+        )
+
+        assert "Channel Norms" in prompt
+        assert "LinkedIn DM" in prompt
+
+    def test_prompt_requests_context_fit_block(self):
+        prompt = _build_user_prompt(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+        )
+
+        assert '"context_fit"' in prompt
+        assert "persona_pain_alignment" in prompt
+        assert "top_unaddressed_objection" in prompt
+
+
+class TestContextFitNormalisation:
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_context_fit_is_validated_and_returned(self, mock_post: MagicMock):
+        response = dict(
+            VALID_LLM_RESPONSE,
+            context_fit={
+                "persona_pain_alignment": {"score": 81, "note": "Targets cost pressure directly."},
+                "objection_coverage": {"score": 40, "note": "Integration effort is ignored."},
+                "proof_credibility": {"score": 999, "note": "Score should clamp."},
+                "cta_ease": 55,
+                "channel_fit": {"score": "not-a-number", "note": "Defaults to neutral."},
+                "decision_driver": "Reliability track record",
+                "top_unaddressed_objection": "Migration effort",
+            },
+        )
+        mock_post.return_value = _mock_openrouter_response(json.dumps(response))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        fit = result["context_fit"]
+        assert fit["persona_pain_alignment"]["score"] == 81
+        assert fit["objection_coverage"]["note"] == "Integration effort is ignored."
+        assert fit["proof_credibility"]["score"] == 100
+        assert fit["cta_ease"]["score"] == 55
+        assert fit["channel_fit"]["score"] == 50
+        assert fit["decision_driver"] == "Reliability track record"
+        assert fit["top_unaddressed_objection"] == "Migration effort"
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_missing_context_fit_is_none(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        assert result["context_fit"] is None
 
 
 class TestPromptLabelsSyntheticTrace:

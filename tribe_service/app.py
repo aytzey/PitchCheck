@@ -367,6 +367,7 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             risks=llm_result.get("risks", [])[:3],
             rewrite_suggestions=rewrite_suggestions,
             persona_summary=llm_result.get("persona_summary", request.persona),
+            context_fit=llm_result.get("context_fit"),
             fmri_output=FmriOutput(**fmri_data),
             persuasion_evidence=llm_result.get("persuasion_evidence"),
             robustness=llm_result.get("robustness"),

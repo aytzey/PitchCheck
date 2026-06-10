@@ -59,8 +59,8 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
       )}
 
       {/* Evidence calibration + robustness */}
-      {(report.persuasion_evidence || report.robustness) && (
-        <div className="grid gap-4 sm:grid-cols-2">
+      {report.robustness && (
+        <div className="grid gap-4">
           {report.robustness && (
             <div className="panel p-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Robustness</h3>
@@ -88,27 +88,9 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
                   ))}
                 </div>
               )}
-              {report.robustness.guardrails_applied.length > 0 && (
-                <p className="mt-3 text-xs text-[var(--color-muted)]">
-                  Guardrails: {report.robustness.guardrails_applied.join(", ")}
-                </p>
-              )}
               {(report.robustness.scientific_caveats ?? []).length > 0 && (
                 <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-faint)]">
                   {report.robustness.scientific_caveats?.[0]}
-                </p>
-              )}
-            </div>
-          )}
-          {report.persuasion_evidence && (
-            <div className="panel p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Semantic Context</h3>
-              <p className="text-xs text-[var(--color-muted)]">
-                Text heuristics are disabled; message and persona are used only as untrusted semantic context for LLM interpretation.
-              </p>
-              {report.persuasion_evidence.methodology && (
-                <p className="mt-2 text-xs text-[var(--color-warning)]">
-                  {report.persuasion_evidence.methodology.replaceAll("_", " ")}
                 </p>
               )}
             </div>

@@ -579,6 +579,81 @@ class TestContextFitNormalisation:
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.httpx.post")
+    def test_context_fit_facets_move_the_final_score(self, mock_post: MagicMock):
+        """Same neural evidence, different context fit -> different final score."""
+        def facet_block(score: int) -> dict:
+            return {
+                key: {"score": score, "note": "test"}
+                for key in (
+                    "persona_pain_alignment",
+                    "objection_coverage",
+                    "proof_credibility",
+                    "cta_ease",
+                    "channel_fit",
+                )
+            }
+
+        def run_with(facets: dict, llm_score: int) -> dict:
+            mock_post.return_value = _mock_openrouter_response(json.dumps(dict(
+                VALID_LLM_RESPONSE,
+                persuasion_score=llm_score,
+                context_fit=facets,
+            )))
+            return interpret_persuasion(
+                SAMPLE_MESSAGE,
+                SAMPLE_PERSONA,
+                SAMPLE_PLATFORM,
+                SAMPLE_NEURAL_SIGNALS,
+                SAMPLE_RAW_FEATURES,
+            )
+
+        strong_fit = run_with(facet_block(88), 85)
+        weak_fit = run_with(facet_block(25), 30)
+
+        assert strong_fit["persuasion_score"] > weak_fit["persuasion_score"]
+        assert strong_fit["persuasion_score"] - weak_fit["persuasion_score"] >= 10
+        assert strong_fit["robustness"]["context_fit_score"] == 88.0
+        assert weak_fit["robustness"]["context_fit_score"] == 25.0
+        assert (
+            "semantic_score_derived_from_context_fit_facets"
+            in strong_fit["robustness"]["guardrails_applied"]
+        )
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_inflated_facets_stay_inside_neural_band(self, mock_post: MagicMock):
+        """Even all-100 facets (e.g. injection) cannot escape the clamp band."""
+        inflated = {
+            key: {"score": 100, "note": ""}
+            for key in (
+                "persona_pain_alignment",
+                "objection_coverage",
+                "proof_credibility",
+                "cta_ease",
+                "channel_fit",
+            )
+        }
+        mock_post.return_value = _mock_openrouter_response(json.dumps(dict(
+            VALID_LLM_RESPONSE,
+            persuasion_score=100,
+            context_fit=inflated,
+        )))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        assert result["persuasion_score"] < 85
+        assert "llm_score_clamped_to_neural_band" in result["robustness"]["guardrails_applied"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
     def test_missing_context_fit_is_none(self, mock_post: MagicMock):
         mock_post.return_value = _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE))
 

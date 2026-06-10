@@ -84,11 +84,13 @@ export interface RobustnessReport {
   evidence_score: number;
   llm_score: number | null;
   raw_llm_score?: number | null;
+  context_fit_score?: number | null;
   llm_score_adjusted?: boolean;
   llm_model?: string | null;
   final_score: number;
   confidence: number;
   score_delta: number | null;
+  semantic_blend_weight?: number;
   prompt_injection_risk: number | null;
   guardrails_applied: string[];
   warnings: string[];

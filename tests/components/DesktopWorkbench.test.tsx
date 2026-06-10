@@ -107,9 +107,23 @@ describe("DesktopWorkbench", () => {
     expect(await screen.findByText("Variant re-rank")).toBeDefined();
     expect(screen.getByRole("button", { name: /Refine draft/ })).toBeDefined();
 
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        refined_message: "Hey Jordan - tighter rewrite with one clear ask.",
+        model: "anthropic/claude-sonnet-4.6",
+        needs_clarification: false,
+        questions: [],
+      }),
+    });
     fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
 
     await waitFor(() => expect(screen.getByText("After . refined")).toBeDefined());
+    const refineCall = mockFetch.mock.calls[1];
+    expect(refineCall[0]).toBe("/api/refine");
+    const refineBody = JSON.parse(refineCall[1].body as string) as { suggestions: string[] };
+    expect(refineBody.suggestions[0]).toContain("Baseline persuasion score 76/100");
+    expect(screen.getByText("Hey Jordan - tighter rewrite with one clear ask.")).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & re-evaluate" })).toBeDefined();
   });

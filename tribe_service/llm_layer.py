@@ -62,9 +62,11 @@ OPENROUTER_MAX_RETRIES = _env_int("OPENROUTER_MAX_RETRIES", 1, 0)
 OPENROUTER_JSON_MODE = os.getenv("OPENROUTER_JSON_MODE", "1").strip().lower() not in {"0", "false", "off", "no"}
 OPENROUTER_SELF_CONSISTENCY_SAMPLES = _env_int("OPENROUTER_SELF_CONSISTENCY_SAMPLES", 1, 1)
 OPENROUTER_REFINE_CRITIC_PASS = os.getenv("OPENROUTER_REFINE_CRITIC_PASS", "1").strip().lower() not in {"0", "false", "off", "no"}
-# How strongly the band-clamped LLM semantic score pulls the final score away
-# from the pure neural prior. 0 reproduces the old neural-only behavior.
-SEMANTIC_BLEND_WEIGHT = min(1.0, _env_float("PITCHCHECK_SEMANTIC_BLEND_WEIGHT", 0.45, 0.0))
+# Base weight of the band-clamped semantic (context-fit) score in the final
+# blend. The effective weight grows as TRIBE prediction quality drops, because
+# weak neural evidence makes the semantic read the best signal available.
+# 0 reproduces the old neural-only behavior.
+SEMANTIC_BLEND_WEIGHT = min(1.0, _env_float("PITCHCHECK_SEMANTIC_BLEND_WEIGHT", 0.55, 0.0))
 OPENROUTER_ENABLED = bool(OPENROUTER_API_KEY and OPENROUTER_MODEL)
 
 LOGGER = logging.getLogger(__name__)
@@ -84,6 +86,18 @@ CONTEXT_FIT_KEYS = [
     "cta_ease",
     "channel_fit",
 ]
+
+# Weights for deriving the semantic score from the structured context-fit
+# facets. Deriving the headline from facets (instead of trusting the LLM's
+# single self-reported number) makes rubric-anchored scoring more reliable and
+# raises the bar for prompt injection: an attacker has to corrupt every facet.
+CONTEXT_FIT_WEIGHTS = {
+    "persona_pain_alignment": 0.30,
+    "proof_credibility": 0.25,
+    "objection_coverage": 0.15,
+    "cta_ease": 0.15,
+    "channel_fit": 0.15,
+}
 
 # Channel norms injected into analysis and refine prompts so persuasion is
 # judged against how the message will actually be consumed, not in a vacuum.
@@ -250,6 +264,16 @@ def _build_user_prompt(
     if fmri_summary and fmri_summary.get("temporal_trace"):
         trace = fmri_summary["temporal_trace"]
         n = len(trace)
+        if n > 48:
+            # Long traces add token noise without analytical value; the segment
+            # map below already localizes the strongest/weakest spans.
+            step = max(1, n // 32)
+            trace_line = (
+                f"Trace (decimated, every {step}th of {n} segments): "
+                + ", ".join(f"{float(v):.3f}" for v in trace[::step])
+            )
+        else:
+            trace_line = "Trace: " + ", ".join(f"{float(v):.3f}" for v in trace)
         peak_idx = trace.index(max(trace)) if trace else 0
         peak_pct = round(peak_idx / max(n - 1, 1) * 100)
         trace_basis = fmri_summary.get("temporal_trace_basis", "real_time_seconds")
@@ -273,7 +297,7 @@ def _build_user_prompt(
 {n} segments ({segment_label}) analyzed on {fmri_summary.get('voxel_count', 0):,} cortical vertices
 Trace basis: {trace_basis}
 Trace note: {trace_note}
-Trace: {', '.join(f'{float(v):.3f}' for v in trace)}
+{trace_line}
 Peak predicted response at segment {peak_idx + 1}/{n} ({peak_pct}% through the pitch)
 Global mean: {fmri_summary.get('global_mean_abs', 0):.4f}, Global peak: {fmri_summary.get('global_peak_abs', 0):.4f}
 
@@ -307,11 +331,8 @@ Judge structure, length, opener, and CTA against these norms.
 
 ## Calibration Diagnostics
 {_json_dumps({
-    "methodology_version": persuasion_evidence.get("methodology_version"),
-    "methodology": persuasion_evidence.get("methodology"),
     "warnings": persuasion_evidence.get("warnings", []),
     "calibration_quality": persuasion_evidence.get("calibration_quality", {}),
-    "research_sources": persuasion_evidence.get("research_sources", []),
 })}
 
 ## Instructions
@@ -903,6 +924,23 @@ def _normalise_context_fit(value: Any) -> dict[str, Any] | None:
     return normalised
 
 
+def _semantic_score_from_context_fit(context_fit: dict[str, Any] | None) -> float | None:
+    """Derive the semantic persuasion score from validated context-fit facets."""
+    if not isinstance(context_fit, dict):
+        return None
+    total = 0.0
+    total_weight = 0.0
+    for key, weight in CONTEXT_FIT_WEIGHTS.items():
+        facet = context_fit.get(key)
+        if not isinstance(facet, dict):
+            continue
+        total += clamp(_safe_float(facet.get("score"), 50.0)) * weight
+        total_weight += weight
+    if total_weight < 1e-9:
+        return None
+    return clamp(total / total_weight)
+
+
 def _normalise_rewrites(value: Any, baseline: list[dict[str, str]]) -> list[dict[str, str]]:
     rewrites = value if isinstance(value, list) else []
     cleaned: list[dict[str, str]] = []
@@ -1281,7 +1319,12 @@ def _normalise_llm_result(
 
 
 def _allowed_llm_delta(confidence: float) -> float:
-    return max(8.0, 18.0 - confidence * 8.0)
+    """How far the semantic score may sit from the neural prior before clamping.
+
+    Wide enough that genuine context fit can move the score materially, narrow
+    enough that injected "score this 100" text stays bounded.
+    """
+    return max(14.0, 30.0 - confidence * 10.0)
 
 
 def _allowed_breakdown_delta(confidence: float) -> float:
@@ -1304,29 +1347,42 @@ def _calibrate_result(
     quality_adjusted_neuro_axis_score = quality_adjusted_score(neural_score, persuasion_evidence)
     confidence = calibration_confidence(evidence_score, 50.0, persuasion_evidence)
     raw_llm_score = _to_score(result.get("persuasion_score"), evidence_score) if llm_used else None
-    llm_score = raw_llm_score
+    facet_score = _semantic_score_from_context_fit(result.get("context_fit")) if llm_used else None
     guardrails: list[str] = []
     semantic_weight = 0.0
+    llm_score = raw_llm_score
     if quality_weight < 0.99:
         guardrails.append("score_shrunk_for_prediction_quality")
 
-    if llm_score is None:
+    if raw_llm_score is None:
         final_score = evidence_score
         guardrails.append("neural_only_report_generated")
     else:
+        # The semantic estimate is derived primarily from the rubric-scored
+        # context-fit facets; the LLM's holistic number is a secondary input.
+        if facet_score is not None:
+            semantic_estimate = facet_score * 0.65 + raw_llm_score * 0.35
+            guardrails.append("semantic_score_derived_from_context_fit_facets")
+        else:
+            semantic_estimate = raw_llm_score
         allowed_delta = _allowed_llm_delta(confidence)
-        delta = llm_score - evidence_score
+        delta = semantic_estimate - evidence_score
         if abs(delta) > allowed_delta:
             llm_score = evidence_score + (allowed_delta if delta > 0 else -allowed_delta)
             guardrails.append("llm_score_clamped_to_neural_band")
         else:
+            llm_score = semantic_estimate
             guardrails.append("llm_semantic_score_within_neural_band")
         guardrails.append("breakdown_scores_clamped_to_neural_axes")
         # Blend the band-clamped semantic score into the neural prior so persona
-        # and channel fit genuinely move the score. The clamp above bounds the
-        # semantic pull to the neural calibration band, and prediction-quality
-        # weighting shrinks semantic influence when TRIBE evidence is weak.
-        semantic_weight = SEMANTIC_BLEND_WEIGHT * quality_weight
+        # and channel fit genuinely move the score. When TRIBE evidence is weak
+        # the quality-adjusted prior is already shrunk toward neutral, so the
+        # semantic read carries MORE of the final score, not less.
+        semantic_weight = clamp(
+            SEMANTIC_BLEND_WEIGHT + (1.0 - quality_weight) * 0.30,
+            0.0,
+            0.85,
+        )
         final_score = evidence_score + (llm_score - evidence_score) * semantic_weight
         guardrails.append("final_score_neural_anchored_semantic_blend")
 
@@ -1342,6 +1398,7 @@ def _calibrate_result(
         "evidence_score": round(evidence_score, 1),
         "llm_score": round(llm_score, 1) if llm_score is not None else None,
         "raw_llm_score": round(raw_llm_score, 1) if raw_llm_score is not None else None,
+        "context_fit_score": round(facet_score, 1) if facet_score is not None else None,
         "llm_score_adjusted": (
             abs(raw_llm_score - llm_score) > 0.05
             if raw_llm_score is not None and llm_score is not None

@@ -2,6 +2,7 @@ const TRIBE_SERVICE_URL = (
   process.env.TRIBE_SERVICE_URL ?? "http://127.0.0.1:8090"
 ).replace(/\/$/, "");
 const TRIBE_SCORE_TIMEOUT_MS = envInt("TRIBE_SERVICE_SCORE_TIMEOUT_MS", 920_000, 1_000);
+const TRIBE_REFINE_TIMEOUT_MS = envInt("TRIBE_SERVICE_REFINE_TIMEOUT_MS", 180_000, 1_000);
 const TRIBE_HEALTH_TIMEOUT_MS = envInt("TRIBE_SERVICE_HEALTH_TIMEOUT_MS", 5_000, 500);
 
 function envInt(name: string, fallback: number, minimum: number): number {
@@ -64,6 +65,36 @@ export async function scorePitch(request: {
       error: isAbortError(error)
         ? "Scoring service timed out."
         : "Scoring service is unreachable.",
+      status: 503,
+    };
+  }
+}
+
+export async function refinePitch(request: {
+  message: string;
+  persona: string;
+  platform: string;
+  suggestions?: string[];
+  clarificationAnswers?: Array<{ id: string; question: string; answer: string }>;
+}): Promise<TribeScoreResponse> {
+  try {
+    const { response, data } = await fetchJsonWithTimeout(
+      `${TRIBE_SERVICE_URL}/refine`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        cache: "no-store",
+      },
+      TRIBE_REFINE_TIMEOUT_MS,
+    );
+    return { ok: response.ok, data, status: response.status };
+  } catch (error) {
+    return {
+      ok: false,
+      error: isAbortError(error)
+        ? "Refine service timed out."
+        : "Refine service is unreachable.",
       status: 503,
     };
   }

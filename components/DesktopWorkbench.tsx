@@ -644,11 +644,49 @@ export default function DesktopWorkbench() {
           improvement: data.improvement,
         });
       } else {
+        const res = await fetch("/api/refine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: source,
+            persona: activePersona,
+            platform: medium.id,
+            suggestions: refineBrief,
+            clarificationAnswers: options?.clarificationAnswers ?? [],
+          }),
+        });
+        const data = (await res.json()) as {
+          refined_message?: string | null;
+          model?: string;
+          methodology?: string;
+          needs_clarification?: boolean;
+          questions?: unknown;
+          safety_notes?: string[];
+          error?: string;
+          detail?: string;
+        };
+        if (!res.ok) throw new Error(data.error || data.detail || "Refine failed.");
+        const questions = normaliseRefineQuestions(data.questions);
+        if (data.needs_clarification) {
+          setRefinedPitch(null);
+          if (questions.length) {
+            setRefineQuestions({
+              model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+              questions,
+              safetyNotes: data.safety_notes,
+            });
+          } else {
+            throw new Error("Refiner asked for clarification but returned no readable questions.");
+          }
+          return;
+        }
+        if (!data.refined_message) throw new Error(data.error || "Refine failed.");
         setRefinedPitch({
           before: source,
-          after: buildPreviewRewrite(source, refineBrief),
-          model: "Web preview rewrite",
+          after: data.refined_message.trim(),
+          model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
           applied: refineBrief,
+          methodology: data.methodology,
         });
       }
     } catch (caught) {
@@ -979,7 +1017,7 @@ function WorkspaceView({
   onClear: () => void;
   onConnect: () => void;
 }) {
-  const tokens = Math.ceil(message.length / 4.2);
+  const wordCount = message.split(/\s+/).filter(Boolean).length;
   const needsConnect = state === "ready" || state === "disconnected" || state === "failed";
   const needsSetup = state === "not-configured";
   const hasRefineAnswers = hasAnyRefineAnswer(refineQuestionAnswers);
@@ -993,7 +1031,7 @@ function WorkspaceView({
         <div className="pc-strip">
           <span className="label">03 / Your message</span>
           <span className="mono pc-count">
-            {message.length} chars . ~{tokens} tokens
+            {message.length} chars . {wordCount} words
           </span>
           <button className="pc-link-button" onClick={onClear} type="button">
             Clear
@@ -1105,7 +1143,6 @@ function WorkspaceView({
             <ResultView
               report={report}
               runtimeKind={runtimeKind}
-              message={message}
               audience={audience}
               openRouterModel={openRouterModel}
               refining={refining}
@@ -1127,7 +1164,7 @@ function DiffView({ refinedPitch }: { refinedPitch: RefinedPitch }) {
       <div className="pc-diff-pane">
         <div className="pc-diff-head">
           <span className="label">Before</span>
-          <span className="mono">{Math.ceil(refinedPitch.before.length / 4.2)} tokens</span>
+          <span className="mono">{refinedPitch.before.split(/\s+/).filter(Boolean).length} words</span>
         </div>
         <p>{refinedPitch.before}</p>
       </div>
@@ -1571,7 +1608,6 @@ function SettingsView({
 function ResultView({
   report,
   runtimeKind,
-  message,
   audience,
   openRouterModel,
   refining,
@@ -1581,7 +1617,6 @@ function ResultView({
 }: {
   report: PitchScoreReport;
   runtimeKind: RuntimeKind;
-  message: string;
   audience: Audience;
   openRouterModel: string;
   refining: boolean;
@@ -1604,12 +1639,10 @@ function ResultView({
       <BrainPanel
         score={score}
         verdict={report.verdict}
-        confidence={report.robustness?.confidence ?? confidenceFromScore(score)}
+        confidence={report.robustness?.confidence}
         fmri={fmri}
         signals={signals}
         runtime={runtimeKind}
-        latencyMs={0}
-        tokens={Math.ceil(message.length / 4.2)}
         model={openRouterModel || DEFAULT_OPENROUTER_MODEL}
       />
       {signals.length > 0 && <NeuralSignalsGrid signals={signals} />}
@@ -1712,28 +1745,22 @@ function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
 }
 
 function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch: RefinedPitch | null }) {
-  const rows = [
-    refinedPitch && {
-      label: "Refined candidate",
-      score,
-      note: "Pending TRIBE re-score after accept",
-      tone: "warn" as Tone,
-    },
+  const rows: RankRow[] = [
     {
       label: "Current scored draft",
       score,
       note: "Last TRIBE score",
       tone: toneFromScore(score),
     },
-    {
-      label: "Persona baseline",
-      score: Math.max(24, score - 11),
-      note: "Control copy estimate",
-      tone: toneFromScore(score - 11),
-    },
-  ]
-    .filter(isRankRow)
-    .sort((left, right) => right.score - left.score);
+  ];
+  if (refinedPitch) {
+    rows.unshift({
+      label: "Refined candidate",
+      score,
+      note: "Pending TRIBE re-score after accept",
+      tone: "warn",
+    });
+  }
 
   return (
     <div>
@@ -1853,10 +1880,6 @@ function RefineQuestionsEditorPanel({
   );
 }
 
-function isRankRow(row: RankRow | false | null): row is RankRow {
-  return Boolean(row);
-}
-
 function BrainPanel({
   score,
   verdict,
@@ -1864,18 +1887,14 @@ function BrainPanel({
   fmri,
   signals,
   runtime,
-  latencyMs,
-  tokens,
   model,
 }: {
   score: number;
   verdict: string;
-  confidence: number;
+  confidence?: number;
   fmri: FmriOutput | null | undefined;
   signals: PitchScoreReport["neural_signals"];
   runtime: RuntimeKind;
-  latencyMs: number;
-  tokens: number;
   model: string;
 }) {
   if (!fmri || !fmri.temporal_trace.length) {
@@ -1935,7 +1954,7 @@ function BrainPanel({
       <div className="pc-brain-meta mono">
         <span>MODEL {model}</span>
         <span>RUNTIME {runtime}</span>
-        <span>{latencyMs || "-"}ms . {tokens} tok</span>
+        <span>{fmri.cortical_mesh || "fsaverage5"} mesh</span>
       </div>
     </div>
   );
@@ -2024,7 +2043,7 @@ function BrainRender({ signals }: { signals: PitchScoreReport["neural_signals"] 
   );
 }
 
-function ScoreHalo({ score, confidence }: { score: number; confidence: number }) {
+function ScoreHalo({ score, confidence }: { score: number; confidence?: number }) {
   const tone = score >= 75 ? "ok" : score >= 55 ? "warn" : "err";
   return (
     <div>
@@ -2032,7 +2051,7 @@ function ScoreHalo({ score, confidence }: { score: number; confidence: number })
       <div className="pc-score-line">
         <span className={`mono tnum score-${tone}`}>{score}</span>
         <small className="mono">/100</small>
-        <em className="mono">P = {confidence.toFixed(2)}</em>
+        {typeof confidence === "number" && <em className="mono">P = {confidence.toFixed(2)}</em>}
       </div>
       <div className="pc-score-rail">
         <span style={{ left: `calc(${score}% - 1px)`, background: `var(--${tone})` }} />
@@ -2141,21 +2160,23 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
                 <b className={`mono score-${toneFromScore(axis.score)}`}>{Math.round(axis.score)}</b>
               </div>
             ))}
+            {typeof robustness.context_fit_score === "number" && (
+              <div className="pc-rank-row">
+                <span className="mono">FIT</span>
+                <strong>Context-fit evidence</strong>
+                <small>LLM rubric read of persona, proof, objections, CTA, and channel fit</small>
+                <b className={`mono score-${toneFromScore(robustness.context_fit_score)}`}>
+                  {Math.round(robustness.context_fit_score)}
+                </b>
+              </div>
+            )}
             <div className="pc-rank-row">
-              <span className="mono">TXT</span>
-              <strong>Text heuristics disabled</strong>
-              <small>Message/persona are semantic LLM context, not scoring features</small>
-              <b className="mono score-warn">off</b>
+              <span className="mono">SEM</span>
+              <strong>Semantic blend weight</strong>
+              <small>Share of the final score carried by the band-clamped context-fit read</small>
+              <b className="mono score-warn">{Math.round((robustness.semantic_blend_weight ?? 0) * 100)}%</b>
             </div>
           </>
-        )}
-        {evidence && (
-          <div className="pc-rank-row">
-            <span className="mono">SEM</span>
-            <strong>Semantic context only</strong>
-            <small>{evidence.methodology ?? "Text audit removed from calibration"}</small>
-            <b className="mono score-warn">off</b>
-          </div>
         )}
         {warnings.map((warning) => (
           <div className="pc-rank-row" key={warning}>
@@ -3175,34 +3196,9 @@ function neuralRepairTactic(key: string) {
   return "Improve this signal with concrete, audience-specific evidence.";
 }
 
-function buildPreviewRewrite(source: string, suggestions: string[]) {
-  const paragraphs = source
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const hasMetricSuggestion = suggestions.some((item) => /metric|proof|credibility|outcome/i.test(item));
-  const hasCtaSuggestion = suggestions.some((item) => /cta|time|reply|friction|schedule/i.test(item));
-
-  if (hasMetricSuggestion && paragraphs.length > 1 && !/\b\d+[%x]?\b/.test(paragraphs[1])) {
-    paragraphs[1] = `${paragraphs[1].replace(/[.!?]$/, "")}, with the outcome framed as time saved and fewer manual dashboard reviews.`;
-  }
-
-  if (hasCtaSuggestion && paragraphs.length) {
-    const lastIndex = paragraphs.length - 1;
-    paragraphs[lastIndex] = paragraphs[lastIndex]
-      .replace(/Would you be open to a 15-min call next Tuesday or Wednesday\?/i, "Could you do 15 minutes Tuesday 2pm ET or Wednesday 11am ET?")
-      .replace(/Would you be open to/i, "Could you do");
-  }
-
-  return paragraphs.join("\n\n") || source;
-}
-
 function toneFromScore(score: number): Tone {
   if (score >= 75) return "ok";
   if (score >= 60) return "warn";
   return "err";
 }
 
-function confidenceFromScore(score: number) {
-  return Math.max(0.55, Math.min(0.96, 0.62 + score / 300));
-}

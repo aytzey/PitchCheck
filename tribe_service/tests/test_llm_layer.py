@@ -354,6 +354,78 @@ class TestRefinePitchMessage:
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_deepseek_reasoning_output_is_handled(self, mock_post: MagicMock):
+        """DeepSeek-style responses with <think> blocks parse cleanly."""
+        content = (
+            "<think>The persona is cost-conscious, so the rewrite should lead "
+            "with the reliability outcome and keep one CTA.</think>\n"
+            + json.dumps({
+                "needs_clarification": False,
+                "questions": [],
+                "refined_message": "Reliability-first rewrite with one CTA.",
+                "safety_notes": [],
+            })
+        )
+        mock_post.return_value = _mock_openrouter_response(content)
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert result["refined_message"] == "Reliability-first rewrite with one CTA."
+        assert result["model"] == "deepseek/deepseek-v4-pro"
+        # DeepSeek gets a higher rewrite temperature than the default.
+        assert mock_post.call_args.kwargs["json"]["temperature"] == 0.7
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT", "high")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_reasoning_effort_is_forwarded_when_configured(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Rewrite.",
+        }))
+
+        refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert mock_post.call_args.kwargs["json"]["reasoning"] == {"effort": "high"}
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_plain_text_fallback_strips_think_blocks(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(
+            "<think>planning the rewrite</think>\nFinal rewritten pitch text."
+        )
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert result["refined_message"] == "Final rewritten pitch text."
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
     @patch("tribe_service.llm_layer.httpx.post")
     def test_refine_prompt_includes_candidate_protocol_and_channel_norms(self, mock_post: MagicMock):
@@ -738,6 +810,28 @@ class TestRobustCalibration:
         assert result["robustness"]["llm_score_adjusted"] is True
         assert result["robustness"]["neuro_axes"]["self_value"]["score"] <= 100
         assert "reverse_inference_caveat_applied" in result["robustness"]["confidence_reasons"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_think_block_wrapped_response_is_parsed(self, mock_post: MagicMock):
+        """Reasoning models that leak <think> blocks still produce a full report."""
+        mock_post.return_value = _mock_openrouter_response(
+            "<think>weighing the neural axes against the persona</think>\n"
+            + json.dumps(VALID_LLM_RESPONSE)
+        )
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert result["verdict"] == VALID_LLM_RESPONSE["verdict"]
+        assert result["robustness"]["llm_model"] == "deepseek/deepseek-v4-pro"
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")

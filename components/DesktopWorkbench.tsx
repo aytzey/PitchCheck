@@ -92,6 +92,13 @@ type RankRow = {
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
+const DEFAULT_OPENROUTER_REFINER_MODEL = "deepseek/deepseek-v4-pro";
+const SUGGESTED_OPENROUTER_MODELS = [
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4-flash",
+  "anthropic/claude-sonnet-4.6",
+  "anthropic/claude-opus-4.8",
+];
 const APP_VERSION = "0.1.11";
 const ROUTES: Route[] = ["workspace", "runtime", "setup", "settings"];
 
@@ -251,7 +258,7 @@ export default function DesktopWorkbench() {
   const [pitchServerNewPassword, setPitchServerNewPassword] = useState("");
   const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [openRouterModel, setOpenRouterModel] = useState(DEFAULT_OPENROUTER_MODEL);
-  const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_MODEL);
+  const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_REFINER_MODEL);
   const [configPath, setConfigPath] = useState<string | undefined>();
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [image, setImage] = useState(DEFAULT_IMAGE);
@@ -624,7 +631,7 @@ export default function DesktopWorkbench() {
           setRefinedPitch(null);
           if (questions.length) {
             setRefineQuestions({
-              model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+              model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
               questions,
               safetyNotes: data.safetyNotes,
             });
@@ -638,7 +645,7 @@ export default function DesktopWorkbench() {
         setRefinedPitch({
           before: source,
           after: data.refinedMessage.trim(),
-          model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+          model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
           applied: refineBrief,
           methodology: data.methodology,
           improvement: data.improvement,
@@ -671,7 +678,7 @@ export default function DesktopWorkbench() {
           setRefinedPitch(null);
           if (questions.length) {
             setRefineQuestions({
-              model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+              model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
               questions,
               safetyNotes: data.safety_notes,
             });
@@ -684,7 +691,7 @@ export default function DesktopWorkbench() {
         setRefinedPitch({
           before: source,
           after: data.refined_message.trim(),
-          model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+          model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
           applied: refineBrief,
           methodology: data.methodology,
         });
@@ -700,7 +707,6 @@ export default function DesktopWorkbench() {
     medium.id,
     message,
     openRouterApiKey,
-    openRouterModel,
     openRouterRefinerModel,
     report,
     setAppRoute,
@@ -1572,11 +1578,16 @@ function SettingsView({
             <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Stored in runtime.env" />
           </Field>
           <Field label="Evaluator model" hint="Used for score explanations and rewrite suggestions.">
-            <input value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
+            <input list="pc-model-suggestions" value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
           </Field>
-          <Field label="Refiner model" hint="Used only when generating an accepted rewrite candidate.">
-            <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
+          <Field label="Refiner model" hint="Writes the refined draft. DeepSeek V4 Pro by default.">
+            <input list="pc-model-suggestions" value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
           </Field>
+          <datalist id="pc-model-suggestions">
+            {SUGGESTED_OPENROUTER_MODELS.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
           <Field label="Runtime image" hint="Published from GitHub Actions.">
             <input value={image} onChange={(event) => setImage(event.target.value)} />
           </Field>
@@ -2434,11 +2445,16 @@ function RuntimeConfig({
         <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Saved in runtime.env" />
       </Field>
       <Field label="Evaluator model">
-        <input value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
+        <input list="pc-model-suggestions-compact" value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
       </Field>
       <Field label="Refiner model">
-        <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
+        <input list="pc-model-suggestions-compact" value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
       </Field>
+      <datalist id="pc-model-suggestions-compact">
+        {SUGGESTED_OPENROUTER_MODELS.map((model) => (
+          <option key={model} value={model} />
+        ))}
+      </datalist>
       {runtimeKind !== "pitchserver" && (
         <>
           <Field label="Minimum VRAM">

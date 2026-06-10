@@ -67,7 +67,7 @@ describe("DesktopWorkbench", () => {
       "anthropic/claude-sonnet-4.6",
     );
     expect(screen.getByLabelText<HTMLInputElement>(/Refiner model/).value).toBe(
-      "anthropic/claude-sonnet-4.6",
+      "deepseek/deepseek-v4-pro",
     );
   });
 

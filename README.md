@@ -93,7 +93,7 @@ The final score is calibrated from these signals through five TRIBE-derived neur
 
 ### 3. Neural Output → LLM Interpretation
 
-The raw signals and prediction summary go to an LLM (Claude Sonnet via [OpenRouter](https://openrouter.ai)) along with the recipient persona, channel norms for the selected platform, and a segment map that ties each temporal-trace segment to the approximate sentence of the pitch it covers. The LLM produces the verdict, narrative, strength/risk analysis, a structured context-fit read (persona pain alignment, objection coverage, proof credibility, CTA ease, channel fit), and rewrite suggestions.
+The raw signals and prediction summary go to an evaluator LLM (Claude Sonnet by default) via [OpenRouter](https://openrouter.ai), along with the recipient persona, channel norms for the selected platform, and a segment map that ties each temporal-trace segment to the approximate sentence of the pitch it covers. Rewrites are produced by a separate refiner model (DeepSeek V4 Pro by default); both are OpenRouter model ids and fully swappable, with first-class handling for reasoning models (`<think>` stripping, `reasoning.effort` hints, JSON-mode fallback). The LLM produces the verdict, narrative, strength/risk analysis, a structured context-fit read (persona pain alignment, objection coverage, proof credibility, CTA ease, channel fit), and rewrite suggestions.
 
 PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The TRIBE-predicted neural prior anchors the final score, and the semantic side is derived from the rubric-scored context-fit facets (not from a single self-reported LLM number), clamped to the neural calibration band, and blended in. When TRIBE evidence is weak, the quality-shrunk neural prior carries less of the score and the semantic read carries more — so persona and channel fit genuinely move the score while prompt-injection text stays bounded by the band clamp.
 
@@ -256,8 +256,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | High-quality model for interpreting neural output |
-| `OPENROUTER_REFINER_MODEL` | `OPENROUTER_MODEL` | Which model generates LLM rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_REFINER_MODEL` | `deepseek/deepseek-v4-pro` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
 | `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
+| `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |
 | `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout; prompt/output caps are not applied |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |

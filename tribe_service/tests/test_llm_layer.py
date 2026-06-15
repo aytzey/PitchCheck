@@ -840,12 +840,12 @@ class TestPromptLimitsRemoved:
     def test_openrouter_payload_has_no_completion_cap(self):
         payload = _openrouter_payload(
             "prompt",
-            model="anthropic/claude-sonnet-4.6",
+            model="deepseek/deepseek-v4-pro",
             temperature=0.2,
             json_mode=True,
         )
 
-        assert payload["model"] == "anthropic/claude-sonnet-4.6"
+        assert payload["model"] == "deepseek/deepseek-v4-pro"
         assert "max_tokens" not in payload
 
 

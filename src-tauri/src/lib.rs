@@ -16,7 +16,7 @@ use thiserror::Error;
 use tokio::time::sleep;
 
 const DEFAULT_IMAGE_FALLBACK: &str = "ghcr.io/aytzey/pitchcheck-tribe:latest";
-const DEFAULT_OPENROUTER_MODEL: &str = "anthropic/claude-sonnet-4.6";
+const DEFAULT_OPENROUTER_MODEL: &str = "deepseek/deepseek-v4-pro";
 const DEFAULT_OPENROUTER_REFINER_MODEL: &str = "deepseek/deepseek-v4-pro";
 const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
 const LOCAL_CONTAINER_NAME: &str = "pitchcheck-tribe-service";
@@ -1929,8 +1929,8 @@ services:
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TRIBE_ALLOW_MOCK: "0"
       OPENROUTER_API_KEY: ${{OPENROUTER_API_KEY:-}}
-      OPENROUTER_MODEL: ${{OPENROUTER_MODEL:-anthropic/claude-sonnet-4.6}}
-      OPENROUTER_REFINER_MODEL: ${{OPENROUTER_REFINER_MODEL:-anthropic/claude-sonnet-4.6}}
+      OPENROUTER_MODEL: ${{OPENROUTER_MODEL:-deepseek/deepseek-v4-pro}}
+      OPENROUTER_REFINER_MODEL: ${{OPENROUTER_REFINER_MODEL:-deepseek/deepseek-v4-pro}}
     volumes:
       - ./models:/models
       - ./logs:/logs
@@ -1987,7 +1987,10 @@ fi
 if [ -z "${{OPENROUTER_MODEL:-}}" ]; then
   OPENROUTER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_MODEL)"
 fi
-export OPENROUTER_API_KEY OPENROUTER_MODEL
+if [ -z "${{OPENROUTER_REFINER_MODEL:-}}" ]; then
+  OPENROUTER_REFINER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_REFINER_MODEL)"
+fi
+export OPENROUTER_API_KEY OPENROUTER_MODEL OPENROUTER_REFINER_MODEL
 docker compose pull tribe
 docker compose up -d --remove-orphans
 docker compose ps tribe
@@ -2672,7 +2675,7 @@ async fn create_vast_instance(
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
             })
-            .unwrap_or(DEFAULT_OPENROUTER_MODEL)),
+            .unwrap_or(DEFAULT_OPENROUTER_REFINER_MODEL)),
     );
     env.insert(
         "OPEN_BUTTON_PORT".to_string(),
@@ -3107,7 +3110,7 @@ mod tests {
         assert_eq!(parse_bool("0"), Some(false));
         assert_eq!(parse_bool("maybe"), None);
         assert_eq!(
-            unquote_env_value("\"anthropic/claude-sonnet-4.6\""),
+            unquote_env_value("\"deepseek/deepseek-v4-pro\""),
             DEFAULT_OPENROUTER_MODEL
         );
         assert_eq!(env_safe("  value\nwith\rnewline  "), "valuewithnewline");

@@ -50,7 +50,7 @@ def _env_float(name: str, default: float, minimum: float) -> float:
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 OPENROUTER_MODEL = os.getenv(
-    "OPENROUTER_MODEL", "anthropic/claude-sonnet-4.6"
+    "OPENROUTER_MODEL", "deepseek/deepseek-v4-pro"
 ).strip()
 # DeepSeek V4 Pro is the default rewrite engine: strong long-form writing and
 # reasoning at low cost via OpenRouter. Any OpenRouter model id can override it.

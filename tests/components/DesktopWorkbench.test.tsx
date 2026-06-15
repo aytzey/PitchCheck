@@ -72,7 +72,7 @@ describe("DesktopWorkbench", () => {
     expect(screen.getByText("Machine env")).toBeDefined();
     expect(screen.getByLabelText(/OpenRouter API key/)).toBeDefined();
     expect(screen.getByLabelText<HTMLInputElement>(/Evaluator model/).value).toBe(
-      "anthropic/claude-sonnet-4.6",
+      "deepseek/deepseek-v4-pro",
     );
     expect(screen.getByLabelText<HTMLInputElement>(/Refiner model/).value).toBe(
       "deepseek/deepseek-v4-pro",
@@ -121,7 +121,7 @@ describe("DesktopWorkbench", () => {
       ok: true,
       json: async () => ({
         refined_message: "Hey Jordan - tighter rewrite with one clear ask.",
-        model: "anthropic/claude-sonnet-4.6",
+        model: "deepseek/deepseek-v4-pro",
         needs_clarification: false,
         questions: [],
       }),
@@ -145,8 +145,8 @@ describe("DesktopWorkbench", () => {
       if (command === "get_app_config") {
         return {
           openRouterApiKey: "sk-test",
-          openRouterModel: "anthropic/claude-haiku-4.5",
-          openRouterRefinerModel: "anthropic/claude-haiku-4.5",
+          openRouterModel: "deepseek/deepseek-v4-pro",
+          openRouterRefinerModel: "deepseek/deepseek-v4-pro",
         };
       }
       if (command === "get_runtime_status") {
@@ -174,7 +174,7 @@ describe("DesktopWorkbench", () => {
         if (refineCalls === 1) {
           return {
             needsClarification: true,
-            model: "anthropic/claude-haiku-4.5",
+            model: "deepseek/deepseek-v4-pro",
             questions: [
               "Does Jordan's team currently use OpenTelemetry, or would adoption be a prerequisite?",
             ],
@@ -195,7 +195,7 @@ describe("DesktopWorkbench", () => {
         expect(request?.forceRewrite).toBe(false);
         return {
           refinedMessage: "Hey Jordan - since your team already has OpenTelemetry in place, I can show a dashboard from one service without new instrumentation.",
-          model: "anthropic/claude-haiku-4.5",
+          model: "deepseek/deepseek-v4-pro",
         };
       }
       throw new Error(`unexpected command ${command}`);

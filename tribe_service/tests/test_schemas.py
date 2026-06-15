@@ -71,14 +71,14 @@ def test_refine_request_accepts_suggestions_and_model_alias():
         }],
         clarificationRound=1,
         forceRewrite=True,
-        openRouterModel="anthropic/claude-sonnet-4.6",
+        openRouterModel="deepseek/deepseek-v4-pro",
     )
     assert req.platform == "email"
     assert req.suggestions == ["Make the CTA easier"]
     assert req.clarification_answers[0].answer == "No, use a screen-share proof path."
     assert req.clarification_round == 1
     assert req.force_rewrite is True
-    assert req.open_router_model == "anthropic/claude-sonnet-4.6"
+    assert req.open_router_model == "deepseek/deepseek-v4-pro"
 
 def test_refine_request_accepts_blank_clarification_answer():
     req = PitchRefineRequest(

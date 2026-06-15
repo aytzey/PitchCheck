@@ -98,7 +98,7 @@ type RankRow = {
 };
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
-const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
+const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-pro";
 const DEFAULT_OPENROUTER_REFINER_MODEL = "deepseek/deepseek-v4-pro";
 const SUGGESTED_OPENROUTER_MODELS = [
   "deepseek/deepseek-v4-pro",
@@ -3124,7 +3124,7 @@ function applyDesktopConfig(
   setters.setVastApiKey(config.vastApiKey || "");
   setters.setOpenRouterApiKey(config.openRouterApiKey || "");
   setters.setOpenRouterModel(config.openRouterModel || DEFAULT_OPENROUTER_MODEL);
-  setters.setOpenRouterRefinerModel(config.openRouterRefinerModel || config.openRouterModel || DEFAULT_OPENROUTER_MODEL);
+  setters.setOpenRouterRefinerModel(config.openRouterRefinerModel || config.openRouterModel || DEFAULT_OPENROUTER_REFINER_MODEL);
   setters.setImage(config.image || DEFAULT_IMAGE);
   setters.setMinGpuRamGb(config.minGpuRamGb ?? 16);
   setters.setMaxHourlyPrice(config.maxHourlyPrice ?? 0.45);

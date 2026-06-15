@@ -266,7 +266,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | Variable | Default | What it does |
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
-| `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | High-quality model for interpreting neural output |
+| `OPENROUTER_MODEL` | `deepseek/deepseek-v4-pro` | High-quality model for interpreting neural output |
 | `OPENROUTER_REFINER_MODEL` | `deepseek/deepseek-v4-pro` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
 | `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
 | `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |

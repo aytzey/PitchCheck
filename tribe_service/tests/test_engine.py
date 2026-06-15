@@ -1,4 +1,7 @@
 import os
+import sys
+from types import ModuleType
+
 import numpy as np
 import pytest
 
@@ -19,6 +22,7 @@ from tribe_service.engine import (
     weighted_signal,
     FEATURE_KEYS,
     PERSUASION_SIGNAL_KEYS,
+    _patch_exca_no_value_alias,
 )
 
 
@@ -56,6 +60,28 @@ class TestHelpers:
 
 
 class TestScoreText:
+    def test_patch_exca_no_value_alias_restores_legacy_path(self, monkeypatch):
+        class SentinelNoValue:
+            pass
+
+        exca = ModuleType("exca")
+        steps = ModuleType("exca.steps")
+        base = ModuleType("exca.steps.base")
+        identity = ModuleType("exca.steps.identity")
+        identity.NoValue = SentinelNoValue
+        exca.steps = steps
+        steps.base = base
+        steps.identity = identity
+
+        monkeypatch.setitem(sys.modules, "exca", exca)
+        monkeypatch.setitem(sys.modules, "exca.steps", steps)
+        monkeypatch.setitem(sys.modules, "exca.steps.base", base)
+        monkeypatch.setitem(sys.modules, "exca.steps.identity", identity)
+
+        _patch_exca_no_value_alias()
+
+        assert base.NoValue is SentinelNoValue
+
     def test_returns_ndarray(self):
         result = score_text("This is a test pitch for a product launch")
         assert isinstance(result, np.ndarray)

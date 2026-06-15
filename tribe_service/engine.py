@@ -367,6 +367,29 @@ def _patch_whisperx_runtime() -> None:
     LOGGER.info("WhisperX runtime patch applied")
 
 
+def _patch_exca_no_value_alias() -> None:
+    """Restore the old exca.steps.base.NoValue alias expected by neuralset."""
+    try:
+        import exca.steps.base as base
+    except Exception:
+        return
+
+    if hasattr(base, "NoValue"):
+        return
+
+    try:
+        from exca.steps.identity import NoValue
+    except Exception:
+        try:
+            from exca.steps.backends import NoValue
+        except Exception:
+            LOGGER.debug("Unable to locate exca NoValue sentinel for neuralset compatibility", exc_info=True)
+            return
+
+    base.NoValue = NoValue
+    LOGGER.info("exca.steps.base.NoValue compatibility alias applied")
+
+
 def _patch_neuralset_hf_text_runtime() -> None:
     """Patch neuralset's HF loader so Accelerate gets explicit memory/offload limits."""
     try:
@@ -621,6 +644,7 @@ def _load_model() -> Any:
             return _model
         # Real model loading
         try:
+            _patch_exca_no_value_alias()
             _patch_whisperx_runtime()
             _patch_neuralset_hf_text_runtime()
             from tribev2.demo_utils import TribeModel

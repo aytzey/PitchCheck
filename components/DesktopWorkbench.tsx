@@ -21,7 +21,7 @@ import {
   type SetupStep,
 } from "@/lib/desktop-runtime";
 import {
-  isPitchScoreReport,
+  normalizePitchScoreReport,
   type ContextFitFacet,
   type ContextFitReport,
   type FmriOutput,
@@ -77,6 +77,7 @@ type RefineQuestion = {
 type RefineQuestionSet = {
   model: string;
   questions: RefineQuestion[];
+  round: number;
   safetyNotes?: string[];
 };
 
@@ -85,6 +86,9 @@ type RefineClarificationAnswer = {
   question: string;
   answer: string;
 };
+
+const SKIPPED_REFINE_ANSWER = "No answer provided; proceed without inventing this fact.";
+const MAX_REFINE_CLARIFICATION_ROUNDS = 2;
 
 type RankRow = {
   label: string;
@@ -535,6 +539,7 @@ export default function DesktopWorkbench() {
   ]);
 
   const handleScore = useCallback(async (messageOverride?: string) => {
+    if (scoring || refining) return;
     const nextMessage = (typeof messageOverride === "string" ? messageOverride : message).trim();
     const nextCanScore =
       runtimeState === "connected" &&
@@ -569,10 +574,11 @@ export default function DesktopWorkbench() {
           platform: medium.id,
           openRouterModel,
         });
-        if (!isPitchScoreReport(data.report)) {
+        const report = normalizePitchScoreReport(data.report);
+        if (!report) {
           throw new Error(data.error || "Scoring service returned an invalid report.");
         }
-        setReport(data.report);
+        setReport(report);
         setRuntimeMessage("Analysis complete.");
       } else {
         const res = await fetch("/api/score", {
@@ -585,12 +591,13 @@ export default function DesktopWorkbench() {
             openRouterModel,
           }),
         });
-        const data = (await res.json()) as { report?: PitchScoreReport; error?: string };
+        const data = (await res.json()) as { report?: unknown; error?: string };
         if (!res.ok) throw new Error(data.error || "Scoring failed.");
-        if (!isPitchScoreReport(data.report)) {
+        const report = normalizePitchScoreReport(data.report);
+        if (!report) {
           throw new Error(data.error || "Scoring service returned an invalid report.");
         }
-        setReport(data.report);
+        setReport(report);
       }
     } catch (caught) {
       const next = readError(caught);
@@ -599,9 +606,15 @@ export default function DesktopWorkbench() {
     } finally {
       setScoring(false);
     }
-  }, [desktopMode, medium.id, message, openRouterModel, persona, runtimeKind, runtimeState, setAppRoute]);
+  }, [desktopMode, medium.id, message, openRouterModel, persona, refining, runtimeKind, runtimeState, scoring, setAppRoute]);
 
-  const handleRefine = useCallback(async (options?: { personaOverride?: string; clarificationAnswers?: RefineClarificationAnswer[] }) => {
+  const handleRefine = useCallback(async (options?: {
+    personaOverride?: string;
+    clarificationAnswers?: RefineClarificationAnswer[];
+    clarificationRound?: number;
+    forceRewrite?: boolean;
+  }) => {
+    if (refining || scoring) return;
     if (!report) return;
     const source = message.trim();
     const activePersona = options?.personaOverride ?? persona;
@@ -628,14 +641,31 @@ export default function DesktopWorkbench() {
           platform: medium.id,
           suggestions: refineBrief,
           clarificationAnswers: options?.clarificationAnswers ?? [],
+          clarificationRound: options?.clarificationRound ?? 0,
+          forceRewrite: options?.forceRewrite ?? false,
         });
         const questions = normaliseRefineQuestions(data.questions);
-        if (data.needsClarification) {
+        const refinedMessage = data.refinedMessage?.trim();
+        if (refinedMessage) {
+          setRefinedPitch({
+            before: source,
+            after: refinedMessage,
+            model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
+            applied: refineBrief,
+            methodology: data.methodology,
+            improvement: data.improvement,
+          });
+          return;
+        }
+        const currentRound = options?.clarificationRound ?? 0;
+        const canAskMore = !options?.forceRewrite && currentRound < MAX_REFINE_CLARIFICATION_ROUNDS;
+        if (data.needsClarification && canAskMore) {
           setRefinedPitch(null);
           if (questions.length) {
             setRefineQuestions({
               model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
               questions,
+              round: currentRound + 1,
               safetyNotes: data.safetyNotes,
             });
             setRuntimeMessage("Refiner needs a little more context before rewriting.");
@@ -644,15 +674,10 @@ export default function DesktopWorkbench() {
           }
           return;
         }
-        if (!data.refinedMessage) throw new Error(data.error || "Refine failed.");
-        setRefinedPitch({
-          before: source,
-          after: data.refinedMessage.trim(),
-          model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
-          applied: refineBrief,
-          methodology: data.methodology,
-          improvement: data.improvement,
-        });
+        if (data.needsClarification) {
+          throw new Error(data.error || "Refiner still asked for more context after the clarification limit.");
+        }
+        throw new Error(data.error || "Refine failed.");
       } else {
         const res = await fetch("/api/refine", {
           method: "POST",
@@ -663,6 +688,8 @@ export default function DesktopWorkbench() {
             platform: medium.id,
             suggestions: refineBrief,
             clarificationAnswers: options?.clarificationAnswers ?? [],
+            clarificationRound: options?.clarificationRound ?? 0,
+            forceRewrite: options?.forceRewrite ?? false,
             openRouterModel: openRouterRefinerModel || undefined,
           }),
         });
@@ -678,12 +705,26 @@ export default function DesktopWorkbench() {
         };
         if (!res.ok) throw new Error(data.error || data.detail || "Refine failed.");
         const questions = normaliseRefineQuestions(data.questions);
-        if (data.needs_clarification) {
+        const refinedMessage = data.refined_message?.trim();
+        if (refinedMessage) {
+          setRefinedPitch({
+            before: source,
+            after: refinedMessage,
+            model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
+            applied: refineBrief,
+            methodology: data.methodology,
+          });
+          return;
+        }
+        const currentRound = options?.clarificationRound ?? 0;
+        const canAskMore = !options?.forceRewrite && currentRound < MAX_REFINE_CLARIFICATION_ROUNDS;
+        if (data.needs_clarification && canAskMore) {
           setRefinedPitch(null);
           if (questions.length) {
             setRefineQuestions({
               model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
               questions,
+              round: currentRound + 1,
               safetyNotes: data.safety_notes,
             });
           } else {
@@ -691,14 +732,10 @@ export default function DesktopWorkbench() {
           }
           return;
         }
-        if (!data.refined_message) throw new Error(data.error || "Refine failed.");
-        setRefinedPitch({
-          before: source,
-          after: data.refined_message.trim(),
-          model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
-          applied: refineBrief,
-          methodology: data.methodology,
-        });
+        if (data.needs_clarification) {
+          throw new Error(data.error || "Refiner still asked for more context after the clarification limit.");
+        }
+        throw new Error(data.error || "Refine failed.");
       }
     } catch (caught) {
       setError(readError(caught));
@@ -713,28 +750,34 @@ export default function DesktopWorkbench() {
     openRouterApiKey,
     openRouterRefinerModel,
     report,
+    refining,
+    scoring,
     setAppRoute,
   ]);
 
   const handleUseRefineAnswers = useCallback(() => {
+    if (refining) return;
     if (!refineQuestions) return;
     const clarificationContext = buildRefineClarificationContext(refineQuestions, refineQuestionAnswers);
-    if (!clarificationContext) {
-      setError("Answer at least one refiner question before using the answers.");
-      return;
-    }
+    const hasAnswers = hasAnyRefineAnswer(refineQuestionAnswers);
     const nextAudience = {
       ...audience,
       context: appendRefineClarificationContext(audience.context, clarificationContext),
     };
     const nextPersona = formatPersona(nextAudience);
     const clarificationAnswers = buildRefineClarificationAnswers(refineQuestions, refineQuestionAnswers);
-    setAudience(nextAudience);
-    setRuntimeMessage("Using clarification answers and refining again...");
-    void handleRefine({ personaOverride: nextPersona, clarificationAnswers });
-  }, [audience, handleRefine, refineQuestionAnswers, refineQuestions]);
+    if (clarificationContext) setAudience(nextAudience);
+    setRuntimeMessage(hasAnswers ? "Using clarification answers and refining again..." : "Skipping unanswered context and refining safely...");
+    void handleRefine({
+      personaOverride: nextPersona,
+      clarificationAnswers,
+      clarificationRound: refineQuestions.round,
+      forceRewrite: !hasAnswers || refineQuestions.round >= MAX_REFINE_CLARIFICATION_ROUNDS,
+    });
+  }, [audience, handleRefine, refineQuestionAnswers, refineQuestions, refining]);
 
   const handleAcceptRefine = useCallback(() => {
+    if (scoring || refining) return;
     if (!refinedPitch) return;
     const nextMessage = refinedPitch.after;
     setMessage(nextMessage);
@@ -742,7 +785,7 @@ export default function DesktopWorkbench() {
     setRefineQuestions(null);
     setRefineQuestionAnswers({});
     void handleScore(nextMessage);
-  }, [handleScore, refinedPitch]);
+  }, [handleScore, refinedPitch, refining, scoring]);
 
   const handleAcceptRefineForEditing = useCallback(() => {
     if (!refinedPitch) return;
@@ -1080,7 +1123,7 @@ function WorkspaceView({
             </span>
           ) : refineQuestions ? (
             <span className="pc-keyhint">
-              <span>Answer these questions in the profile or draft, then refine again</span>
+              <span>Answer useful context, or skip and refine without invented facts</span>
             </span>
           ) : (
             <span className="pc-keyhint">
@@ -1095,10 +1138,10 @@ function WorkspaceView({
               <Button variant="ghost" onClick={onDiscardRefine}>
                 Discard
               </Button>
-              <Button variant="secondary" disabled={scoring} onClick={onAcceptRefineForEditing} icon={<Icon name="check" />}>
+              <Button variant="secondary" disabled={scoring || refining} onClick={onAcceptRefineForEditing} icon={<Icon name="check" />}>
                 Accept & continue editing
               </Button>
-              <Button variant="primary" loading={scoring} disabled={scoring} onClick={onAcceptRefine} icon={<Icon name="spark" />}>
+              <Button variant="primary" loading={scoring} disabled={scoring || refining} onClick={onAcceptRefine} icon={<Icon name="spark" />}>
                 {scoring ? "Re-evaluating..." : "Accept & re-evaluate"}
               </Button>
             </>
@@ -1111,11 +1154,11 @@ function WorkspaceView({
               <Button
                 variant="primary"
                 loading={refining}
-                disabled={refining || !hasRefineAnswers}
+                disabled={refining}
                 onClick={onUseRefineAnswers}
                 icon={<Icon name="spark" />}
               >
-                {refining ? "Refining..." : "Use answers & refine"}
+                {refining ? "Refining..." : hasRefineAnswers ? "Use answers & refine" : "Skip & refine"}
               </Button>
             </>
           )}
@@ -2000,17 +2043,17 @@ function RefineQuestionsEditorPanel({
           </div>
         )}
         <p className="pc-refine-question-hint">
-          Answers are saved into the recipient profile context for this refinement so the outgoing draft stays clean.
+          Filled answers are saved into the recipient profile context; blank answers tell the refiner not to invent that fact.
         </p>
         <div className="pc-question-actions">
           <Button
             variant="primary"
             loading={refining}
-            disabled={refining || !hasAnswers}
+            disabled={refining}
             onClick={onUseAnswers}
             icon={<Icon name="spark" />}
           >
-            {refining ? "Refining..." : "Use answers & refine"}
+            {refining ? "Refining..." : hasAnswers ? "Use answers & refine" : "Skip & refine"}
           </Button>
         </div>
       </div>
@@ -3037,7 +3080,22 @@ function FacetRow({ facet, last }: { facet: { label: string; value: number; note
 }
 
 function readError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    for (const key of ["message", "error", "details", "detail"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+    try {
+      const serialized = JSON.stringify(record);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      return "Unexpected error.";
+    }
+  }
+  return "Unexpected error.";
 }
 
 function routeFromHash(hash: string): Route {
@@ -3100,7 +3158,7 @@ function normaliseRefineQuestions(value: unknown): RefineQuestion[] {
         });
       }
     }
-    if (questions.length >= 3) break;
+    if (questions.length >= 5) break;
   }
   return questions;
 }
@@ -3126,9 +3184,9 @@ function buildRefineClarificationAnswers(questionSet: RefineQuestionSet, answers
     .map((item) => ({
       id: item.id,
       question: item.question,
-      answer: (answers[item.id] ?? "").trim(),
+      answer: (answers[item.id] ?? "").trim() || SKIPPED_REFINE_ANSWER,
     }))
-    .filter((item) => item.answer.length > 0);
+    .filter((item) => item.question.trim().length > 0);
 }
 
 function appendRefineClarificationContext(currentContext: string, clarificationContext: string) {
@@ -3376,4 +3434,3 @@ function toneFromScore(score: number): Tone {
   if (score >= 60) return "warn";
   return "err";
 }
-

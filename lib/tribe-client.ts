@@ -76,6 +76,8 @@ export async function refinePitch(request: {
   platform: string;
   suggestions?: string[];
   clarificationAnswers?: Array<{ id: string; question: string; answer: string }>;
+  clarificationRound?: number;
+  forceRewrite?: boolean;
   openRouterModel?: string;
 }): Promise<TribeScoreResponse> {
   try {

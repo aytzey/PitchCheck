@@ -186,6 +186,8 @@ class TestScore:
         def fake_refine_pitch_message(**kwargs):
             assert kwargs["suggestions"] == ["Make the CTA easier"]
             assert kwargs["clarification_answers"][0]["answer"] == "Use a screen-share proof path."
+            assert kwargs["clarification_round"] == 1
+            assert kwargs["force_rewrite"] is True
             return {
                 "refined_message": "Improved message with a lower-friction CTA.",
                 "model": "test-refiner",
@@ -205,6 +207,8 @@ class TestScore:
                 "question": "Can we name this customer?",
                 "answer": "Use a screen-share proof path.",
             }],
+            "clarificationRound": 1,
+            "forceRewrite": True,
         })
 
         assert res.status_code == 200

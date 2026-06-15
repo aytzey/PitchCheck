@@ -163,6 +163,8 @@ export async function refinePitchOnDesktop(request: {
     question: string;
     answer: string;
   }>;
+  clarificationRound?: number;
+  forceRewrite?: boolean;
 }): Promise<{
   refinedMessage?: string;
   model?: string;

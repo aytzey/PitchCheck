@@ -1210,14 +1210,20 @@ def _format_refine_suggestions(suggestions: list[str] | None) -> str:
     return "\n".join(f"{idx + 1}. {item}" for idx, item in enumerate(cleaned))
 
 
+_SKIPPED_CLARIFICATION_ANSWER = "No answer provided; proceed without inventing this fact."
+_MAX_CLARIFICATION_ROUNDS = 2
+_INITIAL_CLARIFICATION_LIMIT = 3
+_FOLLOW_UP_CLARIFICATION_LIMIT = 5
+
+
 def _format_refine_clarification_answers(clarification_answers: list[dict[str, Any]] | None) -> str:
     cleaned: list[str] = []
     for item in clarification_answers or []:
         if not isinstance(item, dict):
             continue
         question = _clean_llm_string(item.get("question"), max_len=500)
-        answer = _clean_llm_string(item.get("answer"), max_len=1000)
-        if question and answer:
+        answer = _clean_llm_string(item.get("answer"), max_len=1000) or _SKIPPED_CLARIFICATION_ANSWER
+        if question:
             cleaned.append(f"- {question}\n  Answer: {answer}")
         if len(cleaned) >= 6:
             break
@@ -1226,13 +1232,33 @@ def _format_refine_clarification_answers(clarification_answers: list[dict[str, A
     return "\n".join(cleaned)
 
 
+def _refine_allows_clarification(clarification_round: int, force_rewrite: bool) -> bool:
+    return not force_rewrite and clarification_round < _MAX_CLARIFICATION_ROUNDS
+
+
+def _refine_question_limit(clarification_round: int) -> int:
+    return _INITIAL_CLARIFICATION_LIMIT if clarification_round <= 0 else _FOLLOW_UP_CLARIFICATION_LIMIT
+
+
 def _build_refine_prompt(
     message: str,
     persona: str,
     platform: str,
     suggestions: list[str] | None,
     clarification_answers: list[dict[str, Any]] | None = None,
+    *,
+    clarification_round: int = 0,
+    force_rewrite: bool = False,
 ) -> str:
+    clarification_round = max(0, min(_MAX_CLARIFICATION_ROUNDS, int(clarification_round or 0)))
+    allow_clarification = _refine_allows_clarification(clarification_round, force_rewrite)
+    question_limit = _refine_question_limit(clarification_round)
+    clarification_instruction = (
+        f"You may ask up to {question_limit} short questions in this response only if a safe rewrite "
+        "would otherwise require invented proof, fake urgency, or fake context."
+        if allow_clarification
+        else "Do not ask any more questions. Return the best safe rewrite now."
+    )
     return f"""Platform: {platform.strip()}
 
 Channel norms for this platform:
@@ -1277,12 +1303,16 @@ Final self-check before answering:
 - The weakest items in the repair brief are visibly repaired, and the strongest part of the draft is preserved.
 
 Clarification behavior:
+- Clarification round already shown to the user: {clarification_round} of {_MAX_CLARIFICATION_ROUNDS}.
+- Force rewrite now: {str(force_rewrite).lower()}.
+- {clarification_instruction}
 - If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.
 - Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.
-- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask 1-3 short questions instead of inventing.
+- Blank or skipped answers mean the fact is unavailable; proceed without inventing it and do not ask again.
+- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask short questions instead of inventing, but only when clarification is allowed above.
 - Ask questions especially when proof, target outcome, decision criterion, likely objection, relationship level, or CTA constraints are missing.
 - If proof is missing but a proof path is enough, you may still rewrite using a pilot/demo/benchmark/screen-share path.
-- Never ask for more context just to be perfect; ask only when the rewrite would otherwise risk fake proof, fake urgency, or weak persona fit.
+- Never ask for more context just to be perfect; ask only when the rewrite would otherwise risk fake proof, fake urgency, or weak persona fit. If clarification is not allowed, produce the safest low-claim rewrite.
 
 Safety boundaries:
 - Do not create fake urgency, fake scarcity, fake social proof, invented customer names, invented metrics, shame, fear pressure, or manipulative CTAs.
@@ -1306,7 +1336,7 @@ Return only valid JSON with this exact shape:
 }}"""
 
 
-def _normalise_refine_questions(value: Any) -> list[dict[str, str]]:
+def _normalise_refine_questions(value: Any, *, limit: int = _INITIAL_CLARIFICATION_LIMIT) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
     questions: list[dict[str, str]] = []
@@ -1329,19 +1359,25 @@ def _normalise_refine_questions(value: Any) -> list[dict[str, str]]:
             "question": question,
             "why": _clean_llm_string(item.get("why"), max_len=500),
         })
-        if len(questions) >= 3:
+        if len(questions) >= limit:
             break
     return questions
 
 
-def _normalise_refine_result(parsed: dict[str, Any], selected_model: str) -> dict[str, Any]:
-    questions = _normalise_refine_questions(parsed.get("questions"))
+def _normalise_refine_result(
+    parsed: dict[str, Any],
+    selected_model: str,
+    *,
+    allow_clarification: bool = True,
+    question_limit: int = _INITIAL_CLARIFICATION_LIMIT,
+) -> dict[str, Any]:
+    questions = _normalise_refine_questions(parsed.get("questions"), limit=question_limit)
     refined_message = parsed.get("refined_message")
     if refined_message is not None:
         refined_message = _strip_code_fences(_clean_llm_string(refined_message, max_len=30000)).strip() or None
     needs_clarification = (
         bool(parsed.get("needs_clarification")) or (refined_message is None and bool(questions))
-    ) and bool(questions)
+    ) and bool(questions) and allow_clarification
     if needs_clarification:
         refined_message = None
 
@@ -1523,6 +1559,8 @@ def refine_pitch_message(
     suggestions: list[str] | None = None,
     *,
     clarification_answers: list[dict[str, Any]] | None = None,
+    clarification_round: int = 0,
+    force_rewrite: bool = False,
     openrouter_model: str | None = None,
 ) -> dict[str, Any]:
     """Rewrite a pitch, or ask targeted clarifying questions, without TRIBE re-scoring."""
@@ -1530,7 +1568,18 @@ def refine_pitch_message(
     if not _openrouter_enabled(selected_model):
         raise RuntimeError("OpenRouter API key is missing; LLM refine is unavailable.")
 
-    prompt = _build_refine_prompt(message, persona, platform, suggestions, clarification_answers)
+    clarification_round = max(0, min(_MAX_CLARIFICATION_ROUNDS, int(clarification_round or 0)))
+    allow_clarification = _refine_allows_clarification(clarification_round, force_rewrite)
+    question_limit = _refine_question_limit(clarification_round)
+    prompt = _build_refine_prompt(
+        message,
+        persona,
+        platform,
+        suggestions,
+        clarification_answers,
+        clarification_round=clarification_round,
+        force_rewrite=force_rewrite,
+    )
     try:
         content = _post_refine_chat(
             REFINE_SYSTEM_PROMPT,
@@ -1560,7 +1609,12 @@ def refine_pitch_message(
             "methodology": "llm_semantic_refine_no_tribe_rescore",
         }
 
-    result = _normalise_refine_result(parsed, selected_model)
+    result = _normalise_refine_result(
+        parsed,
+        selected_model,
+        allow_clarification=allow_clarification,
+        question_limit=question_limit,
+    )
     if not result.get("refined_message") and not result.get("questions"):
         raise RuntimeError("OpenRouter returned an empty refinement.")
     if OPENROUTER_REFINE_CRITIC_PASS and result.get("refined_message"):

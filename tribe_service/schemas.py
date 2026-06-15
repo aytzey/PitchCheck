@@ -75,6 +75,8 @@ class PitchRefineRequest(PitchScoreRequest):
         max_length=6,
         alias="clarificationAnswers",
     )
+    clarification_round: int = Field(default=0, ge=0, le=2, alias="clarificationRound")
+    force_rewrite: bool = Field(default=False, alias="forceRewrite")
 
 
 class PitchRefineClarificationAnswer(BaseModel):
@@ -82,7 +84,7 @@ class PitchRefineClarificationAnswer(BaseModel):
 
     id: str = Field(default="", max_length=80)
     question: str = Field(default="", max_length=500)
-    answer: str = Field(..., min_length=1, max_length=1000)
+    answer: str = Field(default="", max_length=1000)
 
 
 class AuthLoginRequest(BaseModel):
@@ -170,7 +172,7 @@ class PitchRefineResponse(BaseModel):
     model: str
     refined_message: str | None = None
     needs_clarification: bool = False
-    questions: list[PitchRefineQuestion] = Field(default_factory=list, max_length=3)
+    questions: list[PitchRefineQuestion] = Field(default_factory=list, max_length=5)
     safety_notes: list[str] = Field(default_factory=list, max_length=5)
     critic_notes: list[str] = Field(default_factory=list, max_length=5)
     persuasion_profile: dict[str, Any] | None = None

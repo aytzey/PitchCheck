@@ -69,8 +69,13 @@ function sanitizeClarificationAnswers(
       question: typeof item.question === "string" ? item.question.slice(0, 500) : "",
       answer: typeof item.answer === "string" ? item.answer.trim().slice(0, 1000) : "",
     }))
-    .filter((item) => item.answer.length > 0)
+    .filter((item) => item.question.trim().length > 0)
     .slice(0, 6);
+}
+
+function sanitizeClarificationRound(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(2, Math.max(0, Math.trunc(value)));
 }
 
 export async function POST(request: Request) {
@@ -139,6 +144,8 @@ export async function POST(request: Request) {
       platform: validPlatform,
       suggestions: sanitizeSuggestions(body.suggestions),
       clarificationAnswers: sanitizeClarificationAnswers(body.clarificationAnswers),
+      clarificationRound: sanitizeClarificationRound(body.clarificationRound),
+      forceRewrite: body.forceRewrite === true,
       openRouterModel: sanitizedOpenRouterModel,
     });
 

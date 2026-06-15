@@ -69,12 +69,28 @@ def test_refine_request_accepts_suggestions_and_model_alias():
             "question": "Can we name this customer?",
             "answer": "No, use a screen-share proof path.",
         }],
+        clarificationRound=1,
+        forceRewrite=True,
         openRouterModel="anthropic/claude-sonnet-4.6",
     )
     assert req.platform == "email"
     assert req.suggestions == ["Make the CTA easier"]
     assert req.clarification_answers[0].answer == "No, use a screen-share proof path."
+    assert req.clarification_round == 1
+    assert req.force_rewrite is True
     assert req.open_router_model == "anthropic/claude-sonnet-4.6"
+
+def test_refine_request_accepts_blank_clarification_answer():
+    req = PitchRefineRequest(
+        message="Valid message here",
+        persona="Valid persona",
+        clarificationAnswers=[{
+            "id": "proof",
+            "question": "Which proof can we mention?",
+            "answer": "",
+        }],
+    )
+    assert req.clarification_answers[0].answer == ""
 
 def test_refine_response_defaults_to_llm_methodology():
     response = PitchRefineResponse(refined_message="Better pitch", model="test-model")

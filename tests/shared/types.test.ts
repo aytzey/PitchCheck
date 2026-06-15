@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPitchScoreReport, platformValues } from "@/shared/types";
+import { isPitchScoreReport, normalizePitchScoreReport, platformValues } from "@/shared/types";
 import { BREAKDOWN_KEYS, NEURAL_SIGNAL_KEYS, PLATFORMS } from "@/shared/constants";
 
 describe("shared/types", () => {
@@ -44,6 +44,52 @@ describe("shared/types", () => {
       platform: "email",
       scored_at: new Date().toISOString(),
     })).toBe(false);
+  });
+
+  it("normalizePitchScoreReport repairs benign runtime drift", () => {
+    const report = normalizePitchScoreReport({
+      persuasion_score: "87.4",
+      verdict: "  Strong fit  ",
+      narrative: "",
+      breakdown: [
+        { key: "clarity", label: "Clarity", score: "105", explanation: "  Direct and readable.  " },
+        { key: "broken", label: "Broken", score: "not-a-score", explanation: "drop me" },
+      ],
+      neural_signals: [
+        { key: "attention_capture", label: "Attention Capture", score: "71", direction: "UP" },
+      ],
+      strengths: ["  Clear trigger  ", "", 42, "Specific CTA"],
+      risks: ["  Could add proof  "],
+      rewrite_suggestions: [
+        { title: "", before: "old", after: "new", why: "clearer" },
+        { title: "empty" },
+      ],
+      persona_summary: "",
+      top_moves: [{ priority: "1", title: "Open stronger", do: "Lead with the migration.", because: "Attention is weak." }],
+      platform: "LinkedIn",
+      scored_at: "not-a-date",
+      fmri_output: { segments: "bad" },
+    });
+
+    expect(report).not.toBeNull();
+    expect(report?.persuasion_score).toBe(87);
+    expect(report?.verdict).toBe("Strong fit");
+    expect(report?.narrative).toBe("No narrative provided.");
+    expect(report?.breakdown).toEqual([
+      { key: "clarity", label: "Clarity", score: 100, explanation: "Direct and readable." },
+    ]);
+    expect(report?.neural_signals[0]).toEqual({
+      key: "attention_capture",
+      label: "Attention Capture",
+      score: 71,
+      direction: "up",
+    });
+    expect(report?.strengths).toEqual(["Clear trigger", "Specific CTA"]);
+    expect(report?.rewrite_suggestions[0].title).toBe("Suggestion 1");
+    expect(report?.persona_summary).toBe("Persona not summarized.");
+    expect(report?.top_moves?.[0].title).toBe("Open stronger");
+    expect(report?.platform).toBe("linkedin");
+    expect(report?.fmri_output).toBeNull();
   });
 
   it("BREAKDOWN_KEYS has 5 entries", () => {

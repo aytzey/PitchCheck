@@ -234,6 +234,39 @@ class TestRefinePitchMessage:
         assert "do not ask the same or equivalent question again" in request_body["messages"][1]["content"]
         assert "Do not invent talk/post topics" in request_body["messages"][1]["content"]
         assert "do not add a \"from X to Y\" baseline" in request_body["messages"][1]["content"]
+        assert "Clarification round already shown to the user: 0 of 2" in request_body["messages"][1]["content"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_refine_pitch_message_can_force_rewrite_after_blank_answers(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Safe low-claim rewrite.",
+            "safety_notes": ["No unverified claims added"],
+        }))
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Add proof safely"],
+            clarification_answers=[{
+                "id": "proof",
+                "question": "Which proof can we mention?",
+                "answer": "",
+            }],
+            clarification_round=1,
+            force_rewrite=True,
+        )
+
+        assert result["refined_message"] == "Safe low-claim rewrite."
+        prompt = mock_post.call_args_list[0].kwargs["json"]["messages"][1]["content"]
+        assert "No answer provided; proceed without inventing this fact." in prompt
+        assert "Force rewrite now: true" in prompt
+        assert "Do not ask any more questions. Return the best safe rewrite now." in prompt
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")

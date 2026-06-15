@@ -181,9 +181,18 @@ describe("DesktopWorkbench", () => {
             safetyNotes: ["No invented metrics, timelines, or credentials will be added."],
           };
         }
-        const request = (args as { request?: { persona?: string; clarificationAnswers?: Array<{ answer: string }> } } | undefined)?.request;
+        const request = (args as {
+          request?: {
+            persona?: string;
+            clarificationAnswers?: Array<{ answer: string }>;
+            clarificationRound?: number;
+            forceRewrite?: boolean;
+          };
+        } | undefined)?.request;
         expect(request?.persona).toContain("Yes, they already use OpenTelemetry.");
         expect(request?.clarificationAnswers?.[0]?.answer).toBe("Yes, they already use OpenTelemetry.");
+        expect(request?.clarificationRound).toBe(1);
+        expect(request?.forceRewrite).toBe(false);
         return {
           refinedMessage: "Hey Jordan - since your team already has OpenTelemetry in place, I can show a dashboard from one service without new instrumentation.",
           model: "anthropic/claude-haiku-4.5",
@@ -202,7 +211,7 @@ describe("DesktopWorkbench", () => {
     expect(await screen.findByText("Refiner needs context")).toBeDefined();
     expect(screen.getAllByText(/Does Jordan's team currently use OpenTelemetry/).length).toBeGreaterThan(0);
     expect(screen.queryByText("After . refined")).toBeNull();
-    expect((screen.getAllByRole("button", { name: /Use answers & refine/ })[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getAllByRole("button", { name: /Skip & refine/ })[0] as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.change(screen.getByLabelText("Answer"), {
       target: { value: "Yes, they already use OpenTelemetry." },

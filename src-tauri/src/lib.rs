@@ -40,6 +40,9 @@ const OCI_MANIFEST_ACCEPT: &str =
 const TRIBE_SCORE_TIMEOUT_SECONDS: u64 = 900;
 const TRIBE_CLIENT_SCORE_TIMEOUT_SECONDS: u64 = TRIBE_SCORE_TIMEOUT_SECONDS + 30;
 const TRIBE_IDLE_UNLOAD_SECONDS: u64 = 600;
+const SKIPPED_CLARIFICATION_ANSWER: &str =
+    "No answer provided; proceed without inventing this fact.";
+const MAX_CLARIFICATION_ROUNDS: u8 = 2;
 
 #[derive(Debug, Error)]
 enum RuntimeError {
@@ -161,6 +164,10 @@ pub struct RefineRequest {
     suggestions: Vec<String>,
     #[serde(default, rename = "clarificationAnswers")]
     clarification_answers: Vec<RefineClarificationAnswer>,
+    #[serde(default, rename = "clarificationRound")]
+    clarification_round: u8,
+    #[serde(default, rename = "forceRewrite")]
+    force_rewrite: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -649,6 +656,8 @@ async fn refine_pitch(
                         "platform": request.platform.trim(),
                         "suggestions": request.suggestions.clone(),
                         "clarification_answers": request.clarification_answers.clone(),
+                        "clarificationRound": request.clarification_round,
+                        "forceRewrite": request.force_rewrite,
                         "openRouterModel": model.clone(),
                     });
                     let mut builder = state
@@ -747,6 +756,17 @@ async fn refine_pitch(
             })?;
         let suggestions = format_refine_suggestions(&request.suggestions);
         let clarification_answers = format_refine_clarification_answers(&request.clarification_answers);
+        let clarification_round = request.clarification_round.min(MAX_CLARIFICATION_ROUNDS);
+        let allow_clarification =
+            !request.force_rewrite && clarification_round < MAX_CLARIFICATION_ROUNDS;
+        let question_limit = if clarification_round == 0 { 3 } else { 5 };
+        let clarification_instruction = if allow_clarification {
+            format!(
+                "You may ask up to {question_limit} short questions in this response only if a safe rewrite would otherwise require invented proof, fake urgency, or fake context."
+            )
+        } else {
+            "Do not ask any more questions. Return the best safe rewrite now.".to_string()
+        };
         let prompt = format!(
             concat!(
                 "Platform: {platform}\n",
@@ -784,11 +804,16 @@ async fn refine_pitch(
                 "- Same language as the draft. Every sentence earns its place. Exactly one CTA, answerable with minimal effort.\n",
                 "- The weakest items in the repair brief are visibly repaired and the strongest part of the draft is preserved.\n\n",
                 "Clarification behavior:\n",
+                "- Clarification round already shown to the user: {clarification_round} of 2.\n",
+                "- Force rewrite now: {force_rewrite}.\n",
+                "- {clarification_instruction}\n",
                 "- If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.\n",
                 "- Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.\n",
-                "- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask 1-3 short questions instead of inventing.\n",
+                "- Blank or skipped answers mean the fact is unavailable; proceed without inventing it and do not ask again.\n",
+                "- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask short questions instead of inventing, but only when clarification is allowed above.\n",
                 "- Ask questions especially when proof, target outcome, decision criterion, likely objection, relationship level, or CTA constraints are missing.\n",
-                "- If proof is missing but a proof path is enough, rewrite using a pilot, demo, benchmark, screen-share, or sample-output path.\n\n",
+                "- If proof is missing but a proof path is enough, rewrite using a pilot, demo, benchmark, screen-share, or sample-output path.\n",
+                "- If clarification is not allowed, produce the safest low-claim rewrite.\n\n",
                 "Return only JSON with this shape:\n",
                 "{{\"needs_clarification\":false,\"questions\":[],\"refined_message\":\"rewritten pitch or null\",\"safety_notes\":[\"No unverified claims added\"],\"persuasion_profile\":{{\"target_values\":[],\"likely_objections\":[],\"proof_threshold\":\"unknown\",\"route\":\"central|peripheral|mixed\",\"cta_style\":\"low-friction proof-first\"}}}}"
             ),
@@ -797,6 +822,9 @@ async fn refine_pitch(
             message = request.message.trim(),
             clarification_answers = clarification_answers,
             suggestions = suggestions,
+            clarification_round = clarification_round,
+            force_rewrite = request.force_rewrite,
+            clarification_instruction = clarification_instruction,
         );
         let response = state
             .client
@@ -1176,9 +1204,14 @@ fn format_refine_clarification_answers(answers: &[RefineClarificationAnswer]) ->
         .filter_map(|item| {
             let question = item.question.trim();
             let answer = item.answer.trim();
-            if question.is_empty() || answer.is_empty() {
+            if question.is_empty() {
                 None
             } else {
+                let answer = if answer.is_empty() {
+                    SKIPPED_CLARIFICATION_ANSWER
+                } else {
+                    answer
+                };
                 Some(format!("- {question}\n  Answer: {answer}"))
             }
         })

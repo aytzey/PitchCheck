@@ -23,6 +23,32 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
         )}
       </div>
 
+      {/* Top moves — the 1-3 highest-leverage changes */}
+      {(report.top_moves ?? []).length > 0 && (
+        <div className="panel p-6 space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-pitch)]">Top Moves</h3>
+          <ol className="space-y-3">
+            {(report.top_moves ?? []).map((move, index) => (
+              <li key={`${move.title}-${index}`} className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--color-pitch-faint)] text-xs font-bold text-[var(--color-pitch)]">
+                  {move.priority || index + 1}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-ink)]">{move.title}</p>
+                  <p className="text-sm text-[var(--color-muted)]">{move.do}</p>
+                  {(move.because || move.principle) && (
+                    <p className="mt-0.5 text-xs text-[var(--color-faint)]">
+                      {move.because}
+                      {move.principle ? ` — ${move.principle}` : ""}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {/* Breakdown */}
       {report.breakdown.length > 0 && (
         <div className="panel p-6 space-y-4">
@@ -59,8 +85,8 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
       )}
 
       {/* Evidence calibration + robustness */}
-      {(report.persuasion_evidence || report.robustness) && (
-        <div className="grid gap-4 sm:grid-cols-2">
+      {report.robustness && (
+        <div className="grid gap-4">
           {report.robustness && (
             <div className="panel p-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Robustness</h3>
@@ -88,11 +114,6 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
                   ))}
                 </div>
               )}
-              {report.robustness.guardrails_applied.length > 0 && (
-                <p className="mt-3 text-xs text-[var(--color-muted)]">
-                  Guardrails: {report.robustness.guardrails_applied.join(", ")}
-                </p>
-              )}
               {(report.robustness.scientific_caveats ?? []).length > 0 && (
                 <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-faint)]">
                   {report.robustness.scientific_caveats?.[0]}
@@ -100,18 +121,47 @@ export default function ScoreDisplay({ report }: { report: PitchScoreReport }) {
               )}
             </div>
           )}
-          {report.persuasion_evidence && (
-            <div className="panel p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)] mb-2">Semantic Context</h3>
-              <p className="text-xs text-[var(--color-muted)]">
-                Text heuristics are disabled; message and persona are used only as untrusted semantic context for LLM interpretation.
-              </p>
-              {report.persuasion_evidence.methodology && (
-                <p className="mt-2 text-xs text-[var(--color-warning)]">
-                  {report.persuasion_evidence.methodology.replaceAll("_", " ")}
-                </p>
-              )}
-            </div>
+        </div>
+      )}
+
+      {/* Context Fit (LLM semantic read) */}
+      {report.context_fit && (
+        <div className="panel p-6 space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">Context Fit</h3>
+          <div className="space-y-2">
+            {([
+              ["Persona pain alignment", report.context_fit.persona_pain_alignment],
+              ["Objection coverage", report.context_fit.objection_coverage],
+              ["Proof credibility", report.context_fit.proof_credibility],
+              ["CTA ease", report.context_fit.cta_ease],
+              ["Channel fit", report.context_fit.channel_fit],
+            ] as const).map(([label, facet]) =>
+              facet && typeof facet.score === "number" ? (
+                <div key={label}>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="font-medium text-[var(--color-ink)]">{label}</span>
+                    <span className="font-mono text-[var(--color-muted)]">{Math.round(facet.score)}</span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-[var(--color-line)]">
+                    <div
+                      className="h-1.5 rounded-full bg-[var(--color-pitch)]"
+                      style={{ width: `${Math.max(4, Math.min(100, facet.score))}%` }}
+                    />
+                  </div>
+                  {facet.note && <p className="mt-0.5 text-[10px] text-[var(--color-faint)]">{facet.note}</p>}
+                </div>
+              ) : null,
+            )}
+          </div>
+          {report.context_fit.decision_driver && (
+            <p className="text-xs text-[var(--color-muted)]">
+              <span className="font-semibold text-[var(--color-ink)]">Decision driver:</span> {report.context_fit.decision_driver}
+            </p>
+          )}
+          {report.context_fit.top_unaddressed_objection && (
+            <p className="text-xs text-[var(--color-warning)]">
+              <span className="font-semibold">Open objection:</span> {report.context_fit.top_unaddressed_objection}
+            </p>
           )}
         </div>
       )}

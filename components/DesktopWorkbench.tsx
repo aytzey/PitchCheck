@@ -20,7 +20,17 @@ import {
   type SetupStatus,
   type SetupStep,
 } from "@/lib/desktop-runtime";
-import { isPitchScoreReport, type FmriOutput, type PitchScoreReport, type Platform } from "@/shared/types";
+import {
+  isPitchScoreReport,
+  type ContextFitFacet,
+  type ContextFitReport,
+  type FmriOutput,
+  type PitchScoreReport,
+  type Platform,
+  type ResearchSynthesis,
+  type SegmentLocalization,
+  type TopMove,
+} from "@/shared/types";
 
 type Route = "workspace" | "runtime" | "setup" | "settings";
 type RuntimeKind = "local" | "vast" | "pitchserver";
@@ -85,6 +95,13 @@ type RankRow = {
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
+const DEFAULT_OPENROUTER_REFINER_MODEL = "deepseek/deepseek-v4-pro";
+const SUGGESTED_OPENROUTER_MODELS = [
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4-flash",
+  "anthropic/claude-sonnet-4.6",
+  "anthropic/claude-opus-4.8",
+];
 const APP_VERSION = "0.1.11";
 const ROUTES: Route[] = ["workspace", "runtime", "setup", "settings"];
 
@@ -244,7 +261,7 @@ export default function DesktopWorkbench() {
   const [pitchServerNewPassword, setPitchServerNewPassword] = useState("");
   const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [openRouterModel, setOpenRouterModel] = useState(DEFAULT_OPENROUTER_MODEL);
-  const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_MODEL);
+  const [openRouterRefinerModel, setOpenRouterRefinerModel] = useState(DEFAULT_OPENROUTER_REFINER_MODEL);
   const [configPath, setConfigPath] = useState<string | undefined>();
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [image, setImage] = useState(DEFAULT_IMAGE);
@@ -598,7 +615,7 @@ export default function DesktopWorkbench() {
       return;
     }
 
-    const refineBrief = extractRefineBrief(report);
+    const refineBrief = extractRefineBrief(report, source);
     setRefining(true);
     setError(null);
     setRefineQuestions(null);
@@ -617,7 +634,7 @@ export default function DesktopWorkbench() {
           setRefinedPitch(null);
           if (questions.length) {
             setRefineQuestions({
-              model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+              model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
               questions,
               safetyNotes: data.safetyNotes,
             });
@@ -631,17 +648,56 @@ export default function DesktopWorkbench() {
         setRefinedPitch({
           before: source,
           after: data.refinedMessage.trim(),
-          model: data.model || openRouterRefinerModel || openRouterModel || DEFAULT_OPENROUTER_MODEL,
+          model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
           applied: refineBrief,
           methodology: data.methodology,
           improvement: data.improvement,
         });
       } else {
+        const res = await fetch("/api/refine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: source,
+            persona: activePersona,
+            platform: medium.id,
+            suggestions: refineBrief,
+            clarificationAnswers: options?.clarificationAnswers ?? [],
+            openRouterModel: openRouterRefinerModel || undefined,
+          }),
+        });
+        const data = (await res.json()) as {
+          refined_message?: string | null;
+          model?: string;
+          methodology?: string;
+          needs_clarification?: boolean;
+          questions?: unknown;
+          safety_notes?: string[];
+          error?: string;
+          detail?: string;
+        };
+        if (!res.ok) throw new Error(data.error || data.detail || "Refine failed.");
+        const questions = normaliseRefineQuestions(data.questions);
+        if (data.needs_clarification) {
+          setRefinedPitch(null);
+          if (questions.length) {
+            setRefineQuestions({
+              model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
+              questions,
+              safetyNotes: data.safety_notes,
+            });
+          } else {
+            throw new Error("Refiner asked for clarification but returned no readable questions.");
+          }
+          return;
+        }
+        if (!data.refined_message) throw new Error(data.error || "Refine failed.");
         setRefinedPitch({
           before: source,
-          after: buildPreviewRewrite(source, refineBrief),
-          model: "Web preview rewrite",
+          after: data.refined_message.trim(),
+          model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
           applied: refineBrief,
+          methodology: data.methodology,
         });
       }
     } catch (caught) {
@@ -655,7 +711,6 @@ export default function DesktopWorkbench() {
     medium.id,
     message,
     openRouterApiKey,
-    openRouterModel,
     openRouterRefinerModel,
     report,
     setAppRoute,
@@ -972,7 +1027,7 @@ function WorkspaceView({
   onClear: () => void;
   onConnect: () => void;
 }) {
-  const tokens = Math.ceil(message.length / 4.2);
+  const wordCount = message.split(/\s+/).filter(Boolean).length;
   const needsConnect = state === "ready" || state === "disconnected" || state === "failed";
   const needsSetup = state === "not-configured";
   const hasRefineAnswers = hasAnyRefineAnswer(refineQuestionAnswers);
@@ -986,7 +1041,7 @@ function WorkspaceView({
         <div className="pc-strip">
           <span className="label">03 / Your message</span>
           <span className="mono pc-count">
-            {message.length} chars . ~{tokens} tokens
+            {message.length} chars . {wordCount} words
           </span>
           <button className="pc-link-button" onClick={onClear} type="button">
             Clear
@@ -1098,7 +1153,6 @@ function WorkspaceView({
             <ResultView
               report={report}
               runtimeKind={runtimeKind}
-              message={message}
               audience={audience}
               openRouterModel={openRouterModel}
               refining={refining}
@@ -1120,7 +1174,7 @@ function DiffView({ refinedPitch }: { refinedPitch: RefinedPitch }) {
       <div className="pc-diff-pane">
         <div className="pc-diff-head">
           <span className="label">Before</span>
-          <span className="mono">{Math.ceil(refinedPitch.before.length / 4.2)} tokens</span>
+          <span className="mono">{refinedPitch.before.split(/\s+/).filter(Boolean).length} words</span>
         </div>
         <p>{refinedPitch.before}</p>
       </div>
@@ -1528,11 +1582,16 @@ function SettingsView({
             <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Stored in runtime.env" />
           </Field>
           <Field label="Evaluator model" hint="Used for score explanations and rewrite suggestions.">
-            <input value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
+            <input list="pc-model-suggestions" value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
           </Field>
-          <Field label="Refiner model" hint="Used only when generating an accepted rewrite candidate.">
-            <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
+          <Field label="Refiner model" hint="Writes the refined draft. DeepSeek V4 Pro by default.">
+            <input list="pc-model-suggestions" value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
           </Field>
+          <datalist id="pc-model-suggestions">
+            {SUGGESTED_OPENROUTER_MODELS.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
           <Field label="Runtime image" hint="Published from GitHub Actions.">
             <input value={image} onChange={(event) => setImage(event.target.value)} />
           </Field>
@@ -1564,7 +1623,6 @@ function SettingsView({
 function ResultView({
   report,
   runtimeKind,
-  message,
   audience,
   openRouterModel,
   refining,
@@ -1574,7 +1632,6 @@ function ResultView({
 }: {
   report: PitchScoreReport;
   runtimeKind: RuntimeKind;
-  message: string;
   audience: Audience;
   openRouterModel: string;
   refining: boolean;
@@ -1597,46 +1654,18 @@ function ResultView({
       <BrainPanel
         score={score}
         verdict={report.verdict}
-        confidence={report.robustness?.confidence ?? confidenceFromScore(score)}
+        confidence={report.robustness?.confidence}
         fmri={fmri}
         signals={signals}
         runtime={runtimeKind}
-        latencyMs={0}
-        tokens={Math.ceil(message.length / 4.2)}
         model={openRouterModel || DEFAULT_OPENROUTER_MODEL}
       />
-      {signals.length > 0 && <NeuralSignalsGrid signals={signals} />}
-      {(report.robustness || report.persuasion_evidence) && (
-        <RobustnessPanel report={report} />
+      {report.narrative && (
+        <div className="pc-narrative">
+          <p>{report.narrative}</p>
+        </div>
       )}
-      <div>
-        <HeaderLine title="Writing facets" right="LLM interpreted" />
-        <div className="pc-facet-list">
-          {breakdown.map((facet, index) => (
-            <FacetRow key={facet.label} facet={facet} last={index === breakdown.length - 1} />
-          ))}
-        </div>
-      </div>
-      <VariantRankPanel score={score} refinedPitch={refinedPitch} />
-      {refineQuestions && <RefineQuestionsPanel questionSet={refineQuestions} />}
-      <div>
-        <HeaderLine title="Suggestions" right={`${suggestions.length} fixes`} />
-        <div className="pc-suggestions">
-          {suggestions.length ? (
-            suggestions.map((suggestion, index) => (
-              <div key={index}>
-                <span className="mono">{String(index + 1).padStart(2, "0")}</span>
-                <p>{suggestion}</p>
-              </div>
-            ))
-          ) : (
-            <div>
-              <span className="mono">00</span>
-              <p>{report.narrative}</p>
-            </div>
-          )}
-        </div>
-      </div>
+      <TopMovesPanel moves={report.top_moves ?? []} />
       <div className="pc-refine">
         <div className="pc-refine-head">
           <span className="label">Auto-refine</span>
@@ -1645,37 +1674,231 @@ function ResultView({
           </Button>
         </div>
         <p>
-          Rewrite this for <strong>{audience.name || "recipient"}</strong> with the strongest suggestions, review the diff,
+          Rewrite this for <strong>{audience.name || "recipient"}</strong> applying the top moves, review the diff,
           then accept it to run a fresh TRIBE score on the revised draft.
         </p>
+      </div>
+      {refineQuestions && <RefineQuestionsPanel questionSet={refineQuestions} />}
+      <details className="pc-deepdive">
+        <summary>
+          <span className="label">Deep dive</span>
+          <span className="mono">facets . context fit . neural evidence</span>
+        </summary>
+        <div className="pc-deepdive-body">
+          <div>
+            <HeaderLine title="Writing facets" right="LLM interpreted" />
+            <div className="pc-facet-list">
+              {breakdown.map((facet, index) => (
+                <FacetRow key={facet.label} facet={facet} last={index === breakdown.length - 1} />
+              ))}
+            </div>
+          </div>
+          {report.context_fit && <ContextFitPanel fit={report.context_fit} />}
+          {report.robustness?.research_synthesis?.localization && (
+            <SegmentLocalizationPanel localization={report.robustness.research_synthesis.localization} />
+          )}
+          {report.robustness?.research_synthesis && (
+            <ResearchSynthesisPanel synthesis={report.robustness.research_synthesis} />
+          )}
+          {suggestions.length > 0 && (
+            <div>
+              <HeaderLine title="More suggestions" right={`${suggestions.length} fixes`} />
+              <div className="pc-suggestions">
+                {suggestions.map((suggestion, index) => (
+                  <div key={index}>
+                    <span className="mono">{String(index + 1).padStart(2, "0")}</span>
+                    <p>{suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {signals.length > 0 && <NeuralSignalsGrid signals={signals} />}
+          {(report.robustness || report.persuasion_evidence) && (
+            <RobustnessPanel report={report} />
+          )}
+          <VariantRankPanel score={score} refinedPitch={refinedPitch} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function TopMovesPanel({ moves }: { moves: TopMove[] }) {
+  if (!moves.length) return null;
+  return (
+    <div>
+      <HeaderLine title="Top moves" right="highest leverage first" />
+      <div className="pc-suggestions">
+        {moves.map((move, index) => (
+          <div key={`${move.title}-${index}`}>
+            <span className="mono">{String(move.priority || index + 1).padStart(2, "0")}</span>
+            <p>
+              <strong>{move.title}. </strong>
+              {move.do}
+              {(move.because || move.principle) ? (
+                <small>
+                  {move.because}
+                  {move.principle ? ` — ${move.principle}` : ""}
+                </small>
+              ) : null}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
+  const facets = [
+    { label: "Persona pain alignment", facet: fit.persona_pain_alignment },
+    { label: "Objection coverage", facet: fit.objection_coverage },
+    { label: "Proof credibility", facet: fit.proof_credibility },
+    { label: "CTA ease", facet: fit.cta_ease },
+    { label: "Channel fit", facet: fit.channel_fit },
+  ].filter((item): item is { label: string; facet: ContextFitFacet } =>
+    Boolean(item.facet && typeof item.facet.score === "number"),
+  );
+  if (!facets.length && !fit.decision_driver && !fit.top_unaddressed_objection) return null;
+
+  return (
+    <div>
+      <HeaderLine title="Context fit" right="semantic read" />
+      <div className="pc-facet-list">
+        {facets.map((item, index) => (
+          <FacetRow
+            key={item.label}
+            facet={{ label: item.label, value: Math.round(item.facet.score), note: item.facet.note }}
+            last={index === facets.length - 1}
+          />
+        ))}
+      </div>
+      {(fit.decision_driver || fit.top_unaddressed_objection) && (
+        <div className="pc-suggestions">
+          {fit.decision_driver && (
+            <div>
+              <span className="mono">DD</span>
+              <p>
+                <strong>Decision driver: </strong>
+                {fit.decision_driver}
+              </p>
+            </div>
+          )}
+          {fit.top_unaddressed_objection && (
+            <div>
+              <span className="mono">!!</span>
+              <p>
+                <strong>Open objection: </strong>
+                {fit.top_unaddressed_objection}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SegmentLocalizationPanel({ localization }: { localization: SegmentLocalization }) {
+  const rows: Array<{ tag: string; label: string; text: string; note: string }> = [];
+  if (localization.peak?.text) {
+    rows.push({
+      tag: "PEAK",
+      label: `Strongest moment (${localization.peak.position_pct}% in)`,
+      text: localization.peak.text,
+      note: "Preserve this or move it earlier.",
+    });
+  }
+  if (localization.weakest?.text) {
+    rows.push({
+      tag: "WEAK",
+      label: "Weakest moment",
+      text: localization.weakest.text,
+      note: "Prime rewrite target.",
+    });
+  }
+  if (localization.attention_cliff?.to?.text) {
+    rows.push({
+      tag: "DROP",
+      label: `Attention cliff (${localization.attention_cliff.to.position_pct}% in)`,
+      text: localization.attention_cliff.to.text,
+      note: "Engagement falls hardest into this span.",
+    });
+  }
+  if (!rows.length) return null;
+  return (
+    <div>
+      <HeaderLine title="Where TRIBE reacts" right="located on your text" />
+      <div className="pc-rank-list">
+        {rows.map((row) => (
+          <div className="pc-rank-row" key={row.tag}>
+            <span className="mono">{row.tag}</span>
+            <strong>{row.label}</strong>
+            <small>
+              &ldquo;{row.text}&rdquo; — {row.note}
+            </small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResearchSynthesisPanel({ synthesis }: { synthesis: ResearchSynthesis }) {
+  const items = synthesis.items ?? [];
+  const archetype = synthesis.temporal_archetype;
+  if (!items.length && !archetype) return null;
+  return (
+    <div>
+      <HeaderLine title="Research synthesis" right="TRIBE × published findings" />
+      <div className="pc-suggestions">
+        {archetype && (
+          <div key={archetype.key}>
+            <span className="mono">TRC</span>
+            <p>
+              <strong>{archetype.label}. </strong>
+              {archetype.lever}
+              <small>
+                {archetype.implication} — {archetype.citation}
+              </small>
+            </p>
+          </div>
+        )}
+        {items.map((item) => (
+          <div key={item.key}>
+            <span className="mono">{item.kind === "gap" ? "FIX" : item.kind === "strength" ? "KEEP" : "USE"}</span>
+            <p>
+              <strong>{item.observation} </strong>
+              {item.lever}
+              <small>
+                {item.finding} — {item.citation}
+              </small>
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch: RefinedPitch | null }) {
-  const rows = [
-    refinedPitch && {
-      label: "Refined candidate",
-      score,
-      note: "Pending TRIBE re-score after accept",
-      tone: "warn" as Tone,
-    },
+  const rows: RankRow[] = [
     {
       label: "Current scored draft",
       score,
       note: "Last TRIBE score",
       tone: toneFromScore(score),
     },
-    {
-      label: "Persona baseline",
-      score: Math.max(24, score - 11),
-      note: "Control copy estimate",
-      tone: toneFromScore(score - 11),
-    },
-  ]
-    .filter(isRankRow)
-    .sort((left, right) => right.score - left.score);
+  ];
+  if (refinedPitch) {
+    rows.unshift({
+      label: "Refined candidate",
+      score,
+      note: "Pending TRIBE re-score after accept",
+      tone: "warn",
+    });
+  }
 
   return (
     <div>
@@ -1795,10 +2018,6 @@ function RefineQuestionsEditorPanel({
   );
 }
 
-function isRankRow(row: RankRow | false | null): row is RankRow {
-  return Boolean(row);
-}
-
 function BrainPanel({
   score,
   verdict,
@@ -1806,18 +2025,14 @@ function BrainPanel({
   fmri,
   signals,
   runtime,
-  latencyMs,
-  tokens,
   model,
 }: {
   score: number;
   verdict: string;
-  confidence: number;
+  confidence?: number;
   fmri: FmriOutput | null | undefined;
   signals: PitchScoreReport["neural_signals"];
   runtime: RuntimeKind;
-  latencyMs: number;
-  tokens: number;
   model: string;
 }) {
   if (!fmri || !fmri.temporal_trace.length) {
@@ -1877,7 +2092,7 @@ function BrainPanel({
       <div className="pc-brain-meta mono">
         <span>MODEL {model}</span>
         <span>RUNTIME {runtime}</span>
-        <span>{latencyMs || "-"}ms . {tokens} tok</span>
+        <span>{fmri.cortical_mesh || "fsaverage5"} mesh</span>
       </div>
     </div>
   );
@@ -1966,7 +2181,7 @@ function BrainRender({ signals }: { signals: PitchScoreReport["neural_signals"] 
   );
 }
 
-function ScoreHalo({ score, confidence }: { score: number; confidence: number }) {
+function ScoreHalo({ score, confidence }: { score: number; confidence?: number }) {
   const tone = score >= 75 ? "ok" : score >= 55 ? "warn" : "err";
   return (
     <div>
@@ -1974,7 +2189,7 @@ function ScoreHalo({ score, confidence }: { score: number; confidence: number })
       <div className="pc-score-line">
         <span className={`mono tnum score-${tone}`}>{score}</span>
         <small className="mono">/100</small>
-        <em className="mono">P = {confidence.toFixed(2)}</em>
+        {typeof confidence === "number" && <em className="mono">P = {confidence.toFixed(2)}</em>}
       </div>
       <div className="pc-score-rail">
         <span style={{ left: `calc(${score}% - 1px)`, background: `var(--${tone})` }} />
@@ -2083,21 +2298,23 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
                 <b className={`mono score-${toneFromScore(axis.score)}`}>{Math.round(axis.score)}</b>
               </div>
             ))}
+            {typeof robustness.context_fit_score === "number" && (
+              <div className="pc-rank-row">
+                <span className="mono">FIT</span>
+                <strong>Context-fit evidence</strong>
+                <small>LLM rubric read of persona, proof, objections, CTA, and channel fit</small>
+                <b className={`mono score-${toneFromScore(robustness.context_fit_score)}`}>
+                  {Math.round(robustness.context_fit_score)}
+                </b>
+              </div>
+            )}
             <div className="pc-rank-row">
-              <span className="mono">TXT</span>
-              <strong>Text heuristics disabled</strong>
-              <small>Message/persona are semantic LLM context, not scoring features</small>
-              <b className="mono score-warn">off</b>
+              <span className="mono">SEM</span>
+              <strong>Semantic blend weight</strong>
+              <small>Share of the final score carried by the band-clamped context-fit read</small>
+              <b className="mono score-warn">{Math.round((robustness.semantic_blend_weight ?? 0) * 100)}%</b>
             </div>
           </>
-        )}
-        {evidence && (
-          <div className="pc-rank-row">
-            <span className="mono">SEM</span>
-            <strong>Semantic context only</strong>
-            <small>{evidence.methodology ?? "Text audit removed from calibration"}</small>
-            <b className="mono score-warn">off</b>
-          </div>
         )}
         {warnings.map((warning) => (
           <div className="pc-rank-row" key={warning}>
@@ -2355,11 +2572,16 @@ function RuntimeConfig({
         <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="Saved in runtime.env" />
       </Field>
       <Field label="Evaluator model">
-        <input value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
+        <input list="pc-model-suggestions-compact" value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} />
       </Field>
       <Field label="Refiner model">
-        <input value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
+        <input list="pc-model-suggestions-compact" value={openRouterRefinerModel} onChange={(event) => setOpenRouterRefinerModel(event.target.value)} />
       </Field>
+      <datalist id="pc-model-suggestions-compact">
+        {SUGGESTED_OPENROUTER_MODELS.map((model) => (
+          <option key={model} value={model} />
+        ))}
+      </datalist>
       {runtimeKind !== "pitchserver" && (
         <>
           <Field label="Minimum VRAM">
@@ -2988,7 +3210,95 @@ function extractSuggestions(report: PitchScoreReport) {
     .slice(0, 5);
 }
 
-function extractRefineBrief(report: PitchScoreReport) {
+function segmentExcerptFor(source: string, segmentIndex: number, segmentCount: number, maxChars = 120) {
+  const words = source.split(/\s+/).filter(Boolean);
+  if (!words.length || segmentCount <= 0) return "";
+  const start = Math.floor((segmentIndex * words.length) / segmentCount);
+  const stop = Math.max(start + 1, Math.floor(((segmentIndex + 1) * words.length) / segmentCount));
+  const excerpt = words.slice(start, stop).join(" ").trim();
+  return excerpt.length > maxChars ? `${excerpt.slice(0, maxChars - 1).trimEnd()}…` : excerpt;
+}
+
+function extractTemporalBrief(report: PitchScoreReport, source: string) {
+  const trace = report.fmri_output?.temporal_trace;
+  if (!trace || trace.length < 3 || !source.trim()) return [];
+  const indexed = trace.map((value, index) => ({ value, index }));
+  const sorted = [...indexed].sort((left, right) => left.value - right.value);
+  const weakest = sorted[0];
+  const strongest = sorted[sorted.length - 1];
+  const lines: string[] = [];
+  const weakExcerpt = segmentExcerptFor(source, weakest.index, trace.length);
+  if (weakExcerpt) {
+    lines.push(
+      `Weakest engagement segment (${weakest.index + 1}/${trace.length}) is around: "${weakExcerpt}". Rework, tighten, or cut this part first.`,
+    );
+  }
+  const strongExcerpt = segmentExcerptFor(source, strongest.index, trace.length);
+  if (strongExcerpt && strongest.index !== weakest.index) {
+    lines.push(
+      `Strongest engagement segment (${strongest.index + 1}/${trace.length}) is around: "${strongExcerpt}". Preserve this beat; consider moving it earlier.`,
+    );
+  }
+  return lines;
+}
+
+function extractContextFitBrief(report: PitchScoreReport) {
+  const fit = report.context_fit;
+  if (!fit) return [];
+  const facets: Array<{ label: string; facet: ContextFitFacet | undefined }> = [
+    { label: "Persona pain alignment", facet: fit.persona_pain_alignment },
+    { label: "Objection coverage", facet: fit.objection_coverage },
+    { label: "Proof credibility", facet: fit.proof_credibility },
+    { label: "CTA ease", facet: fit.cta_ease },
+    { label: "Channel fit", facet: fit.channel_fit },
+  ];
+  const lines = facets
+    .filter((item): item is { label: string; facet: ContextFitFacet } =>
+      Boolean(item.facet && typeof item.facet.score === "number" && item.facet.score < 70),
+    )
+    .sort((left, right) => left.facet.score - right.facet.score)
+    .slice(0, 2)
+    .map(({ label, facet }) => `Context-fit gap - ${label} (${Math.round(facet.score)}/100)${facet.note ? `: ${facet.note}` : "."}`);
+  if (fit.top_unaddressed_objection) {
+    lines.push(`Pre-empt this objection without inventing facts: ${fit.top_unaddressed_objection}`);
+  }
+  return lines;
+}
+
+function extractResearchBrief(report: PitchScoreReport) {
+  const synthesis = report.robustness?.research_synthesis;
+  if (!synthesis) return [];
+  const lines: string[] = [];
+  const loc = synthesis.localization;
+  if (loc?.weakest?.text) {
+    lines.push(
+      `TRIBE-located weakest span (rewrite first): "${loc.weakest.text}".`,
+    );
+  }
+  if (loc?.attention_cliff?.to?.text) {
+    lines.push(
+      `TRIBE-located attention drop into: "${loc.attention_cliff.to.text}". Fix this transition.`,
+    );
+  }
+  if (synthesis.temporal_archetype) {
+    lines.push(
+      `Research lever (${synthesis.temporal_archetype.citation}) - ${synthesis.temporal_archetype.label}: ${synthesis.temporal_archetype.lever}`,
+    );
+  }
+  for (const item of (synthesis.items ?? []).filter((entry) => entry.kind !== "strength").slice(0, 2)) {
+    lines.push(`Research lever (${item.citation}) - ${item.observation} ${item.lever}`);
+  }
+  return lines.slice(0, 4);
+}
+
+function extractRefineBrief(report: PitchScoreReport, source: string) {
+  const baseline = `Baseline persuasion score ${Math.round(report.persuasion_score)}/100 - "${report.verdict}". The rewrite must beat this baseline, not paraphrase it.`;
+  const topMoves = (report.top_moves ?? []).map(
+    (move) => `Top move - ${move.title}: ${move.do}${move.because ? ` (${move.because})` : ""}`,
+  );
+  const research = extractResearchBrief(report);
+  const temporal = extractTemporalBrief(report, source);
+  const contextFit = extractContextFitBrief(report);
   const rewriteGuidance = report.rewrite_suggestions
     .map((item) => {
       const before = item.before ? ` Replace or improve "${item.before}"` : "";
@@ -3008,11 +3318,16 @@ function extractRefineBrief(report: PitchScoreReport) {
       const rightWeakness = right.key === "cognitive_friction" ? right.score : 100 - right.score;
       return rightWeakness - leftWeakness;
     })
-    .slice(0, 3)
+    .slice(0, 2)
     .map((item) => `Weak neural signal - ${item.label} (${Math.round(item.score)}/100): ${neuralRepairTactic(item.key)}`);
-  const risks = report.risks.slice(0, 3).map((risk) => `Risk to fix: ${risk}`);
+  const risks = report.risks.slice(0, 2).map((risk) => `Risk to fix: ${risk}`);
 
   return [
+    baseline,
+    ...topMoves,
+    ...research,
+    ...temporal,
+    ...contextFit,
     ...rewriteGuidance,
     ...weakFacets,
     ...weakSignals,
@@ -3056,34 +3371,9 @@ function neuralRepairTactic(key: string) {
   return "Improve this signal with concrete, audience-specific evidence.";
 }
 
-function buildPreviewRewrite(source: string, suggestions: string[]) {
-  const paragraphs = source
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const hasMetricSuggestion = suggestions.some((item) => /metric|proof|credibility|outcome/i.test(item));
-  const hasCtaSuggestion = suggestions.some((item) => /cta|time|reply|friction|schedule/i.test(item));
-
-  if (hasMetricSuggestion && paragraphs.length > 1 && !/\b\d+[%x]?\b/.test(paragraphs[1])) {
-    paragraphs[1] = `${paragraphs[1].replace(/[.!?]$/, "")}, with the outcome framed as time saved and fewer manual dashboard reviews.`;
-  }
-
-  if (hasCtaSuggestion && paragraphs.length) {
-    const lastIndex = paragraphs.length - 1;
-    paragraphs[lastIndex] = paragraphs[lastIndex]
-      .replace(/Would you be open to a 15-min call next Tuesday or Wednesday\?/i, "Could you do 15 minutes Tuesday 2pm ET or Wednesday 11am ET?")
-      .replace(/Would you be open to/i, "Could you do");
-  }
-
-  return paragraphs.join("\n\n") || source;
-}
-
 function toneFromScore(score: number): Tone {
   if (score >= 75) return "ok";
   if (score >= 60) return "warn";
   return "err";
 }
 
-function confidenceFromScore(score: number) {
-  return Math.max(0.55, Math.min(0.96, 0.62 + score / 300));
-}

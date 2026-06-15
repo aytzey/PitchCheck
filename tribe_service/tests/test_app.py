@@ -63,6 +63,10 @@ class TestScore:
         assert report["fmri_output"]["cortical_mesh"] == "fsaverage5"
         assert "calibration_quality" in report["persuasion_evidence"]
         assert report["platform"] == "general"
+        assert isinstance(report["top_moves"], list)
+        assert len(report["top_moves"]) >= 1
+        assert report["top_moves"][0]["title"]
+        assert report["top_moves"][0]["do"]
 
     def test_with_platform(self):
         res = client.post("/score", json={

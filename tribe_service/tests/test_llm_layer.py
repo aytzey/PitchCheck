@@ -61,6 +61,15 @@ VALID_LLM_RESPONSE = {
     "verdict": "Compelling pitch with strong social proof",
     "narrative": "The pitch leverages social proof effectively. Neural signals indicate high engagement.",
     "persona_summary": "A cost-conscious engineering leader who values proven solutions.",
+    "top_moves": [
+        {
+            "priority": 1,
+            "title": "Open inside their cost problem",
+            "do": "Start with the budget pressure this persona faces, then introduce the proof.",
+            "because": "Engagement is weakest in the opener and this persona is cost-driven.",
+            "principle": "self-relevance (Falk et al. 2010)",
+        },
+    ],
     "breakdown": [
         {"key": "emotional_resonance", "label": "Emotional Resonance", "score": 75, "explanation": "Strong emotional activation."},
         {"key": "clarity", "label": "Clarity", "score": 82, "explanation": "Clear and concise messaging."},
@@ -120,8 +129,15 @@ class TestValidResponseParsed:
         assert 0 <= result["persuasion_score"] <= 100
         assert result["robustness"]["llm_score"] == 78
         assert round(result["robustness"]["final_score"]) == result["persuasion_score"]
-        assert result["robustness"]["final_score"] == result["robustness"]["evidence_score"]
-        assert "final_score_neural_only" in result["robustness"]["guardrails_applied"]
+        # Final score is anchored to the neural prior but pulled toward the
+        # band-clamped semantic read, so it sits between the two.
+        evidence = result["robustness"]["evidence_score"]
+        llm = result["robustness"]["llm_score"]
+        final = result["robustness"]["final_score"]
+        assert min(evidence, llm) <= final <= max(evidence, llm)
+        assert final != evidence
+        assert "final_score_neural_anchored_semantic_blend" in result["robustness"]["guardrails_applied"]
+        assert 0 < result["robustness"]["semantic_blend_weight"] <= 1
         assert result["robustness"]["text_score"] is None
         assert result["robustness"]["prompt_injection_risk"] is None
         assert result["robustness"]["calibration_basis"].endswith("text heuristics disabled")
@@ -137,6 +153,12 @@ class TestValidResponseParsed:
         assert len(result["risks"]) == 3
         assert isinstance(result["rewrite_suggestions"], list)
         assert len(result["rewrite_suggestions"]) >= 1
+        assert result["top_moves"][0]["title"] == "Open inside their cost problem"
+        assert result["top_moves"][0]["priority"] == 1
+        assert result["top_moves"][0]["principle"] == "self-relevance (Falk et al. 2010)"
+        synthesis = result["robustness"]["research_synthesis"]
+        assert isinstance(synthesis["items"], list)
+        assert synthesis["route_hint"] in {"balanced", "reward_led", "social_led"}
 
 
 class TestNeuralOnlyWithoutApiKey:
@@ -173,6 +195,10 @@ class TestNeuralOnlyWithoutApiKey:
         assert len(result["risks"]) >= 1
         assert isinstance(result["rewrite_suggestions"], list)
         assert len(result["rewrite_suggestions"]) >= 1
+        # Neural-only fallback still ranks the highest-leverage moves.
+        assert 1 <= len(result["top_moves"]) <= 3
+        assert result["top_moves"][0]["title"]
+        assert result["top_moves"][0]["do"]
 
 
 class TestRefinePitchMessage:
@@ -258,6 +284,189 @@ class TestRefinePitchMessage:
         else:
             raise AssertionError("Expected RuntimeError")
 
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_critic_pass_improves_stage_one_rewrite(self, mock_post: MagicMock):
+        stage_one = json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Stage one rewrite.",
+            "safety_notes": ["No unverified claims added"],
+        })
+        critic = json.dumps({
+            "verdict": "improved",
+            "remaining_issues_fixed": ["Tightened the CTA to one specific ask"],
+            "final_message": "Final critic-approved rewrite.",
+        })
+        mock_post.side_effect = [
+            _mock_openrouter_response(stage_one),
+            _mock_openrouter_response(critic),
+        ]
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Lower the CTA friction"],
+        )
+
+        assert result["refined_message"] == "Final critic-approved rewrite."
+        assert result["methodology"] == "llm_semantic_refine_two_pass_critic"
+        assert result["critic_notes"] == ["Tightened the CTA to one specific ask"]
+        assert mock_post.call_count == 2
+        critic_prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
+        assert "Candidate rewrite to critique" in critic_prompt
+        assert "Stage one rewrite." in critic_prompt
+        assert "Lower the CTA friction" in critic_prompt
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_critic_pass_failure_keeps_stage_one_rewrite(self, mock_post: MagicMock):
+        stage_one = json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Stage one rewrite.",
+        })
+        mock_post.side_effect = [
+            _mock_openrouter_response(stage_one),
+            httpx.ConnectError("network down"),
+        ]
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            ["Lower the CTA friction"],
+        )
+
+        assert result["refined_message"] == "Stage one rewrite."
+        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_critic_pass_can_be_disabled(self, mock_post: MagicMock):
+        stage_one = json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Stage one rewrite.",
+        })
+        mock_post.return_value = _mock_openrouter_response(stage_one)
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+        )
+
+        assert result["refined_message"] == "Stage one rewrite."
+        assert mock_post.call_count == 1
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_deepseek_reasoning_output_is_handled(self, mock_post: MagicMock):
+        """DeepSeek-style responses with <think> blocks parse cleanly."""
+        content = (
+            "<think>The persona is cost-conscious, so the rewrite should lead "
+            "with the reliability outcome and keep one CTA.</think>\n"
+            + json.dumps({
+                "needs_clarification": False,
+                "questions": [],
+                "refined_message": "Reliability-first rewrite with one CTA.",
+                "safety_notes": [],
+            })
+        )
+        mock_post.return_value = _mock_openrouter_response(content)
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert result["refined_message"] == "Reliability-first rewrite with one CTA."
+        assert result["model"] == "deepseek/deepseek-v4-pro"
+        # DeepSeek gets a higher rewrite temperature than the default.
+        assert mock_post.call_args.kwargs["json"]["temperature"] == 0.7
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT", "high")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_reasoning_effort_is_forwarded_when_configured(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({
+            "needs_clarification": False,
+            "questions": [],
+            "refined_message": "Rewrite.",
+        }))
+
+        refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert mock_post.call_args.kwargs["json"]["reasoning"] == {"effort": "high"}
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_plain_text_fallback_strips_think_blocks(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(
+            "<think>planning the rewrite</think>\nFinal rewritten pitch text."
+        )
+
+        result = refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            [],
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert result["refined_message"] == "Final rewritten pitch text."
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_refine_prompt_includes_candidate_protocol_and_channel_norms(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response("Plain rewrite without JSON.")
+
+        refine_pitch_message(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            "linkedin",
+            ["Make the opener persona-specific"],
+        )
+
+        prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
+        assert "Channel norms for this platform" in prompt
+        assert "LinkedIn DM" in prompt
+        assert "Persuasion doctrine" in prompt
+        assert "Specificity is credibility" in prompt
+        assert "Evidence base" in prompt
+        assert "Carpenter 2013" in prompt
+        assert "THREE candidate rewrites" in prompt
+        assert "Final self-check before answering" in prompt
+
 
 class TestMalformedJsonNeuralOnlyReport:
     """Mock OpenRouter returning broken JSON -> returns neural-only report."""
@@ -314,9 +523,16 @@ class TestPromptIncludesPersonaAndMessage:
         messages = request_body["messages"]
         user_content = messages[1]["content"]
 
+        system_content = messages[0]["content"]
+        assert "Persuasion doctrine" in system_content
+        assert "Specificity is credibility" in system_content
+        assert "Evidence base" in system_content
+        assert "Falk et al." in system_content
+        assert "Tversky & Kahneman" in system_content
         assert SAMPLE_MESSAGE in user_content
         assert SAMPLE_PERSONA in user_content
         assert SAMPLE_PLATFORM in user_content
+        assert "Neural × Research Synthesis" in user_content
         assert "same language as the Pitch Message" in user_content
         assert "UNTRUSTED DATA" in user_content or "Untrusted Input Payload" in user_content
         assert "Deterministic Persuasion Evidence Audit" not in user_content
@@ -378,6 +594,183 @@ class TestPromptIncludesNeuralSignals:
             assert f"{value:.1f}" in user_content, (
                 f"Signal value {value:.1f} for {key!r} missing from prompt"
             )
+
+
+class TestPromptIncludesContextEvidence:
+    def test_prompt_maps_trace_segments_to_text_spans(self):
+        message = (
+            "Hey Jordan, saw your migration post. "
+            "I built a tool that generates dashboards from your traces. "
+            "A few production teams use it daily. "
+            "Open to a quick screen-share next week?"
+        )
+        prompt = _build_user_prompt(
+            message,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            fmri_summary=SAMPLE_SYNTHETIC_FMRI_SUMMARY,
+        )
+
+        assert "Segment map" in prompt
+        assert "weakest predicted response" in prompt
+        assert "strongest predicted response" in prompt
+        # Segment 1 of 4 maps to the start of the message.
+        assert "Hey Jordan," in prompt
+        # Deterministic localization gives the LLM the spans directly.
+        assert "Deterministic Segment Localization" in prompt
+        assert "Attention cliff" in prompt or "Weakest predicted moment" in prompt
+
+    def test_prompt_includes_platform_norms(self):
+        prompt = _build_user_prompt(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            "linkedin",
+            SAMPLE_NEURAL_SIGNALS,
+        )
+
+        assert "Channel Norms" in prompt
+        assert "LinkedIn DM" in prompt
+
+    def test_prompt_requests_context_fit_block(self):
+        prompt = _build_user_prompt(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+        )
+
+        assert '"context_fit"' in prompt
+        assert "persona_pain_alignment" in prompt
+        assert "top_unaddressed_objection" in prompt
+
+
+class TestContextFitNormalisation:
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_context_fit_is_validated_and_returned(self, mock_post: MagicMock):
+        response = dict(
+            VALID_LLM_RESPONSE,
+            context_fit={
+                "persona_pain_alignment": {"score": 81, "note": "Targets cost pressure directly."},
+                "objection_coverage": {"score": 40, "note": "Integration effort is ignored."},
+                "proof_credibility": {"score": 999, "note": "Score should clamp."},
+                "cta_ease": 55,
+                "channel_fit": {"score": "not-a-number", "note": "Defaults to neutral."},
+                "decision_driver": "Reliability track record",
+                "top_unaddressed_objection": "Migration effort",
+            },
+        )
+        mock_post.return_value = _mock_openrouter_response(json.dumps(response))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        fit = result["context_fit"]
+        assert fit["persona_pain_alignment"]["score"] == 81
+        assert fit["objection_coverage"]["note"] == "Integration effort is ignored."
+        assert fit["proof_credibility"]["score"] == 100
+        assert fit["cta_ease"]["score"] == 55
+        assert fit["channel_fit"]["score"] == 50
+        assert fit["decision_driver"] == "Reliability track record"
+        assert fit["top_unaddressed_objection"] == "Migration effort"
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_context_fit_facets_move_the_final_score(self, mock_post: MagicMock):
+        """Same neural evidence, different context fit -> different final score."""
+        def facet_block(score: int) -> dict:
+            return {
+                key: {"score": score, "note": "test"}
+                for key in (
+                    "persona_pain_alignment",
+                    "objection_coverage",
+                    "proof_credibility",
+                    "cta_ease",
+                    "channel_fit",
+                )
+            }
+
+        def run_with(facets: dict, llm_score: int) -> dict:
+            mock_post.return_value = _mock_openrouter_response(json.dumps(dict(
+                VALID_LLM_RESPONSE,
+                persuasion_score=llm_score,
+                context_fit=facets,
+            )))
+            return interpret_persuasion(
+                SAMPLE_MESSAGE,
+                SAMPLE_PERSONA,
+                SAMPLE_PLATFORM,
+                SAMPLE_NEURAL_SIGNALS,
+                SAMPLE_RAW_FEATURES,
+            )
+
+        strong_fit = run_with(facet_block(88), 85)
+        weak_fit = run_with(facet_block(25), 30)
+
+        assert strong_fit["persuasion_score"] > weak_fit["persuasion_score"]
+        assert strong_fit["persuasion_score"] - weak_fit["persuasion_score"] >= 10
+        assert strong_fit["robustness"]["context_fit_score"] == 88.0
+        assert weak_fit["robustness"]["context_fit_score"] == 25.0
+        assert (
+            "semantic_score_derived_from_context_fit_facets"
+            in strong_fit["robustness"]["guardrails_applied"]
+        )
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_inflated_facets_stay_inside_neural_band(self, mock_post: MagicMock):
+        """Even all-100 facets (e.g. injection) cannot escape the clamp band."""
+        inflated = {
+            key: {"score": 100, "note": ""}
+            for key in (
+                "persona_pain_alignment",
+                "objection_coverage",
+                "proof_credibility",
+                "cta_ease",
+                "channel_fit",
+            )
+        }
+        mock_post.return_value = _mock_openrouter_response(json.dumps(dict(
+            VALID_LLM_RESPONSE,
+            persuasion_score=100,
+            context_fit=inflated,
+        )))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        assert result["persuasion_score"] < 85
+        assert "llm_score_clamped_to_neural_band" in result["robustness"]["guardrails_applied"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_missing_context_fit_is_none(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        assert result["context_fit"] is None
 
 
 class TestPromptLabelsSyntheticTrace:
@@ -450,6 +843,28 @@ class TestRobustCalibration:
         assert result["robustness"]["llm_score_adjusted"] is True
         assert result["robustness"]["neuro_axes"]["self_value"]["score"] <= 100
         assert "reverse_inference_caveat_applied" in result["robustness"]["confidence_reasons"]
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_think_block_wrapped_response_is_parsed(self, mock_post: MagicMock):
+        """Reasoning models that leak <think> blocks still produce a full report."""
+        mock_post.return_value = _mock_openrouter_response(
+            "<think>weighing the neural axes against the persona</think>\n"
+            + json.dumps(VALID_LLM_RESPONSE)
+        )
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+            openrouter_model="deepseek/deepseek-v4-pro",
+        )
+
+        assert result["verdict"] == VALID_LLM_RESPONSE["verdict"]
+        assert result["robustness"]["llm_model"] == "deepseek/deepseek-v4-pro"
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")

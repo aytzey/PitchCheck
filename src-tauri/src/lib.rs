@@ -17,6 +17,7 @@ use tokio::time::sleep;
 
 const DEFAULT_IMAGE_FALLBACK: &str = "ghcr.io/aytzey/pitchcheck-tribe:latest";
 const DEFAULT_OPENROUTER_MODEL: &str = "anthropic/claude-sonnet-4.6";
+const DEFAULT_OPENROUTER_REFINER_MODEL: &str = "deepseek/deepseek-v4-pro";
 const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
 const LOCAL_CONTAINER_NAME: &str = "pitchcheck-tribe-service";
 const LOCAL_MODELS_VOLUME: &str = "pitchcheck_tribe_models";
@@ -636,14 +637,7 @@ async fn refine_pitch(
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .or_else(|| {
-                config
-                    .open_router_model
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-            })
-            .unwrap_or(DEFAULT_OPENROUTER_MODEL)
+            .unwrap_or(DEFAULT_OPENROUTER_REFINER_MODEL)
             .to_string();
 
         if let Ok(status) = clone_status(&state) {
@@ -773,6 +767,22 @@ async fn refine_pitch(
                 "- If the draft has a one-sided metric, preserve it as one-sided; do not add a \"from X to Y\" baseline unless X is explicitly provided.\n",
                 "- Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.\n",
                 "- Preserve the sender intent, platform fit, and the input language exactly.\n\n",
+                "Persuasion doctrine:\n",
+                "- Open inside the reader's problem, never with the sender.\n",
+                "- Specificity is credibility: one concrete number, name, or mechanism beats adjectives.\n",
+                "- Earn the ask: CTA size must match trust built; exactly one low-effort ask.\n",
+                "- Pre-empt the reader's default objection in one clause, without sounding defensive.\n",
+                "- Proof hierarchy: named outcome > demo/pilot path > peer usage > generic claim; never fabricate.\n",
+                "- One message, one idea; short sentences; end on a question answerable in ten seconds.\n\n",
+                "Rewrite process - do this internally before answering:\n",
+                "1. Build the persona's decision model: what they optimize for, their default objection, and the proof threshold they need before acting.\n",
+                "2. Draft THREE candidate rewrites with genuinely different strategies (outcome-led, problem/insight-led, proof-led). Do not output the drafts.\n",
+                "3. Score each candidate against: persona-specific opener; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel fit; fluency; zero invented facts.\n",
+                "4. Take the highest-scoring candidate, fix its single weakest item, and output only that final version.\n\n",
+                "Final self-check before answering:\n",
+                "- No invented facts, names, metrics, dates, or baselines anywhere.\n",
+                "- Same language as the draft. Every sentence earns its place. Exactly one CTA, answerable with minimal effort.\n",
+                "- The weakest items in the repair brief are visibly repaired and the strongest part of the draft is preserved.\n\n",
                 "Clarification behavior:\n",
                 "- If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.\n",
                 "- Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.\n",
@@ -1009,9 +1019,7 @@ fn load_app_config(app: &AppHandle) -> RuntimeResult<AppConfig> {
             .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
         open_router_refiner_model: env_value(&values, "OPENROUTER_REFINER_MODEL")
             .or_else(|| std::env::var("OPENROUTER_REFINER_MODEL").ok())
-            .or_else(|| env_value(&values, "OPENROUTER_MODEL"))
-            .or_else(|| std::env::var("OPENROUTER_MODEL").ok())
-            .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
+            .or_else(|| Some(DEFAULT_OPENROUTER_REFINER_MODEL.to_string())),
         image: env_value(&values, "PITCHCHECK_TRIBE_IMAGE")
             .or_else(|| std::env::var("PITCHCHECK_TRIBE_IMAGE").ok())
             .or_else(|| Some(DEFAULT_IMAGE_FALLBACK.to_string())),
@@ -1184,8 +1192,26 @@ fn format_refine_clarification_answers(answers: &[RefineClarificationAnswer]) ->
     }
 }
 
+fn strip_think_blocks(content: &str) -> String {
+    // Reasoning models (DeepSeek V4/R1 style) can leak <think>...</think>
+    // chain-of-thought into message content; drop those blocks.
+    let mut result = String::new();
+    let mut rest = content;
+    while let Some(start) = rest.find("<think") {
+        if let Some(end) = rest[start..].find("</think>") {
+            result.push_str(&rest[..start]);
+            rest = &rest[start + end + "</think>".len()..];
+        } else {
+            break;
+        }
+    }
+    result.push_str(rest);
+    result.trim().to_string()
+}
+
 fn clean_refined_message(content: &str) -> String {
-    let mut value = content.trim();
+    let cleaned = strip_think_blocks(content);
+    let mut value = cleaned.trim();
     if let Some(stripped) = value.strip_prefix("```") {
         value = if let Some(line_break) = stripped.find('\n') {
             &stripped[line_break + 1..]
@@ -1324,7 +1350,7 @@ fn merge_runtime_config(app: &AppHandle, config: RuntimeConfig) -> RuntimeResult
             config.open_router_refiner_model,
             saved.open_router_refiner_model,
         )
-        .or_else(|| Some(DEFAULT_OPENROUTER_MODEL.to_string())),
+        .or_else(|| Some(DEFAULT_OPENROUTER_REFINER_MODEL.to_string())),
         image: first_non_empty(config.image, saved.image)
             .or_else(|| Some(DEFAULT_IMAGE_FALLBACK.to_string())),
         min_gpu_ram_gb: config.min_gpu_ram_gb.or(saved.min_gpu_ram_gb).or(Some(16)),
@@ -3094,6 +3120,17 @@ mod tests {
         assert_eq!(value["new_username"], "new-user");
         assert_eq!(value["new_password"], "new-pass");
         assert!(value.get("currentPassword").is_none());
+    }
+
+    #[test]
+    fn clean_refined_message_strips_think_blocks_and_fences() {
+        let content = "<think>internal reasoning about the pitch</think>\n```json\n{\"a\":1}\n```";
+        assert_eq!(clean_refined_message(content), "{\"a\":1}");
+        assert_eq!(
+            strip_think_blocks("<think>x</think>Hello<think>y</think> world"),
+            "Hello world"
+        );
+        assert_eq!(strip_think_blocks("no reasoning here"), "no reasoning here");
     }
 
     #[test]

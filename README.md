@@ -36,8 +36,11 @@ PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookr
 - **Six neural signals** — affective value salience, early attention salience, self-value relevance, social cognition/sharing, encoding potential, cognitive friction
 - **Neuro-persuasive axes** — self/value fit, reward/affect, social cognition, encoding/attention, processing fluency
 - **Segment-by-segment engagement timeline** — where the reader tunes in, where they drop off
-- **Verdict and narrative** — an LLM reads the neural output and explains what's working and what isn't
+- **Verdict and narrative** — an LLM reads the neural output and explains what's working and what isn't, in plain language
+- **Top moves** — the 1-3 highest-leverage changes, ranked by expected impact on whether the reader acts
 - **Rewrite suggestions** — before/after alternatives with reasoning
+
+Every judgment and rewrite is held to a built-in persuasion doctrine — open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs — backed by an evidence annex from published persuasion science: self-relevance and neural message effectiveness (Falk et al. 2010/2016; Scholz, Chan & Falk 2025), route matching (Petty & Cacioppo's Elaboration Likelihood Model), loss aversion and framing (Tversky & Kahneman 1981), similar-other social proof (Goldstein, Cialdini & Griskevicius 2008), reactance and the "but you are free" effect (Carpenter 2013 meta-analysis), processing fluency (Alter & Oppenheimer), precise-number credibility (Janiszewski & Uy 2008), psychological targeting (Matz et al. 2017), and the commitment gradient (Freedman & Fraser 1966). Each top move names the principle it rests on.
 
 The whole loop takes a few seconds. Write, score, tweak, re-score.
 
@@ -93,9 +96,17 @@ The final score is calibrated from these signals through five TRIBE-derived neur
 
 ### 3. Neural Output → LLM Interpretation
 
-The raw signals and prediction summary go to an LLM (Claude Sonnet via [OpenRouter](https://openrouter.ai)) along with the recipient persona and channel context. The LLM produces the verdict, narrative, strength/risk analysis, and rewrite suggestions.
+The raw signals and prediction summary go to an evaluator LLM (Claude Sonnet by default) via [OpenRouter](https://openrouter.ai), along with the recipient persona, channel norms for the selected platform, and a segment map that ties each temporal-trace segment to the approximate sentence of the pitch it covers. Rewrites are produced by a separate refiner model (DeepSeek V4 Pro by default); both are OpenRouter model ids and fully swappable, with first-class handling for reasoning models (`<think>` stripping, `reasoning.effort` hints, JSON-mode fallback).
 
-PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The final score is determined by TRIBE-predicted fMRI response geometry; the pitch text and persona are given to the LLM only as untrusted semantic context for interpretation and rewrite advice. Any LLM score is retained only as audit metadata and clamped to the neural band before display.
+Before the LLM sees anything, a deterministic **neural × research synthesis** layer does the heavy interpretive lifting from the TRIBE output so the LLM mostly verbalizes and rewrites rather than guesses:
+
+- **Segment localization.** The per-segment temporal trace is mapped back onto the actual words of the pitch to pinpoint — in Python, with no LLM — the opener strength, the strongest moment, the single weakest span, the close/CTA strength, and the "attention cliff" where predicted engagement falls off hardest. The LLM and the report both receive the exact text spans ("the weakest predicted span is '…' — rewrite that first") instead of being asked to find them.
+- **Research findings.** Axis geometry and raw TRIBE features (e.g. `sustain_ratio`) are linked to published findings: weak self/value response → the Falk et al. self-relevance lever; low fluency → Alter & Oppenheimer; reward-vs-social route dominance → Cohen et al. 2024; "engagement holds for only N% of the pitch" → the sustained-attention literature.
+- **Temporal archetype.** The trace shape is classified (strong-open-fade, late peak, buried lede, flat, sustained) per Chan et al. 2024, each with a concrete lever.
+
+All of it is citation-anchored, appears in the report's deep dive, drives the refine brief (the rewrite targets the located weak span first), and the evaluator is told to localize every judgment to these spans and execute the strongest levers in its top moves. The LLM produces the verdict, narrative, strength/risk analysis, a structured context-fit read (persona pain alignment, objection coverage, proof credibility, CTA ease, channel fit), and rewrite suggestions.
+
+PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The TRIBE-predicted neural prior anchors the final score, and the semantic side is derived from the rubric-scored context-fit facets (not from a single self-reported LLM number), clamped to the neural calibration band, and blended in. When TRIBE evidence is weak, the quality-shrunk neural prior carries less of the score and the semantic read carries more — so persona and channel fit genuinely move the score while prompt-injection text stays bounded by the band clamp.
 
 Repeated TRIBE predictions are cached in-process, but OpenRouter prompt/output caps and fast-model routing are intentionally disabled; quality is preferred over latency/cost.
 
@@ -256,7 +267,10 @@ cargo test --manifest-path src-tauri/Cargo.toml
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4.6` | High-quality model for interpreting neural output |
-| `OPENROUTER_REFINER_MODEL` | `OPENROUTER_MODEL` | Which model generates LLM rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_REFINER_MODEL` | `deepseek/deepseek-v4-pro` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
+| `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |
+| `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout; prompt/output caps are not applied |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |

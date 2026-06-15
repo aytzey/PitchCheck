@@ -74,6 +74,57 @@ export interface NeuroAxisReport {
   unsupported_by_text?: boolean;
 }
 
+// One citation-anchored link between TRIBE geometry and a published finding
+export interface ResearchSynthesisItem {
+  key: string;
+  kind: "gap" | "strength" | "pattern";
+  axis?: string;
+  observation: string;
+  finding: string;
+  citation: string;
+  source_keys?: string[];
+  lever: string;
+}
+
+export interface SegmentLocation {
+  segment: number;
+  of: number;
+  position_pct: number;
+  value: number;
+  percentile: number;
+  text: string;
+}
+
+export interface SegmentLocalization {
+  opener: SegmentLocation;
+  opener_strength_percentile: number;
+  closer_strength_percentile: number;
+  peak: SegmentLocation;
+  weakest: SegmentLocation;
+  attention_cliff?: {
+    drop: number;
+    drop_ratio: number;
+    from: SegmentLocation;
+    to: SegmentLocation;
+  } | null;
+  basis?: string;
+}
+
+export interface ResearchSynthesis {
+  items: ResearchSynthesisItem[];
+  temporal_archetype?: {
+    key: string;
+    label: string;
+    implication: string;
+    lever: string;
+    citation: string;
+    source_keys?: string[];
+  } | null;
+  route_hint?: string;
+  localization?: SegmentLocalization | null;
+  basis?: string;
+}
+
 // Robustness/calibration metadata for the final persuasion score
 export interface RobustnessReport {
   neural_prior_score?: number;
@@ -84,18 +135,46 @@ export interface RobustnessReport {
   evidence_score: number;
   llm_score: number | null;
   raw_llm_score?: number | null;
+  context_fit_score?: number | null;
   llm_score_adjusted?: boolean;
   llm_model?: string | null;
   final_score: number;
   confidence: number;
   score_delta: number | null;
+  semantic_blend_weight?: number;
   prompt_injection_risk: number | null;
   guardrails_applied: string[];
   warnings: string[];
   neuro_axes?: Record<string, NeuroAxisReport>;
+  research_synthesis?: ResearchSynthesis | null;
   confidence_reasons?: string[];
   scientific_caveats?: string[];
   calibration_basis: string;
+}
+
+// One of the 1-3 highest-leverage changes, ranked by expected impact
+export interface TopMove {
+  priority: number;     // 1-3
+  title: string;        // short imperative
+  do: string;           // concrete change, ideally paste-ready copy
+  because: string;      // plain-language reason
+  principle?: string;   // research principle it rests on, e.g. "loss aversion"
+}
+
+// Semantic context-fit diagnostics from the LLM (bounded by the neural band)
+export interface ContextFitFacet {
+  score: number;        // 0-100
+  note: string;
+}
+
+export interface ContextFitReport {
+  persona_pain_alignment: ContextFitFacet;
+  objection_coverage: ContextFitFacet;
+  proof_credibility: ContextFitFacet;
+  cta_ease: ContextFitFacet;
+  channel_fit: ContextFitFacet;
+  decision_driver: string;
+  top_unaddressed_objection: string;
 }
 
 // Full score report
@@ -109,6 +188,8 @@ export interface PitchScoreReport {
   risks: string[];                  // 3 risks
   rewrite_suggestions: RewriteSuggestion[]; // 2-3 suggestions
   persona_summary: string;          // LLM's understanding of the persona
+  top_moves?: TopMove[];            // 1-3 highest-leverage changes, ranked
+  context_fit?: ContextFitReport | null; // semantic context-fit diagnostics
   fmri_output?: FmriOutput | null;  // fMRI summary from TRIBE
   persuasion_evidence?: PersuasionEvidence | null; // Neural-only compatibility metadata
   robustness?: RobustnessReport | null; // Score calibration + guardrail metadata

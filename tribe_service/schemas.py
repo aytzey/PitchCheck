@@ -114,6 +114,14 @@ class RewriteSuggestion(BaseModel):
     after: str
     why: str
 
+class TopMove(BaseModel):
+    """One of the 1-3 highest-leverage changes, ranked by expected impact."""
+    priority: int = Field(..., ge=1, le=3)
+    title: str
+    do: str
+    because: str = ""
+    principle: str = ""  # research principle the move rests on, e.g. "loss aversion"
+
 class FmriOutput(BaseModel):
     """fMRI summary from TRIBE — temporal trace and top voxel data."""
     segments: int
@@ -142,6 +150,8 @@ class PitchScoreReport(BaseModel):
     risks: list[str]
     rewrite_suggestions: list[RewriteSuggestion]
     persona_summary: str
+    top_moves: list[TopMove] = Field(default_factory=list, max_length=3)
+    context_fit: dict[str, Any] | None = None
     fmri_output: FmriOutput | None = None
     persuasion_evidence: dict[str, Any] | None = None
     robustness: dict[str, Any] | None = None
@@ -162,5 +172,6 @@ class PitchRefineResponse(BaseModel):
     needs_clarification: bool = False
     questions: list[PitchRefineQuestion] = Field(default_factory=list, max_length=3)
     safety_notes: list[str] = Field(default_factory=list, max_length=5)
+    critic_notes: list[str] = Field(default_factory=list, max_length=5)
     persuasion_profile: dict[str, Any] | None = None
     methodology: str = "llm_semantic_refine_no_tribe_rescore"

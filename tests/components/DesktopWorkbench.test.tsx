@@ -42,6 +42,14 @@ const mockReport: PitchScoreReport = {
     },
   ],
   persona_summary: "Engineering leader handling a migration",
+  top_moves: [
+    {
+      priority: 1,
+      title: "Open inside her migration problem",
+      do: "Start with the observability gap her team hit after Athena, then offer the dashboard.",
+      because: "Attention is weakest in the opener and she ignores product-first outreach.",
+    },
+  ],
   fmri_output: null,
   platform: "email",
   scored_at: new Date().toISOString(),
@@ -67,7 +75,7 @@ describe("DesktopWorkbench", () => {
       "anthropic/claude-sonnet-4.6",
     );
     expect(screen.getByLabelText<HTMLInputElement>(/Refiner model/).value).toBe(
-      "anthropic/claude-sonnet-4.6",
+      "deepseek/deepseek-v4-pro",
     );
   });
 
@@ -105,11 +113,27 @@ describe("DesktopWorkbench", () => {
     fireEvent.click(screen.getByRole("button", { name: /Score message/ }));
 
     expect(await screen.findByText("Variant re-rank")).toBeDefined();
+    expect(screen.getByText("Top moves")).toBeDefined();
+    expect(screen.getByText(/Open inside her migration problem/)).toBeDefined();
     expect(screen.getByRole("button", { name: /Refine draft/ })).toBeDefined();
 
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        refined_message: "Hey Jordan - tighter rewrite with one clear ask.",
+        model: "anthropic/claude-sonnet-4.6",
+        needs_clarification: false,
+        questions: [],
+      }),
+    });
     fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
 
     await waitFor(() => expect(screen.getByText("After . refined")).toBeDefined());
+    const refineCall = mockFetch.mock.calls[1];
+    expect(refineCall[0]).toBe("/api/refine");
+    const refineBody = JSON.parse(refineCall[1].body as string) as { suggestions: string[] };
+    expect(refineBody.suggestions[0]).toContain("Baseline persuasion score 76/100");
+    expect(screen.getByText("Hey Jordan - tighter rewrite with one clear ask.")).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & re-evaluate" })).toBeDefined();
   });

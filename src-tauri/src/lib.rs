@@ -1985,7 +1985,13 @@ if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
   OPENROUTER_API_KEY="$(read_env_value ../../landing/.env OPENROUTER_API_KEY)"
 fi
 if [ -z "${{OPENROUTER_MODEL:-}}" ]; then
+  OPENROUTER_MODEL="$(read_env_value ./service.env OPENROUTER_MODEL)"
+fi
+if [ -z "${{OPENROUTER_MODEL:-}}" ]; then
   OPENROUTER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_MODEL)"
+fi
+if [ -z "${{OPENROUTER_REFINER_MODEL:-}}" ]; then
+  OPENROUTER_REFINER_MODEL="$(read_env_value ./service.env OPENROUTER_REFINER_MODEL)"
 fi
 if [ -z "${{OPENROUTER_REFINER_MODEL:-}}" ]; then
   OPENROUTER_REFINER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_REFINER_MODEL)"

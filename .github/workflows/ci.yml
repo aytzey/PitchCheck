@@ -17,7 +17,7 @@ jobs:
     name: Web app
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -33,7 +33,7 @@ jobs:
     name: Desktop shell
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -60,6 +60,6 @@ jobs:
     name: Docker Compose
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: cp .env.example .env
       - run: docker compose config

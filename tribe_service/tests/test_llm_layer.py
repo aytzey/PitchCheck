@@ -530,6 +530,48 @@ class TestMalformedJsonNeuralOnlyReport:
         assert "risks" in result
         assert "rewrite_suggestions" in result
 
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_MAX_RETRIES", 1)
+    @patch("tribe_service.llm_layer.time.sleep")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_truncated_json_is_retried_before_fallback(self, mock_post: MagicMock, _sleep: MagicMock):
+        mock_post.side_effect = [
+            _mock_openrouter_response('{"persuasion_score": 46, "verdict": "cut off mid-str'),
+            _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE)),
+        ]
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+            openrouter_model="test/model",
+        )
+
+        assert mock_post.call_count == 2
+        assert result["robustness"]["llm_model"] == "test/model"
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_MAX_RETRIES", 1)
+    @patch("tribe_service.llm_layer.time.sleep")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_persistent_non_json_stops_after_retry_budget(self, mock_post: MagicMock, _sleep: MagicMock):
+        mock_post.return_value = _mock_openrouter_response("still {{{broken")
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE,
+            SAMPLE_PERSONA,
+            SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS,
+            SAMPLE_RAW_FEATURES,
+        )
+
+        assert mock_post.call_count == 2
+        assert result["robustness"]["llm_model"] is None
+
 
 class TestPromptIncludesPersonaAndMessage:
     """Capture the request body sent to OpenRouter, assert it contains persona and message."""

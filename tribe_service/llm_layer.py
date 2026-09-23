@@ -50,11 +50,11 @@ def _env_float(name: str, default: float, minimum: float) -> float:
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 OPENROUTER_MODEL = os.getenv(
-    "OPENROUTER_MODEL", "deepseek/deepseek-v4-pro"
+    "OPENROUTER_MODEL", "google/gemini-3.8-flash"
 ).strip()
 # DeepSeek V4 Pro is the default rewrite engine: strong long-form writing and
 # reasoning at low cost via OpenRouter. Any OpenRouter model id can override it.
-DEFAULT_REFINER_MODEL = "deepseek/deepseek-v4-pro"
+DEFAULT_REFINER_MODEL = "google/gemini-3.8-flash"
 OPENROUTER_REFINER_MODEL = (
     os.getenv("OPENROUTER_REFINER_MODEL", "").strip() or DEFAULT_REFINER_MODEL
 )
@@ -650,6 +650,11 @@ def _call_openrouter_once(
                 parsed = _parse_json_content(content)
                 if parsed is not None:
                     return parsed
+                # Providers occasionally cut a long JSON reply mid-string; a fresh
+                # sample usually completes, so spend the retry budget before giving up.
+                if attempt < OPENROUTER_MAX_RETRIES:
+                    LOGGER.warning("OpenRouter returned non-JSON content; retrying")
+                    break
                 LOGGER.warning("OpenRouter returned non-JSON content; using neural-only report")
                 return None
             except httpx.HTTPStatusError as exc:

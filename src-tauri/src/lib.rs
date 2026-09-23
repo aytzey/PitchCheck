@@ -16,8 +16,8 @@ use thiserror::Error;
 use tokio::time::sleep;
 
 const DEFAULT_IMAGE_FALLBACK: &str = "ghcr.io/aytzey/pitchcheck-tribe:latest";
-const DEFAULT_OPENROUTER_MODEL: &str = "deepseek/deepseek-v4-pro";
-const DEFAULT_OPENROUTER_REFINER_MODEL: &str = "deepseek/deepseek-v4-pro";
+const DEFAULT_OPENROUTER_MODEL: &str = "google/gemini-3.8-flash";
+const DEFAULT_OPENROUTER_REFINER_MODEL: &str = "google/gemini-3.8-flash";
 const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
 const LOCAL_CONTAINER_NAME: &str = "pitchcheck-tribe-service";
 const LOCAL_MODELS_VOLUME: &str = "pitchcheck_tribe_models";
@@ -1929,8 +1929,8 @@ services:
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
       TRIBE_ALLOW_MOCK: "0"
       OPENROUTER_API_KEY: ${{OPENROUTER_API_KEY:-}}
-      OPENROUTER_MODEL: ${{OPENROUTER_MODEL:-deepseek/deepseek-v4-pro}}
-      OPENROUTER_REFINER_MODEL: ${{OPENROUTER_REFINER_MODEL:-deepseek/deepseek-v4-pro}}
+      OPENROUTER_MODEL: ${{OPENROUTER_MODEL:-google/gemini-3.8-flash}}
+      OPENROUTER_REFINER_MODEL: ${{OPENROUTER_REFINER_MODEL:-google/gemini-3.8-flash}}
     volumes:
       - ./models:/models
       - ./logs:/logs
@@ -1978,6 +1978,9 @@ read_env_value() {{
   [ -f "$file" ] || return 0
   awk -v key="$key" 'index($0, key "=") == 1 {{ print substr($0, length(key) + 2); exit }}' "$file"
 }}
+if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
+  OPENROUTER_API_KEY="$(read_env_value ./service.env OPENROUTER_API_KEY)"
+fi
 if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
   OPENROUTER_API_KEY="$(read_env_value ../.env OPENROUTER_API_KEY)"
 fi
@@ -3116,7 +3119,7 @@ mod tests {
         assert_eq!(parse_bool("0"), Some(false));
         assert_eq!(parse_bool("maybe"), None);
         assert_eq!(
-            unquote_env_value("\"deepseek/deepseek-v4-pro\""),
+            unquote_env_value("\"google/gemini-3.8-flash\""),
             DEFAULT_OPENROUTER_MODEL
         );
         assert_eq!(env_safe("  value\nwith\rnewline  "), "valuewithnewline");

@@ -266,8 +266,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | Variable | Default | What it does |
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
-| `OPENROUTER_MODEL` | `deepseek/deepseek-v4-pro` | High-quality model for interpreting neural output |
-| `OPENROUTER_REFINER_MODEL` | `deepseek/deepseek-v4-pro` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | High-quality model for interpreting neural output |
+| `OPENROUTER_REFINER_MODEL` | `google/gemini-3.8-flash` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
 | `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
 | `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |
 | `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |

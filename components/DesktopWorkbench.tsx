@@ -98,13 +98,13 @@ type RankRow = {
 };
 
 const DEFAULT_IMAGE = "ghcr.io/aytzey/pitchcheck-tribe:latest";
-const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-pro";
-const DEFAULT_OPENROUTER_REFINER_MODEL = "deepseek/deepseek-v4-pro";
+const DEFAULT_OPENROUTER_MODEL = "google/gemini-3.8-flash";
+const DEFAULT_OPENROUTER_REFINER_MODEL = "google/gemini-3.8-flash";
 const SUGGESTED_OPENROUTER_MODELS = [
+  "google/gemini-3.8-flash",
+  "deepseek/deepseek-v4.1-flash",
+  "xiaomi/mimo-v2.6-pro",
   "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-v4-flash",
-  "anthropic/claude-sonnet-4.6",
-  "anthropic/claude-opus-4.8",
 ];
 const APP_VERSION = "0.1.11";
 const ROUTES: Route[] = ["workspace", "runtime", "setup", "settings"];

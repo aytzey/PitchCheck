@@ -72,10 +72,10 @@ describe("DesktopWorkbench", () => {
     expect(screen.getByText("Machine env")).toBeDefined();
     expect(screen.getByLabelText(/OpenRouter API key/)).toBeDefined();
     expect(screen.getByLabelText<HTMLInputElement>(/Evaluator model/).value).toBe(
-      "deepseek/deepseek-v4-pro",
+      "google/gemini-3.8-flash",
     );
     expect(screen.getByLabelText<HTMLInputElement>(/Refiner model/).value).toBe(
-      "deepseek/deepseek-v4-pro",
+      "google/gemini-3.8-flash",
     );
   });
 

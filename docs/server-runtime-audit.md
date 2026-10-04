@@ -78,7 +78,9 @@ Batch=8 denemesi aynı sayısal tahminleri korumadı; kullanılmadı. Exca eksik
 
 ## ONNX / TensorRT kararı
 
-Bu dağıtım mevcut PyTorch CUDA akışını kullanıyor. Ölçülen darboğazlar gereksiz encoder yüklemesi ve tam bağlamın CPU'ya taşınmasıydı; mevcut ağırlık ve aritmetik korunarak giderildi. ONNX veya TensorRT dönüşümü yapılmadı ve bu motorlarla karşılaştırmalı hız ölçümü üretilmedi.
+Bu dağıtım mevcut PyTorch CUDA akışını kullanıyor. Ölçülen darboğazlar gereksiz encoder yüklemesi ve tam bağlamın CPU'ya taşınmasıydı; mevcut ağırlık ve aritmetik korunarak giderildi. İlk dağıtımda ONNX/TensorRT dönüşümü uygulanmadı.
+
+Takip çalışmasında 28 encoder bloğu TensorRT'ye dönüştürülüp gerçek TRIBE tahminleri üretildi. Sıcak encoder ile 126 kelimede native **2,3397 sn**, TensorRT **2,4836 sn** ölçüldü; çıktı eşitliği testi geçmedi. 378 kelimelik TensorRT işi 8 GiB süreç GPU bütçesini aşınca yalnızca deneme konteyneri durduruldu. Canlı imaj korunuyor. Ayrıntılar, kaynak sınırları ve tekrar üretme yolu [TensorRT deneme raporunda](tensorrt-experiment.md).
 
 Ayrıca tam API süresinde dış LLM çağrısı önemli yer tutuyor: son canlı imajda soğuk skor+rapor **17,060 sn**, refine **19,939 sn** ölçüldü. Son imajın otomatik restart testi sonrası **18,549 sn** ve **15,495 sn** ölçüldü. Mevcut `google/gemini-3.8-flash` ve refine kalite adımları korundu. Encoder'ın TensorRT'ye taşınması bu dış çağrının süresini azaltmaz. TensorRT seçilirse dinamik şekiller için profil ve bellek bütçelerinin yeniden doğrulanması gerekir; bu NVIDIA'nın [dinamik şekil dokümanında](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/dynamic-shapes-basics.html) anlatılır.
 

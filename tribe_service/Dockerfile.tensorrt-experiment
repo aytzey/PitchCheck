@@ -1,0 +1,7 @@
+# Build only an isolated experiment image from the verified native GPU image.
+ARG TRIBE_BASE_IMAGE=pitchcheck-trt-base:20261004
+FROM ${TRIBE_BASE_IMAGE}
+RUN python -m pip install --no-cache-dir torch-tensorrt==2.7.0 tensorrt==10.9.0.34
+RUN python -c "import torch,importlib.metadata as m; assert torch.__version__ == '2.7.1+cu128'; assert m.version('torch-tensorrt') == '2.7.0'; assert m.version('tensorrt') == '10.9.0.34'"
+ENTRYPOINT ["python"]
+CMD ["/audit/experiment-tensorrt.py"]

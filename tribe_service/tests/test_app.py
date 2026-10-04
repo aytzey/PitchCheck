@@ -652,10 +652,13 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
             events.append(('writer', payload))
             assert payload['model'] == 'google/gemini-3.5-flash-lite'
             prompt = payload['messages'][1]['content']
-            assert 'company' in prompt and 'synthetic_word_order' in prompt
-            assert '0.5' in prompt
+            assert 'company' in prompt and 'approximate_word_order' in prompt
+            assert 'continuity' in prompt
+            assert 'temporal_trace' not in prompt
             assert '15 saniyelik klip' not in prompt
-            body = {'choices': [{'message': {'content': json.dumps({'candidates': drafts})}}]}
+            plans = [{'anchor': 'çilekeş', 'idea': idea, 'message': draft}
+                     for idea, draft in zip(['Kendine takılan davet', 'Birlikte deneyim', 'Yalın davet'], drafts)]
+            body = {'choices': [{'message': {'content': json.dumps({'drafts': plans})}}]}
         return httpx.Response(200, json=body, request=httpx.Request('POST', url))
     monkeypatch.setattr(service_app, 'score_text', measure)
     monkeypatch.setattr(service_app, 'analyze_predictions', analysis)

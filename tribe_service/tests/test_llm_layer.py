@@ -1064,6 +1064,8 @@ def test_concrete_time_claim_is_not_authorized_by_a_generic_invitation():
     ('weak_trace', 'c2'), ('runtime_mismatch', 'c2'), ('score_clipping', 'c2'),
     ('invented_detail', 'c2'), ('unsupported_weather', 'c2'),
     ('all_ineligible', 'original'), ('writer_rejected', None),
+    ('missing_draft', None), ('unsupported_plan_anchor', None), ('invalid_idea', None),
+    ('invalid_message', None), ('duplicate_drafts', None),
 ])
 def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeypatch, case, expected):
     import numpy as np
@@ -1150,10 +1152,27 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         assert payload['model'] == 'google/gemini-3.5-flash-lite'
         assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
         assert payload['max_tokens'] == 1536
+        system = payload['messages'][0]['content']
+        assert 'doğal Türkçeyle' in system
+        assert 'satranç oynayalım mı?' in system
+        assert 'birlikte eğleneceğinizi vaat etme' in system
+        assert 'Çilekeş' not in system
         assert 'candidate_roles' in payload['messages'][1]['content']
         assert 'neural_score' not in payload['messages'][1]['content']
+        assert 'temporal_trace' not in payload['messages'][1]['content']
+        assert 'shared activity' in payload['messages'][1]['content']
+        assert plan['structural_hypothesis']['objective'] in payload['messages'][1]['content']
+        schema = payload['messages'][1]['content'].split('Return JSON only:')[1]
+        assert schema.index('idea') < schema.index('message')
+        plans = [{'anchor': 'çilekeş', 'idea': idea, 'message': draft}
+                 for idea, draft in zip(['Kendine takılan davet', 'Birlikte deneyim', 'Yalın davet'], drafts)]
+        if case == 'missing_draft': plans.pop()
+        if case == 'unsupported_plan_anchor': plans[0]['anchor'] = 'bilet aldım'
+        if case == 'invalid_idea': plans[0]['idea'] = ''
+        if case == 'invalid_message': plans[0]['message'] = None
+        if case == 'duplicate_drafts': plans[1] = plans[0]
         return httpx.Response(422 if case == 'writer_rejected' else 200,
-            json={'choices': [{'message': {'content': json.dumps({'candidates': drafts})}}]},
+            json={'choices': [{'message': {'content': json.dumps({'drafts': plans})}}]},
             request=httpx.Request('POST', url))
     monkeypatch.setattr(llm_layer.httpx, 'post', post)
     if case == 'writer_rejected':
@@ -1162,8 +1181,17 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
                 decision_strategy=plan, force_rewrite=True, openrouter_model='legacy/model')
         assert calls.count('writer') == 1
         return
+    if case in {'missing_draft', 'unsupported_plan_anchor', 'invalid_idea', 'invalid_message', 'duplicate_drafts'}:
+        with pytest.raises(RuntimeError, match='writing drafts|three distinct'):
+            llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
+                decision_strategy=plan, force_rewrite=True)
+        assert calls.count('writer') == 1
+        return
     result = llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
         decision_strategy=plan, force_rewrite=True, openrouter_model='legacy/model')
+    assert result['candidates'] == drafts
+    assert result['writer_call']['draft_plans'][0]['move'] == plan['choices']['move']
+    assert result['writer_call']['draft_plans'][0]['objective'] == plan['structural_hypothesis']['objective']
     reviews = [
         {'id': row['id'], 'supported': case != 'all_ineligible' and not (
              case == 'unsupported_weather' and row['id'] == 'c1'), 'intent_preserved': True,
@@ -1182,6 +1210,7 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         ['Bu akşam iki bilet var'], result, measurements)
     proof = selected['tribe_guidance']
     assert proof['selected_id'] == expected
+    assert proof['writer_call']['draft_plans'] == result['writer_call']['draft_plans']
     assert calls.count('writer') == 1
     assert proof['selection_policy']['basis'] == 'context_first_experimental_trace_tiebreak'
     assert proof['selection_policy']['trace_preference_applied'] == (case in {

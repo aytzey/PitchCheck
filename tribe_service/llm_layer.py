@@ -1556,7 +1556,8 @@ _REFINE_CONCRETE_DETAILS = re.compile(
 
 def _refine_concrete_details(text: str) -> set[str]:
     normalised = text.casefold().replace("i\u0307", "i")
-    normalised = re.sub(r"(akşam|gece)ki\b", r"\1", normalised)
+    normalised = re.sub(r"(?<!\w)(akşam)(?:ki|ı|a|da|dan|ın|ını|ına|ında|ından|ının|ım|ımı|ıma|ımda|ımdan|ımız|ımızı|ımıza|ımızda|ımızdan)\b", r"\1", normalised)
+    normalised = re.sub(r"(?<!\w)(gece)(?:ki|yi|ye|de|den|nin|si|sini|sine|sinde|sinden|sinin|mi|me|ni|ne|mizi|nizi)\b", r"\1", normalised)
     return {value or ("klip" if resource == "klib" else resource)
             for value, resource in _REFINE_CONCRETE_DETAILS.findall(normalised)}
 
@@ -1805,7 +1806,9 @@ def plan_tribe_refinement(message: str, persona: str, platform: str, baseline: d
 
 def _jev_refinement_reviews(message, persona, platform, measurements, strategy, clarification_answers):
     checks = {
-        "supported": ("An objective fact, resource, date, commitment or prior history is invented or contradicted.", "Objective facts are supported by original, persona or actual answers. Expressing the sender's wish or proposing the original invitation is valid, not invented history."),
+        "supported": (
+            "The message asserts or presupposes an unsupported objective fact, available resource, timing, commitment, prior history or guaranteed reaction. Questions can still presuppose invented dates, tickets or arrangements.",
+            "All asserted or presupposed facts are supported by original, persona or actual answers. Present wishes, open proposals for how to share the requested activity, and obvious figurative relational phrasing are creative invitations, not claims of existing arrangements. They do not authorize invented timing, resources or history, or promises of enjoyment."),
         "intent_preserved": ("The requested activity/proposal is replaced with an after-plan, reward or different goal.", "The actual requested activity/proposal remains; no unrelated reward or changed goal."),
         "recipient_respected": ("Guilt, pressure, insults, denial of stated taste, or promises they will enjoy a disliked activity.", "Their taste is respected. An invitation despite differing taste is still respectful; explicit refusal disclaimers and conceding the activity are NOT required."),
         "voice_preserved": ("Different language, forced marketing template, implausible register or unfilled placeholders.", "Same language and believable natural sender voice and relationship, ready to send."),

@@ -1056,6 +1056,34 @@ def test_concrete_time_claim_is_not_authorized_by_a_generic_invitation():
     assert 'bu akşam' not in _refine_concrete_details('Çilekeş konserine gidelim mi?')
     assert _refine_concrete_details('Bu akşamki konsere gidelim mi?') == {'bu akşam'}
     assert _refine_concrete_details('A short demo this week?') == {'this week'}
+    for reference in ['bu akşamı', 'bu akşama', 'bu akşamın', 'bu akşamını', 'bu akşamında', 'bu akşamından']:
+        assert _refine_concrete_details(reference) == {'bu akşam'}
+    for reference in ['bu geceyi', 'bu geceye', 'bu gecenin', 'bu gecesi', 'bu gecesinde']:
+        assert _refine_concrete_details(reference) == {'bu gece'}
+
+
+def test_jev_support_checks_asserted_facts_separately_from_proposals(monkeypatch):
+    from tribe_service import llm_layer
+    measurements = [{'id': 'original', 'message': 'Birlikte yürüyüşe çıkar mısın?'},
+                    {'id': 'c1', 'message': 'Biraz adım, biraz sohbet; yürüyüşe çıkalım mı?'}]
+    def decisions(state, questions):
+        assert state['measurements'][1]['message'] == measurements[1]['message']
+        answers = {}
+        for row in measurements:
+            criteria = questions[row['id'] + '_supported']['criteria']
+            assert 'asserts or presupposes' in criteria['false']
+            assert 'open proposals' in criteria['true'] and 'figurative' in criteria['true']
+            assert 'timing, resources or history' in criteria['true']
+            assert measurements[1]['message'] not in str(criteria)
+        for name, question in questions.items():
+            answers[name] = ({'noul': .75} if question['type'] == 'noul' else
+                             {'score': 3} if question['type'] == 'score' else
+                             {'choice': 'c1', 'confidence': .9})
+        return {'model': 'typesafe/jev-test', 'answers': answers}
+    monkeypatch.setattr(llm_layer, '_post_jev_decisions', decisions)
+    reviews, _, _ = llm_layer._jev_refinement_reviews('Birlikte yürüyüşe çıkar mısın?', 'Bir arkadaş',
+        'general', measurements, {'creative_brief': {}, 'choices': {}, 'instructions': []}, [])
+    assert all(review['supported'] for review in reviews)
 
 
 @pytest.mark.parametrize('case,expected', [
@@ -1063,6 +1091,7 @@ def test_concrete_time_claim_is_not_authorized_by_a_generic_invitation():
     ('unverified_encoder', 'c1'), ('mock', 'c2'), ('different_resolution', 'c2'),
     ('weak_trace', 'c2'), ('runtime_mismatch', 'c2'), ('score_clipping', 'c2'),
     ('invented_detail', 'c2'), ('unsupported_weather', 'c2'),
+    ('inflected_time', 'c2'), ('supplied_inflected_time', 'c1'),
     ('all_ineligible', 'original'), ('writer_rejected', None),
     ('missing_draft', None), ('unsupported_plan_anchor', None), ('invalid_idea', None),
     ('invalid_message', None), ('duplicate_drafts', None),
@@ -1090,6 +1119,8 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         drafts[0] = 'Bu akşam iki bilet aldım, Çilekeş konserine beraber gidelim mi?'
     if case == 'unsupported_weather':
         drafts[0] = 'Hava da tam konser havası, Çilekeş konserine beraber gidelim mi?'
+    if case in {'inflected_time', 'supplied_inflected_time'}:
+        drafts[0] = 'Çilekeş konserine benimle gelip bu akşamı paylaşır mısın?'
     measurements = [
         {'id': name, 'message': text, 'model_id': 'facebook/tribev2', 'mode': 'model',
          'neural_score': 99 if name == 'c2' else 1, 'quality_weight': 1,
@@ -1207,14 +1238,17 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
     monkeypatch.setattr(llm_layer, '_jev_refinement_reviews', lambda *args: (
         reviews, 'typesafe/jev-1.13-20260917', {'type': 'choice', 'choice': 'c2', 'confidence': .9}))
     selected = llm_layer.select_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general',
-        ['Bu akşam iki bilet var'], result, measurements)
+        ['Bu akşam iki bilet var'], result, measurements,
+        clarification_answers=[{'answer': 'Bu akşamki konser.'}] if case == 'supplied_inflected_time' else [])
     proof = selected['tribe_guidance']
     assert proof['selected_id'] == expected
     assert proof['writer_call']['draft_plans'] == result['writer_call']['draft_plans']
     assert calls.count('writer') == 1
     assert proof['selection_policy']['basis'] == 'context_first_experimental_trace_tiebreak'
     assert proof['selection_policy']['trace_preference_applied'] == (case in {
-        'close', 'swapped_trace', 'unverified_encoder', 'different_resolution', 'weak_trace', 'score_clipping'})
+        'close', 'swapped_trace', 'unverified_encoder', 'different_resolution', 'weak_trace', 'score_clipping', 'supplied_inflected_time'})
+    if case in {'inflected_time', 'supplied_inflected_time'}:
+        assert proof['evaluations'][1]['eligible'] == (case == 'supplied_inflected_time')
     assert all(0 <= row['selection_score'] <= 100 for row in proof['evaluations'])
     if case == 'weak_trace':
         assert 0 < proof['evaluations'][1]['empirical_effect']['weight'] < .1

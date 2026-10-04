@@ -14,7 +14,7 @@
 | Compose / servis | `pitchserver` / `tribe` |
 | Konteyner | `pitchserver_tribe` |
 | Mevcut erişim | `127.0.0.1:18090`, `https://pitchserver.machinity.ai` |
-| Son dağıtılan imaj; Taskfulight entegrasyonu dahil | `sha256:ee00749112001f740f3f31e74436247a82210a5bf9fbb16039e02a4cb1bfc660` |
+| Son dağıtılan imaj; gerçek TRIBE aday seçimi dahil | `sha256:942421b4faa73f9788f61e1d75e704ef3aac84c9e399ade79a709fc42e439eb0` |
 | Önceki sağlamlık / performans imajı | `sha256:9572265cf67a3be3186ff479552126aa370f06deb93240a7563470d010e50721` |
 
 Traefik, diğer Compose projeleri, GPU sürücüsü ve sistem paketleri değiştirilmedi. İşlem öncesinde yaklaşık 4 GiB GPU belleği başka süreçlerce kullanılıyordu. Sunucunun swap alanı doluydu; PitchServer'ın swap kullanması engellendi.
@@ -23,7 +23,7 @@ Traefik, diğer Compose projeleri, GPU sürücüsü ve sistem paketleri değişt
 
 Sunucuya dağıtılan imaj Python backend'idir. Masaüstü ve web değişiklikleri bu branch üzerinde build/test edildi; hazır native geliştirme build'i `src-tauri/target/debug/pitchcheck-desktop` yolundadır.
 
-Masaüstü Tauri istemcisi SSH tüneli ve kullanıcı oturumu üzerinden; mobil istemci HTTP API üzerinden çalışıyor. Python API metni kelime olaylarına çeviriyor, Hermes metin özelliklerini çıkarıyor, TRIBE ile 20.484 voxel tahmini oluşturuyor, sayısal özellikleri özetliyor ve mevcut OpenRouter modeliyle raporu tamamlıyor. Doğrudan metin modunda TTS/WhisperX çalışmıyor. `/refine` ayrı bir LLM akışı; yeniden TRIBE skoru üretmiyor.
+Masaüstü Tauri istemcisi SSH tüneli ve kullanıcı oturumu üzerinden; mobil istemci HTTP API üzerinden çalışıyor. Python API metni kelime olaylarına çeviriyor, Hermes metin özelliklerini çıkarıyor, TRIBE ile 20.484 voxel tahmini oluşturuyor, sayısal özellikleri özetliyor ve mevcut OpenRouter modeliyle raporu tamamlıyor. Doğrudan metin modunda TTS/WhisperX çalışmıyor. Son takip çalışmasında `/refine`, üç farklı LLM taslağını ve orijinali gerçek TRIBE ile ölçer; olgusal/bağlamsal kontrolü geçen ölçülmüş adaylar arasından mevcut nöral/semantik ağırlıklarla seçim yapar. Seçimden sonra ölçülmemiş yeni bir metin yazılmaz.
 
 | Sorun | Düzeltilen davranış ve kanıt |
 |---|---|
@@ -85,7 +85,7 @@ Takip çalışmasında 28 encoder bloğu TensorRT'ye dönüştürülüp gerçek 
 
 Ayrıca tam API süresinde dış LLM çağrısı önemli yer tutuyor: ilk sağlamlık dağıtımında soğuk skor+rapor **17,060 sn**, refine **19,939 sn** ölçüldü. O imajın otomatik restart testi sonrası **18,549 sn** ve **15,495 sn** ölçüldü. Bu ilk ölçümde mevcut `google/gemini-3.8-flash` ve refine kalite adımları korundu. Encoder'ın TensorRT'ye taşınması bu dış çağrının süresini azaltmaz. TensorRT seçilirse dinamik şekiller için profil ve bellek bütçelerinin yeniden doğrulanması gerekir; bu NVIDIA'nın [dinamik şekil dokümanında](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/dynamic-shapes-basics.html) anlatılır.
 
-## Doğrulama ve kapsam
+## İlk sağlamlık dağıtımının doğrulaması ve kapsamı
 
 - Sabit GPU imajında **130 Python testi geçti**. Hafif CPU/CI ortamında **129 geçti, 1 Torch/neuralset testi atlandı**; o test gerçek GPU bağımlılıklarının bulunduğu imajda geçti.
 - **49 web testi**, **9 Rust testi**, ESLint, Next.js üretim build'i, desktop static build ve native desktop build geçti.
@@ -145,7 +145,7 @@ Tekrar üretilebilir GPU karşılaştırması için `scripts/benchmark-runtime.p
 
 Sunucudaki ayrıntılı test çıktıları ve `.npy` matrisleri `audit-20261004/` altında; son performans kaydı `final/metrics.json`, servis karşılaştırması `service-verification.json`, dağıtım/rollback yolu `deployment.json` dosyalarında bulunur. Auth/API testi yalnızca durum, süre ve model adını kaydeder; parola veya token yazdırmaz.
 
-## Taskfulight özel iOS entegrasyonu — aynı gün takip çalışması
+## Taskfulight özel iOS entegrasyonu — önceki dağıtımın ölçümleri
 
 Taskfulight'ın mevcut `feat/taskfulight-v2` branch'ine **Şimdi → İkna** ekranı eklendi. Ekran mevcut PitchServer hesabıyla HTTPS üzerinden bağlanır; giriş bilgileri ve token iPhone'un cihazda kalan, kilit açıkken erişilebilir Keychain kaydındadır. Kullanıcı bir dokunuşla modeli yükleyebilir veya boşaltabilir; analiz, iki turlu metin iyileştirme ve yeni metni yeniden analiz ederek karşılaştırma aynı ekrandadır. Seçilen model uygulamanın mevcut ayarından alınır: bu kabul testinde **`deepseek/deepseek-v4-flash`** kullanıldı. Sunucunun başka istemciler için varsayılan modeli değiştirilmedi.
 
@@ -176,3 +176,38 @@ Son imajda **136 Python testi geçti**; yerel hafif ortamda 135 geçti, Torch/ne
 Diğer **165 kalıcı servisin** kimliği, başlangıç zamanı, restart sayısı ve sağlık durumu ilk Taskfulight snapshot'ıyla karşılaştırıldığında değişmedi. Son dağıtımın ham snapshot'ına eşzamanlı çalışan geçici pytest konteyneri de girmişti; `--rm` ile normal çıkışı ham karşılaştırmada bir silinme olarak görünür. Ham kayıt korundu; kalıcı servislerin ilk baseline'a göre ayrı doğrulaması `audit-taskfulight-20261004-final/service-verification.json`, açıklama `deployment-verification-note.json` dosyasındadır. GPU zamanında sıfır etki garantisi verilmez; mevcut kaynak sınırları korunur.
 
 Kanıtlar sunucuda `audit-taskfulight-20261004-final/` altında `live-api.json`, `live-api.log`, `memory.json`, `deployment.json` ve `service-verification.json` dosyalarındadır. Sentetik test metni kayıtlıdır; parola/token/API anahtarı kayıtlı değildir. Son küçük backend değişikliği öncesine dönüş `rollback-20261004T180820Z/rollback.sh`; Taskfulight entegrasyonunun tümünü geri alıp önceki sağlamlık imajına dönüş `rollback-20261004T174806Z/rollback.sh` ile yapılır. Her iki script yalnız `tribe` servisini yeniler.
+
+
+## Gerçek TRIBE aday araması — kullanıcı örneği sonrası son dağıtım
+
+Önceki mobil refine yalnız dil modeliyle iki tur yazıyordu. Kullanıcının kişisel davet örneği, açıkça belirtilen hoşlanmama tercihinin göz ardı edildiğini ve verilmemiş kısa klip ayrıntısının yazıya eklendiğini gösterdi. Son akışta mevcut `deepseek/deepseek-v4-flash` üç farklı taslak üretir; orijinal dahil dört metnin her biri gerçek CUDA TRIBE modeliyle ölçülür. Eleştirmen her adayı doğruluk, asıl amaç, alıcı tercihi ve gönderenin dili açısından değerlendirir. Python, uygun adaylar arasında gerçek nöral kanıt ile semantik bağlamın mevcut ağırlıklı bileşimini kullanarak seçim yapar. Yüksek nöral puan yanlış bilgiyi meşrulaştıramaz; uygun iyileşme yoksa orijinal korunur.
+
+Analizdeki örnek yeniden yazımlar artık taslak üretimine aktarılmaz; bunlar yeni gerçekler için kaynak değildir. Gerçek HTTPS ilk kabul denemesinde eleştirmenin önerideki verilmemiş cuma bilgisini onaylaması yakalandı. Tarih, sayı, klip/bilet ayrıntıları yalnız orijinal, persona ve gerçekten cevaplanmış bağlamda varsa kabul edilir. Sorulmuş ama cevaplanmamış soru olgusal kaynak sayılmaz. Doldurulmamış köşeli parantezli yer tutucular da elenir. Bu sınırlı Türkçe/İngilizce ayrıntı denetimi genel olgusal çıkarımın yerini tutmaz; kalan iddialar için semantik kontrol korunur. Başarısız veya eksik eleştirmen çıktısı ölçümsüz yeniden yazıma düşmek yerine redakte edilmiş hata verir.
+
+GPU izin hakkı dört metnin bütün ölçüm süresi boyunca işçide kalır; iptal veya HTTP timeout bu hakkı erken bırakmaz. İşlem sırasında unload reddedilir. API yanıtındaki `tribe_guidance` orijinal ve üç adayın metnini, gerçek model/mode kimliğini, voxel/segment sayısını, nöral sinyallerini, ayrı bağlam puanını, seçimi ve elenme nedenlerini taşır. Taskfulight bu sözleşmeyi doğrulamadan gerçek TRIBE karşılaştırması iddiası göstermez. Uygulamadaki açılır aday karşılaştırması seçimin kanıtını görünür kılar; genel kanal kişisel davetlerde başlangıç seçimidir.
+
+Eleştirmene gönderilen yinelenen eksen açıklamaları ve araştırma eki kaldırıldı; gerçek sayısal ölçümler korunuyor, tam eksen bilgisi API kanıtında kalıyor. Önceki ara sürümde dış sağlayıcı nedeniyle refine 104,159 sn sürdü. Bu bir hız garantisi değildir; gerçek model hesabı ile dış sağlayıcı gecikmesi ayrı ölçülür.
+
+Son backend kaynak commit'i `52c2c7924159cb740fbd459136967f444c49b569`; `/app` altındaki 28 izlenen runtime dosyasının SHA-256 değeri kaynakla bire bir doğrulandı. GPU bağımlılık imajında **140 Python testi**, hafif yerel ortamda **139 test** geçti; yalnız gerçek Torch/neuralset testi yerelde atlandı ve imajda geçti. Karşıt testte aynı semantik değerlendirme tutulup nöral ölçümler değiştirilince kazanan aday değişiyor. Verilmemiş tarih/klip/bilet ve yer tutucu en yüksek model puanını alsa ve eleştirmen onaylasa bile eleniyor. İptal, eksik/çift aday, eksik eleştirmen ve özel hata içeriği regresyonları geçti.
+
+Taskfulight kaynak commit'i `a85dcbb9c126bdc0120c834edf7d56573e90b350`. **136 Flutter testi**, analiz ve release hygiene geçti. Yeni imzalı iOS CI'de **12 native RunnerTests ve 2 simülatör akışı** geçti. **1.0.0 (1791142457)** Apple tarafından işlendi ve mevcut **Taskfulight Owner** grubuna eklendi; dış beta/App Store yayını yapılmadı. IPA bundle ID `com.aytzey.taskfulight`, kaynak provenance ve SHA-256 (`83cd4e7eb9ed93d9399214c68d65b7a7c5230e62b9e930b1d704a95bcdc2d5e1`) CI artefaktlarıyla eşleşiyor. Yeni sürümün fiziksel iPhone akışı bu çalışmada çalıştırılmadı.
+
+TRIBE, [resmî proje açıklamasındaki](https://github.com/facebookresearch/tribev2) ortalama-denek fMRI yanıtını tahmin eder. Bu kullanıcının flörtünden ölçülmüş fMRI veya ikna olma olasılığı değildir; türetilmiş nöral eksen/puanlar bireysel davranışa doğrulanmış kalibrasyon sayılmaz.
+
+Son dağıtım yalnız `tribe` servisini yeniledi. Diğer **165 konteynerin** kimliği, başlangıç zamanı, restart sayısı ve sağlık durumu değişmedi. Kaynak sınırları, auth/model mount'ları, Traefik ve native PyTorch CUDA korunuyor. Son sürüm öncesine hedefli dönüş `rollback-20261004T194256Z/rollback.sh`; bu aday seçimi çalışmasının tamamından önceki imaja dönüş `rollback-20261004T192626Z/rollback.sh`. Sunucudaki kanıt dizini `audit-tribe-search-final-20261004/`; kullanıcıya ait örnek metinler sadece yetkisi sınırlı canlı kabul kaydında tutulur ve Git/PR açıklamasına yazılmaz.
+
+Son public HTTPS kabulünde kullanıcı girdisine karşı **4 gerçek, mock olmayan TRIBE ölçümü** (20.484 voxel) doğrulandı. Nöral türetilmiş puan orijinalde **32,357**, seçilende **38,637**; ayrı semantik bağlam puanı **42,5 → 60,5**, rapor puanı **25 → 40** oldu. Bunlar aynı kişinin gerçek davranışını ölçmez; yalnız bu işlemdeki model değerlendirmeleridir. Seçilen metin kısa ve verilen bilgilere sadık kaldı; doğal dil kalitesi hâlâ model değerlendirmesidir, evrensel ikna iddiası yoktur.
+
+| Son canlı kabul ölçümü | Sonuç |
+|---|---:|
+| Tam yükleme | 4,783 sn |
+| Orijinal skor + rapor | 24,807 sn |
+| Üç aday üretimi + dört ölçüm + eleştirmen/seçim | 74,633 sn |
+| Ayrı yeniden skor + rapor | 17,715 sn |
+| Yeni adayların tekil native TRIBE hesabı | 0,196–0,240 sn |
+| Health en uzun | 0,340 sn |
+| 150 ms aralıklarla örneklenen cgroup `memory.current` tepe | 1,617 GiB |
+| Örnek CUDA peak allocated | 6,695 GiB |
+| Unload | 0,607 sn |
+
+Bu kısa metin denemesinde dört TRIBE ölçümü yaklaşık bir saniyedir; toplam refine süresinin çoğu dış LLM beklemesidir. **74,633 saniye hızlı bir son kullanıcı yanıtı sayılmaz**; seçili ucuz sağlayıcının gecikmesi değişkendir. Yerelde aynı modelle aday üretimi yaklaşık beş saniye sürerken bu sunucu çağrısında belirgin gecikti. Bu örnekleme mutlak süreç RSS veya RAM tepe ölçümü değildir. En büyük metinler için RAM veya süre garantisi çıkarılmaz. Sıfır aktif GPU işi, başarılı unload, çağıran token'ın logout sonrası `401` alması ve diğer 165 servisin son kabul sonrasında da değişmemesi doğrulandı.

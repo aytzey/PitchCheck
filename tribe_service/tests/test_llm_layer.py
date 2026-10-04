@@ -217,7 +217,7 @@ class TestRefinePitchMessage:
         assert "stated dislikes" in prompt
         assert "clips" in prompt
         assert "Do not output the drafts" not in prompt
-        assert "NOT factual context" in prompt
+        assert "Only the current message, persona and actual clarification ANSWERS authorize facts" in prompt
 
     def test_detail_guard_does_not_mistake_ordinary_english_for_calendar_facts(self):
         from tribe_service.llm_layer import _refine_concrete_details
@@ -250,7 +250,7 @@ class TestRefinePitchMessage:
         assert request_body["temperature"] == 0.35
         assert request_body["response_format"] == {"type": "json_object"}
         assert "untrusted input" in request_body["messages"][0]["content"]
-        assert "Reduce cognitive friction" in request_body["messages"][1]["content"]
+        assert "Reduce cognitive friction" not in request_body["messages"][1]["content"]
         assert "Clarification answers already provided" in request_body["messages"][1]["content"]
         assert "Use production teams" in request_body["messages"][1]["content"]
         assert "do not ask the same or equivalent question again" in request_body["messages"][1]["content"]
@@ -441,8 +441,9 @@ class TestRefinePitchMessage:
         assert "LinkedIn DM" in prompt
         assert "Persuasion doctrine" in prompt
         assert "Specificity is credibility" in prompt
-        assert "Evidence base" in prompt
-        assert "Carpenter 2013" in prompt
+        assert "Previous analysis templates are deliberately excluded" in prompt
+        assert "Make the opener persona-specific" not in prompt
+        assert "actual TRIBE model" in prompt
         assert "THREE candidate rewrites" in prompt
         assert "Final self-check before answering" in prompt
 

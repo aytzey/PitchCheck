@@ -421,6 +421,14 @@ class TestScore:
         assert res.json()["tribe_guidance"]["evaluations"][1]["eligible"] is True
         assert res.json()["refined_message"] == fabricated
 
+        # A model-approved, high-scoring placeholder is still not ready to send.
+        placeholder = "Çilekeş konserine beraber gidelim mi? [onun sevdiği bir mekan]"
+        candidates[0] = placeholder
+        scores[placeholder] = 99
+        res = client.post("/refine", json=payload)
+        assert res.json()["tribe_guidance"]["evaluations"][1]["eligible"] is False
+        assert res.json()["refined_message"] != placeholder
+
     def test_refine_can_return_clarifying_questions(self, monkeypatch):
         def fake_refine_pitch_message(**kwargs):
             return {

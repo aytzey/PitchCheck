@@ -126,7 +126,10 @@ class TopMove(BaseModel):
     principle: str = ""  # research principle the move rests on, e.g. "loss aversion"
 
 class FmriOutput(BaseModel):
-    """fMRI summary from TRIBE — temporal trace and top voxel data."""
+    """TRIBE response geometry with feature-encoder provenance."""
+    text_feature_model: str | None = None
+    expected_text_feature_model: str | None = None
+    text_feature_compatible: bool = False
     segments: int
     voxel_count: int
     global_mean_abs: float

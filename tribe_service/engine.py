@@ -46,7 +46,9 @@ TRIBE_TEXT_DEVICE = os.getenv(
 TRIBE_TEXT_INPUT_MODE = os.getenv("TRIBE_TEXT_INPUT_MODE", "direct").strip().lower()
 TRIBE_DIRECT_TEXT_LANGUAGE = os.getenv("TRIBE_DIRECT_TEXT_LANGUAGE", "english")
 TRIBE_CACHE_DIR = Path(os.getenv("TRIBE_CACHE_DIR", "/models")).resolve()
-TRIBE_TEXT_MODEL = os.getenv("TRIBE_TEXT_MODEL", "NousResearch/Hermes-3-Llama-3.2-3B")
+# Retain the requested Hermes runtime; report its mismatch with the trained feature space.
+TRIBE_CHECKPOINT_TEXT_MODEL = "meta-llama/Llama-3.2-3B"
+TRIBE_TEXT_MODEL = os.getenv("TRIBE_TEXT_MODEL", "NousResearch/Hermes-3-Llama-3.2-3B").strip()
 TRIBE_TEXT_BATCH_SIZE = os.getenv("TRIBE_TEXT_BATCH_SIZE", "auto").strip().lower()
 TRIBE_TEXT_CUDA_MIN_TOTAL_GB = _env_float("TRIBE_TEXT_CUDA_MIN_TOTAL_GB", 7.0, 0.0)
 TRIBE_TEXT_CUDA_MIN_FREE_GB = _env_float("TRIBE_TEXT_CUDA_MIN_FREE_GB", 5.0, 0.0)
@@ -805,11 +807,19 @@ def load_runtime_models() -> None:
         model.data.text_feature.model
 
 
+def _text_feature_metadata() -> dict[str, Any]:
+    actual = _loaded_runtime_config.get("text_model")
+    expected = TRIBE_CHECKPOINT_TEXT_MODEL if TRIBE_MODEL_ID == "facebook/tribev2" else None
+    return {"text_feature_model": actual, "expected_text_feature_model": expected,
+            "text_feature_compatible": bool(_model is not None and expected and actual == expected)}
+
+
 def runtime_config() -> dict[str, Any]:
     with _prediction_cache_lock:
         prediction_cache_entries = len(_prediction_cache)
         prediction_cache_bytes = _prediction_cache_bytes
     return {
+        **_text_feature_metadata(),
         "configured_device": TRIBE_DEVICE,
         "configured_text_device": TRIBE_TEXT_DEVICE,
         "cuda_memory_limit_gb": TRIBE_CUDA_MEMORY_LIMIT_GB,
@@ -1243,6 +1253,7 @@ def _summarize_fmri_output_from_matrix(
     return {
         "segments": n_segments,
         "voxel_count": n_voxels,
+        **_text_feature_metadata(),
         "global_mean_abs": float(abs_preds.mean()),
         "global_peak_abs": float(abs_preds.max()),
         "temporal_trace": [round(v, 4) for v in temporal_trace],
@@ -1270,7 +1281,7 @@ def summarize_fmri_output(
         LOGGER.warning("Rust fMRI summary failed; using Python fallback: %s", exc)
         native_summary = None
     if native_summary is not None:
-        return native_summary
+        return {**native_summary, **_text_feature_metadata()}
     return _summarize_fmri_output_from_matrix(
         predictions,
         text_input_mode=text_input_mode,
@@ -1425,7 +1436,8 @@ def analyze_predictions(
         LOGGER.warning("Rust prediction analysis failed; using Python fallback: %s", exc)
         native_analysis = None
     if native_analysis is not None:
-        return native_analysis
+        raw_features, fmri_summary, neural_signals = native_analysis
+        return raw_features, {**fmri_summary, **_text_feature_metadata()}, neural_signals
 
     raw_features = _extract_features_from_matrix(matrix)
     fmri_summary = _summarize_fmri_output_from_matrix(

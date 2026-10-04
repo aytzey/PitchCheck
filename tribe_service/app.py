@@ -528,6 +528,12 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
             "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
             "temporal_trace": fmri.get("temporal_trace", []),
             "temporal_trace_basis": fmri.get("temporal_trace_basis", "unknown"),
+            "text_feature_model": fmri.get("text_feature_model"),
+            "expected_text_feature_model": fmri.get("expected_text_feature_model"),
+            "text_feature_compatible": fmri.get("text_feature_compatible") is True,
+            "response_features": {key: raw[key] for key in (
+                "global_mean_abs", "global_peak_abs", "focus_ratio", "spatial_spread", "sustain_ratio", "arc_ratio",
+            ) if key in raw},
         })
     return measurements
 

@@ -1054,3 +1054,143 @@ def test_concrete_time_claim_is_not_authorized_by_a_generic_invitation():
     from tribe_service.llm_layer import _refine_concrete_details
     assert 'bu akşam' in _refine_concrete_details('Bu akşam Çilekeş konserine gidelim mi?')
     assert 'bu akşam' not in _refine_concrete_details('Çilekeş konserine gidelim mi?')
+    assert _refine_concrete_details('Bu akşamki konsere gidelim mi?') == {'bu akşam'}
+    assert _refine_concrete_details('A short demo this week?') == {'this week'}
+
+
+@pytest.mark.parametrize('case,expected', [
+    ('close', 'c1'), ('swapped_trace', 'c2'), ('quality_gap', 'c2'),
+    ('unverified_encoder', 'c1'), ('mock', 'c2'), ('different_resolution', 'c2'),
+    ('weak_trace', 'c2'), ('runtime_mismatch', 'c2'), ('score_clipping', 'c2'),
+    ('invented_detail', 'c2'), ('unsupported_weather', 'c2'),
+    ('all_ineligible', 'original'), ('writer_rejected', None),
+])
+def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeypatch, case, expected):
+    import numpy as np
+    from tribe_service import engine, llm_layer
+    monkeypatch.setattr(engine, 'TRIBE_MODEL_ID', 'facebook/tribev2')
+    monkeypatch.setattr(engine, '_model', object())
+    monkeypatch.setattr(engine.native_core, 'prediction_analysis', lambda *args: ({}, {}, {}))
+    monkeypatch.setattr(engine.native_core, 'summarize_fmri_output', lambda *args: {})
+    for encoder in ['meta-llama/Llama-3.2-3B', 'NousResearch/Hermes-3-Llama-3.2-3B', 'mock', None]:
+        monkeypatch.setattr(engine, '_loaded_runtime_config', {'text_model': encoder})
+        metadata = engine._text_feature_metadata()
+        assert metadata['text_feature_model'] == encoder
+        assert metadata['expected_text_feature_model'] == 'meta-llama/Llama-3.2-3B'
+        assert metadata['text_feature_compatible'] == (encoder == 'meta-llama/Llama-3.2-3B')
+        assert engine.analyze_predictions(np.ones((4, 3)))[1] == metadata
+        assert engine.summarize_fmri_output(np.ones((4, 3))) == metadata
+    original = 'benimle çilekeş konserine gelmelisin harika bi grup çok eğlencez'
+    drafts = ['Çilekeş konserine benimle gelir misin? Yanımda sen ol istiyorum.',
+              'Müzik zevkime kefil olamam, ama sana eşlik etme teklifim var. Çilekeş konserine gidelim mi?',
+              'Çilekeş konserine beraber gidelim mi?']
+    if case == 'invented_detail':
+        drafts[0] = 'Bu akşam iki bilet aldım, Çilekeş konserine beraber gidelim mi?'
+    if case == 'unsupported_weather':
+        drafts[0] = 'Hava da tam konser havası, Çilekeş konserine beraber gidelim mi?'
+    measurements = [
+        {'id': name, 'message': text, 'model_id': 'facebook/tribev2', 'mode': 'model',
+         'neural_score': 99 if name == 'c2' else 1, 'quality_weight': 1,
+         'neural_signals': {'personal_relevance': 99}, 'voxel_count': 20484, 'segments': 4,
+         'text_feature_model': 'NousResearch/Hermes-3-Llama-3.2-3B',
+         'text_feature_compatible': False, 'temporal_trace_basis': 'synthetic_word_order',
+         'temporal_trace': [.3, .45, .4, .35] if name == 'c1' else [.3, .5, .1, .3]}
+        for name, text in zip(['original', 'c1', 'c2', 'c3'], [original, *drafts])
+    ]
+    if case == 'swapped_trace':
+        measurements[1]['temporal_trace'], measurements[2]['temporal_trace'] = (
+            measurements[2]['temporal_trace'], measurements[1]['temporal_trace'])
+    if case == 'unverified_encoder':
+        for row in measurements:
+            row.pop('text_feature_compatible')
+    if case == 'mock':
+        for row in measurements:
+            row['mode'] = 'mock'
+    if case == 'different_resolution':
+        measurements[1]['segments'] = 3
+        measurements[1]['temporal_trace'] = [.3, .45, .4]
+    if case == 'weak_trace':
+        for row in measurements:
+            row['temporal_trace'] = [.3, .30002, .3, .30001]
+        measurements[1]['temporal_trace'] = [.3, .30001, .30001, .30001]
+    if case == 'runtime_mismatch':
+        measurements[1]['text_feature_model'] = 'another-feature-space'
+    calls = []
+    def decisions(state, questions):
+        assert 'neural_score' not in json.dumps(state)
+        assert 'personal_relevance' not in json.dumps(state)
+        answers = {}
+        chosen = {'relationship': 'romantic', 'objection': 'taste', 'angle': 'company',
+                  'tone': 'playful', 'repair': 'recipient', 'move': 'self_aware', 'repair_target': 'weakest'}
+        for name, question in questions.items():
+            choice = chosen.get(name, next(iter(question['criteria'])))
+            if choice not in question['criteria']:
+                choice = next(iter(question['criteria']))
+            assert original not in json.dumps(question['criteria'])
+            answers[name] = {'choice': choice, 'confidence': .9}
+        calls.append('plan')
+        return {'model': 'typesafe/jev-1.13-20260917', 'answers': answers}
+    monkeypatch.setattr(llm_layer, '_post_jev_decisions', decisions)
+    plan = llm_layer.plan_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general', measurements[0])
+    usable_baseline = case != 'mock'
+    expected_target = 'benimle çilekeş' if case == 'weak_trace' else 'harika bi'
+    assert plan['creative_brief']['repair']['target']['text'] == (expected_target if usable_baseline else original)
+    assert 'attention_cliff' not in json.dumps(plan)
+    # Holding facts constant and moving the measured weak span must change the actual repair target.
+    other_baseline = {**measurements[0], 'temporal_trace': [.05, .5, .3, .3]}
+    other_plan = llm_layer.plan_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general', other_baseline)
+    assert other_plan['creative_brief']['repair']['target']['text'] == ('benimle çilekeş' if usable_baseline else original)
+    if usable_baseline and case != 'weak_trace':
+        assert plan['structural_hypothesis']['objective'] == 'continuity'
+        assert other_plan['structural_hypothesis']['objective'] == 'opening'
+    monkeypatch.setattr(llm_layer, 'OPENROUTER_API_KEY', 'test-key')
+    def post(url, **kwargs):
+        calls.append('writer')
+        payload = kwargs['json']
+        assert payload['model'] == 'google/gemini-3.5-flash-lite'
+        assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
+        assert payload['max_tokens'] == 1536
+        assert 'candidate_roles' in payload['messages'][1]['content']
+        assert 'neural_score' not in payload['messages'][1]['content']
+        return httpx.Response(422 if case == 'writer_rejected' else 200,
+            json={'choices': [{'message': {'content': json.dumps({'candidates': drafts})}}]},
+            request=httpx.Request('POST', url))
+    monkeypatch.setattr(llm_layer.httpx, 'post', post)
+    if case == 'writer_rejected':
+        with pytest.raises(RuntimeError, match='OpenRouter refine failed'):
+            llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
+                decision_strategy=plan, force_rewrite=True, openrouter_model='legacy/model')
+        assert calls.count('writer') == 1
+        return
+    result = llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
+        decision_strategy=plan, force_rewrite=True, openrouter_model='legacy/model')
+    reviews = [
+        {'id': row['id'], 'supported': case != 'all_ineligible' and not (
+             case == 'unsupported_weather' and row['id'] == 'c1'), 'intent_preserved': True,
+         'recipient_respected': True, 'voice_preserved': True,
+         'context_fit': {facet: (40 if row['id'] == 'original' else
+                                65 if row['id'] == 'c1' and case == 'quality_gap' else
+                                99 if row['id'] == 'c1' and case == 'score_clipping' else
+                                100 if row['id'] == 'c2' and case == 'score_clipping' else
+                                79 if row['id'] == 'c1' else 80 if row['id'] == 'c2' else 60)
+                         for facet in llm_layer.CONTEXT_FIT_KEYS}, 'issues': []}
+        for row in measurements
+    ]
+    monkeypatch.setattr(llm_layer, '_jev_refinement_reviews', lambda *args: (
+        reviews, 'typesafe/jev-1.13-20260917', {'type': 'choice', 'choice': 'c2', 'confidence': .9}))
+    selected = llm_layer.select_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general',
+        ['Bu akşam iki bilet var'], result, measurements)
+    proof = selected['tribe_guidance']
+    assert proof['selected_id'] == expected
+    assert calls.count('writer') == 1
+    assert proof['selection_policy']['basis'] == 'context_first_experimental_trace_tiebreak'
+    assert proof['selection_policy']['trace_preference_applied'] == (case in {
+        'close', 'swapped_trace', 'unverified_encoder', 'different_resolution', 'weak_trace', 'score_clipping'})
+    assert all(0 <= row['selection_score'] <= 100 for row in proof['evaluations'])
+    if case == 'weak_trace':
+        assert 0 < proof['evaluations'][1]['empirical_effect']['weight'] < .1
+    if case == 'different_resolution':
+        assert proof['evaluations'][1]['empirical_effect']['available'] is True
+        assert proof['evaluations'][1]['empirical_effect']['limited_window_sensitivity'] is True
+    if case in {'close', 'swapped_trace', 'unverified_encoder'}:
+        assert proof['evaluations'][1]['empirical_effect']['weight'] > 0

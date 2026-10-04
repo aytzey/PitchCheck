@@ -637,7 +637,7 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
             answers = {}
             for name, q in questions.items():
                 if q['type'] == 'choice':
-                    choice = selected[name]
+                    choice = selected.get(name, next(iter(q['criteria'])))
                     answers[name] = {'type': 'choice', 'choice': choice, 'confidence': .95,
                                      'probabilities': {key: float(key == choice) for key in q['criteria']}}
                 elif q['type'] == 'noul':

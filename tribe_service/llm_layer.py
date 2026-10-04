@@ -572,9 +572,12 @@ def _openrouter_enabled(model: str | None = None) -> bool:
     return bool(_resolve_openrouter_model(model))
 
 
-def _reasoning_payload() -> dict[str, Any] | None:
+def _reasoning_payload(model: str | None = None) -> dict[str, Any] | None:
     if OPENROUTER_REASONING_EFFORT in {"minimal", "low", "medium", "high", "xhigh"}:
         return {"effort": OPENROUTER_REASONING_EFFORT}
+    # Flash defaults to high thinking, which can exceed the public HTTPS deadline.
+    if model == "deepseek/deepseek-v4-flash":
+        return {"enabled": False}
     return None
 
 
@@ -593,7 +596,7 @@ def _openrouter_payload(
         ],
         "temperature": temperature,
     }
-    reasoning = _reasoning_payload()
+    reasoning = _reasoning_payload(payload["model"])
     if reasoning is not None:
         payload["reasoning"] = reasoning
     if json_mode:
@@ -648,14 +651,14 @@ def _call_openrouter_once(
                 data = response.json()
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 parsed = _parse_json_content(content)
-                if parsed is not None:
+                if parsed is not None and "persuasion_score" in parsed:
                     return parsed
                 # Providers occasionally cut a long JSON reply mid-string; a fresh
                 # sample usually completes, so spend the retry budget before giving up.
                 if attempt < OPENROUTER_MAX_RETRIES:
-                    LOGGER.warning("OpenRouter returned non-JSON content; retrying")
+                    LOGGER.warning("OpenRouter returned an invalid report; retrying")
                     break
-                LOGGER.warning("OpenRouter returned non-JSON content; using neural-only report")
+                LOGGER.warning("OpenRouter returned an invalid report; using neural-only report")
                 return None
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
@@ -1432,7 +1435,7 @@ def _post_refine_chat(system_prompt: str, user_prompt: str, model: str, temperat
         "temperature": temperature,
         "response_format": {"type": "json_object"},
     }
-    reasoning = _reasoning_payload()
+    reasoning = _reasoning_payload(model)
     if reasoning is not None:
         payload["reasoning"] = reasoning
     headers = {

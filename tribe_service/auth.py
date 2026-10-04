@@ -148,6 +148,10 @@ class AuthStore:
                 raise InvalidCredentialsError("Invalid or expired PitchServer auth token.")
             return session.username
 
+    def logout(self, token: str | None) -> None:
+        with self._lock:
+            self._sessions.pop(token, None)
+
     def change_credentials(
         self,
         *,

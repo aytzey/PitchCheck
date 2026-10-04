@@ -14,7 +14,8 @@
 | Compose / servis | `pitchserver` / `tribe` |
 | Konteyner | `pitchserver_tribe` |
 | Mevcut erişim | `127.0.0.1:18090`, `https://pitchserver.machinity.ai` |
-| Son dağıtılan imaj | `sha256:9572265cf67a3be3186ff479552126aa370f06deb93240a7563470d010e50721` |
+| Son dağıtılan imaj; Taskfulight entegrasyonu dahil | `sha256:ee00749112001f740f3f31e74436247a82210a5bf9fbb16039e02a4cb1bfc660` |
+| Önceki sağlamlık / performans imajı | `sha256:9572265cf67a3be3186ff479552126aa370f06deb93240a7563470d010e50721` |
 
 Traefik, diğer Compose projeleri, GPU sürücüsü ve sistem paketleri değiştirilmedi. İşlem öncesinde yaklaşık 4 GiB GPU belleği başka süreçlerce kullanılıyordu. Sunucunun swap alanı doluydu; PitchServer'ın swap kullanması engellendi.
 
@@ -82,7 +83,7 @@ Bu dağıtım mevcut PyTorch CUDA akışını kullanıyor. Ölçülen darboğazl
 
 Takip çalışmasında 28 encoder bloğu TensorRT'ye dönüştürülüp gerçek TRIBE tahminleri üretildi. Sıcak encoder ile 126 kelimede native **2,3397 sn**, TensorRT **2,4836 sn** ölçüldü; çıktı eşitliği testi geçmedi. 378 kelimelik TensorRT işi 8 GiB süreç GPU bütçesini aşınca yalnızca deneme konteyneri durduruldu. Canlı imaj korunuyor. Ayrıntılar, kaynak sınırları ve tekrar üretme yolu [TensorRT deneme raporunda](tensorrt-experiment.md).
 
-Ayrıca tam API süresinde dış LLM çağrısı önemli yer tutuyor: son canlı imajda soğuk skor+rapor **17,060 sn**, refine **19,939 sn** ölçüldü. Son imajın otomatik restart testi sonrası **18,549 sn** ve **15,495 sn** ölçüldü. Mevcut `google/gemini-3.8-flash` ve refine kalite adımları korundu. Encoder'ın TensorRT'ye taşınması bu dış çağrının süresini azaltmaz. TensorRT seçilirse dinamik şekiller için profil ve bellek bütçelerinin yeniden doğrulanması gerekir; bu NVIDIA'nın [dinamik şekil dokümanında](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/dynamic-shapes-basics.html) anlatılır.
+Ayrıca tam API süresinde dış LLM çağrısı önemli yer tutuyor: ilk sağlamlık dağıtımında soğuk skor+rapor **17,060 sn**, refine **19,939 sn** ölçüldü. O imajın otomatik restart testi sonrası **18,549 sn** ve **15,495 sn** ölçüldü. Bu ilk ölçümde mevcut `google/gemini-3.8-flash` ve refine kalite adımları korundu. Encoder'ın TensorRT'ye taşınması bu dış çağrının süresini azaltmaz. TensorRT seçilirse dinamik şekiller için profil ve bellek bütçelerinin yeniden doğrulanması gerekir; bu NVIDIA'nın [dinamik şekil dokümanında](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/dynamic-shapes-basics.html) anlatılır.
 
 ## Doğrulama ve kapsam
 
@@ -143,3 +144,35 @@ Rollback scriptleri yerel eski imajı ve kaydedilmiş Compose/env ayarlarını k
 Tekrar üretilebilir GPU karşılaştırması için `scripts/benchmark-runtime.py`, auth/API kabul kontrolü için `scripts/smoke-runtime.py` kullanılır. Karşılaştırma önce ayrı bir sınırlı konteynerde eski imajla `--output /audit/before`, ardından yeni imajla boş başka `TRIBE_CACHE_DIR` ve `--output /audit/after --compare /audit/before` ile sırayla çalıştırılmalıdır. Her iki koşuda aynı GPU/thread limitleri ve ortak read-only Hugging Face ağırlık mount'u kullanılmalıdır. `--compare` matris eşitliğini ve yeni sürümün işlem sonunda feature-cache'inin boş olmasını doğrular.
 
 Sunucudaki ayrıntılı test çıktıları ve `.npy` matrisleri `audit-20261004/` altında; son performans kaydı `final/metrics.json`, servis karşılaştırması `service-verification.json`, dağıtım/rollback yolu `deployment.json` dosyalarında bulunur. Auth/API testi yalnızca durum, süre ve model adını kaydeder; parola veya token yazdırmaz.
+
+## Taskfulight özel iOS entegrasyonu — aynı gün takip çalışması
+
+Taskfulight'ın mevcut `feat/taskfulight-v2` branch'ine **Şimdi → İkna** ekranı eklendi. Ekran mevcut PitchServer hesabıyla HTTPS üzerinden bağlanır; giriş bilgileri ve token iPhone'un cihazda kalan, kilit açıkken erişilebilir Keychain kaydındadır. Kullanıcı bir dokunuşla modeli yükleyebilir veya boşaltabilir; analiz, iki turlu metin iyileştirme ve yeni metni yeniden analiz ederek karşılaştırma aynı ekrandadır. Seçilen model uygulamanın mevcut ayarından alınır: bu kabul testinde **`deepseek/deepseek-v4-flash`** kullanıldı. Sunucunun başka istemciler için varsayılan modeli değiştirilmedi.
+
+Backend'de yeni auth gerektiren `POST /runtime/load`, TRIBE ile aynı cached Hermes encoder'ını tam yükler; sadece wrapper oluşturup hazır görünmez. Tekrar yükleme idempotenttir. Mevcut GPU işlem kilidi ve backpressure sınırları korunur. Unload isteği iptal edilse bile boşaltma thread'i bitene kadar pipeline kilidi tutulur. Yeni `POST /auth/logout` yalnızca arayan oturumu iptal eder; diğer oturumları korur.
+
+Canlı testte DeepSeek'in varsayılan yüksek düşünme süresi public HTTPS sınırını aştı ve `524` oluştu. Yalnızca bu model için, operatör açık bir reasoning effort belirtmediyse, OpenRouter payload'ına `reasoning: {enabled: false}` eklenir. Hem skor raporu hem refine ortak politikayı kullanır. İkinci eleştirmen turu korunur. `minimal` denemesi aynı rapor tanılamasında **98,476 sn**, düşünme kapalı deneme **34,531 sn** sürdü; yalnız istemci timeout'unu artırmak edge timeout'unu çözmedi. Eksik `persuasion_score` alanıyla gelen JSON artık mevcut retry bütçesini kullanır; sessizce başarılı semantik rapor sayılmaz. Neural-only fallback uygulamada açıkça gösterilir.
+
+Son imajda gerçek public HTTPS kabul sonucu; sentetik endüstriyel satış metni:
+
+| İşlem / ölçüm | Sonuç |
+|---|---:|
+| Tam model yükleme | 4,783 sn |
+| Tekrar yükleme | 0,124 sn |
+| İlk analiz + gerçek DeepSeek raporu | 43,124 sn; skor 35 |
+| Gerçek iki turlu refine | 9,528 sn |
+| Yeni metnin ayrı gerçek analizi | 28,852 sn; skor 54 |
+| Son native TRIBE hesabı; 27 kelime | 0,411 sn |
+| İşlem sırasında en uzun health | 0,416 sn |
+| Model boşaltma | 0,653 sn |
+| Son analizde CUDA allocated / peak | 6,652 / 6,702 GiB |
+| Model yüklü, işlem başlamadan RAM | 1,769 GiB |
+| Model boşaltılmış RAM | 1,616 GiB |
+
+RAM satırları Docker working-set ölçümüdür; yalnız yükleme/bekleme durumunu kapsar. Daha uzun gerçek inference için önceki performans karşılaştırmasında ölçülen tepe RSS yaklaşık 5.965 MiB idi. CUDA ölçümü GPU belleğidir ve RAM'den ayrıdır. Skor artışı bu tek örnekteki model değerlendirmesidir; gerçek kişilerin ikna olma olasılığı veya genel kalite garantisi değildir. Tam uygulama yolu fiziksel iPhone'da henüz doğrulanmadı; Flutter widget testleri ile native iOS/TestFlight CI ayrı kontrollerdir.
+
+Son imajda **136 Python testi geçti**; yerel hafif ortamda 135 geçti, Torch/neuralset bağımlılık testi atlandı ve gerçek GPU imajında geçti. Auth olmadan load `401`, çalışan GPU işinde unload engeli, tam modelin sağlıkta hazır görünmesi, gerçek sağlayıcıyla iki turlu refine, gerçek yeniden skor, unload ve logout sonrası eski token'ın `401` alması doğrulandı. Public HTTPS health yönetilen Firefox'ta tekrar doğrulandı; görev oturumları kapatıldı. Test sonunda model boşaltıldı.
+
+Diğer **165 kalıcı servisin** kimliği, başlangıç zamanı, restart sayısı ve sağlık durumu ilk Taskfulight snapshot'ıyla karşılaştırıldığında değişmedi. Son dağıtımın ham snapshot'ına eşzamanlı çalışan geçici pytest konteyneri de girmişti; `--rm` ile normal çıkışı ham karşılaştırmada bir silinme olarak görünür. Ham kayıt korundu; kalıcı servislerin ilk baseline'a göre ayrı doğrulaması `audit-taskfulight-20261004-final/service-verification.json`, açıklama `deployment-verification-note.json` dosyasındadır. GPU zamanında sıfır etki garantisi verilmez; mevcut kaynak sınırları korunur.
+
+Kanıtlar sunucuda `audit-taskfulight-20261004-final/` altında `live-api.json`, `live-api.log`, `memory.json`, `deployment.json` ve `service-verification.json` dosyalarındadır. Sentetik test metni kayıtlıdır; parola/token/API anahtarı kayıtlı değildir. Son küçük backend değişikliği öncesine dönüş `rollback-20261004T180820Z/rollback.sh`; Taskfulight entegrasyonunun tümünü geri alıp önceki sağlamlık imajına dönüş `rollback-20261004T174806Z/rollback.sh` ile yapılır. Her iki script yalnız `tribe` servisini yeniler.

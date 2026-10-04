@@ -136,6 +136,46 @@ class TestScore:
         assert unload.json()["ok"] is True
         assert client.get("/health").json()["pipeline"]["model_loaded"] is False
 
+    def test_runtime_load_is_idempotent_and_can_be_unloaded(self):
+        client.post("/runtime/unload")
+        for _ in range(2):
+            loaded = client.post("/runtime/load")
+            assert loaded.status_code == 200
+            assert loaded.json()["ok"] is True
+            assert loaded.json()["pipeline"]["model_loaded"] is True
+            assert loaded.json()["pipeline"]["text_model_loaded"] is True
+            assert loaded.json()["pipeline"]["active_scores"] == 0
+        assert client.post("/runtime/unload").json()["ok"] is True
+        assert client.get("/health").json()["pipeline"]["text_model_loaded"] is False
+
+    def test_cancelled_unload_keeps_pipeline_locked_until_worker_finishes(self, monkeypatch):
+        started = threading.Event()
+        allow_finish = threading.Event()
+
+        def slow_unload():
+            started.set()
+            allow_finish.wait(2)
+
+        async def run_case():
+            monkeypatch.setattr(service_app, "_pipeline_lock", asyncio.Lock())
+            monkeypatch.setattr(service_app, "_active_scores", 0)
+            monkeypatch.setattr(service_app, "is_model_loaded", lambda: True)
+            monkeypatch.setattr(service_app, "unload_model", slow_unload)
+            task = asyncio.create_task(service_app._unload_pipeline("test"))
+            try:
+                assert await asyncio.to_thread(started.wait, 1)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                assert service_app._pipeline_lock.locked()
+            finally:
+                allow_finish.set()
+                if service_app._worker_tasks:
+                    await asyncio.gather(*tuple(service_app._worker_tasks), return_exceptions=True)
+            assert not service_app._pipeline_lock.locked()
+
+        asyncio.run(run_case())
+
     def test_queue_timeout_is_reported_separately(self, monkeypatch):
         async def run_case():
             score_lock = asyncio.Semaphore(1)
@@ -372,6 +412,21 @@ class TestPitchServerAuth:
             "persona": "CTO at a mid-stage startup, technical background",
         })
         assert res.status_code == 401
+
+    def test_runtime_load_requires_login_when_auth_enabled(self, monkeypatch, tmp_path):
+        self._enable_auth(monkeypatch, tmp_path)
+        assert client.post("/runtime/load").status_code == 401
+
+    def test_logout_revokes_only_the_callers_session(self, monkeypatch, tmp_path):
+        self._enable_auth(monkeypatch, tmp_path)
+        headers = []
+        for _ in range(2):
+            login = client.post('/auth/login', json={'username': 'pitchserver', 'password': 'initial-pass-123'})
+            assert login.status_code == 200
+            headers.append({'Authorization': 'Bearer ' + login.json()['token']})
+        assert client.post('/auth/logout', headers=headers[0]).status_code == 200
+        assert client.post('/runtime/load', headers=headers[0]).status_code == 401
+        assert client.post('/runtime/load', headers=headers[1]).status_code == 200
 
     def test_login_allows_scoring_when_auth_enabled(self, monkeypatch, tmp_path):
         self._enable_auth(monkeypatch, tmp_path)

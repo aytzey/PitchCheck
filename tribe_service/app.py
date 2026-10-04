@@ -31,6 +31,8 @@ from tribe_service.engine import (
     score_text,
     analyze_predictions,
     is_model_loaded,
+    is_text_model_loaded,
+    load_runtime_models,
     runtime_config,
     unload_model,
     PERSUASION_SIGNAL_LABELS,
@@ -214,6 +216,7 @@ async def _pipeline_status() -> dict:
     async with _pipeline_lock:
         return {
             "model_loaded": is_model_loaded(),
+            "text_model_loaded": is_text_model_loaded(),
             "active_scores": _active_scores,
             "idle_for_seconds": round(_idle_for_seconds(), 3),
             "idle_unload_seconds": TRIBE_IDLE_UNLOAD_SECONDS,
@@ -221,6 +224,18 @@ async def _pipeline_status() -> dict:
 
 
 async def _unload_pipeline(reason: str) -> dict:
+    # The worker keeps the pipeline lock even if the phone disconnects mid-unload.
+    task = asyncio.create_task(_perform_unload_pipeline(reason))
+    _worker_tasks.add(task)
+    task.add_done_callback(_worker_tasks.discard)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        task.add_done_callback(_log_detached_worker_result)
+        raise
+
+
+async def _perform_unload_pipeline(reason: str) -> dict:
     async with _pipeline_lock:
         if _active_scores > 0:
             return {
@@ -362,6 +377,15 @@ def auth_change_password(
         )
     except Exception as error:
         raise _auth_error(error) from error
+
+
+@app.post("/auth/logout")
+def auth_logout(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    _: str = Depends(require_auth),
+):
+    AUTH_STORE.logout(_token_from_credentials(credentials))
+    return {"ok": True}
 
 
 @app.post("/score")
@@ -510,6 +534,23 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
     except Exception as exc:
         LOGGER.error("Refine failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Refine failed while calling the LLM refiner.")
+
+
+@app.post("/runtime/load")
+async def load_runtime(_: str = Depends(require_auth)):
+    try:
+        await _run_with_backpressure(
+            load_runtime_models, lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
+            track_runtime=True,
+        )
+    except ScoreQueueTimeoutError as exc:
+        raise HTTPException(status_code=429, detail="Runtime is busy. Try again shortly.") from exc
+    except ScoreRunTimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Model loading is still running. Check runtime status.") from exc
+    except Exception as exc:
+        LOGGER.error("Runtime load failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Model could not be loaded within the available resources.") from exc
+    return {"ok": True, "pipeline": await _pipeline_status(), "runtime": runtime_config()}
 
 
 @app.post("/runtime/unload")

@@ -553,6 +553,19 @@ class TestMalformedJsonNeuralOnlyReport:
         assert mock_post.call_count == 2
         assert result["robustness"]["llm_model"] == "test/model"
 
+    @patch("tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT", "")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_flash_disables_default_thinking_in_analysis_and_refine(self, mock_post: MagicMock):
+        from tribe_service.llm_layer import _post_refine_chat
+
+        payload = _openrouter_payload("Prompt", model="deepseek/deepseek-v4-flash", temperature=.2, json_mode=True)
+        assert payload["reasoning"] == {"enabled": False}
+        mock_post.return_value = _mock_openrouter_response('{"refined_message":"A supported rewrite"}')
+        _post_refine_chat("System", "Prompt", "deepseek/deepseek-v4-flash", .2)
+        assert mock_post.call_args.kwargs["json"]["reasoning"] == {"enabled": False}
+        other = _openrouter_payload("Prompt", model="google/gemini-3.8-flash", temperature=.2, json_mode=True)
+        assert "reasoning" not in other
+
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_MAX_RETRIES", 1)
@@ -571,6 +584,24 @@ class TestMalformedJsonNeuralOnlyReport:
 
         assert mock_post.call_count == 2
         assert result["robustness"]["llm_model"] is None
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_MAX_RETRIES", 1)
+    @patch("tribe_service.llm_layer.time.sleep")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_json_without_required_score_is_retried(self, mock_post: MagicMock, _sleep: MagicMock):
+        mock_post.side_effect = [
+            _mock_openrouter_response('{"overall_score": 70, "verdict": "Wrong schema"}'),
+            _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE)),
+        ]
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES,
+            openrouter_model="test/model",
+        )
+        assert mock_post.call_count == 2
+        assert result["robustness"]["llm_model"] == "test/model"
 
 
 class TestPromptIncludesPersonaAndMessage:

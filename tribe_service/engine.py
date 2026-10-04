@@ -789,6 +789,22 @@ def is_model_loaded() -> bool:
     return _model is not None
 
 
+def is_text_model_loaded() -> bool:
+    if _model is None:
+        return False
+    if TRIBE_ALLOW_MOCK:
+        return True
+    feature = getattr(getattr(_model, "data", None), "text_feature", None)
+    return getattr(feature, "_model", None) is not None
+
+
+def load_runtime_models() -> None:
+    """Warm the same cached encoder used by scoring, without scoring a dummy pitch."""
+    model = get_model()
+    if not TRIBE_ALLOW_MOCK:
+        model.data.text_feature.model
+
+
 def runtime_config() -> dict[str, Any]:
     with _prediction_cache_lock:
         prediction_cache_entries = len(_prediction_cache)

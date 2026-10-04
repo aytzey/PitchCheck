@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import os
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PLATFORM_VALUES = ("email", "linkedin", "cold-call-script", "landing-page", "ad-copy", "general")
@@ -69,7 +69,7 @@ class PitchScoreRequest(BaseModel):
 
 
 class PitchRefineRequest(PitchScoreRequest):
-    suggestions: list[str] = Field(default_factory=list, max_length=12)
+    suggestions: list[Annotated[str, Field(max_length=2000)]] = Field(default_factory=list, max_length=12)
     clarification_answers: list["PitchRefineClarificationAnswer"] = Field(
         default_factory=list,
         max_length=6,
@@ -88,15 +88,15 @@ class PitchRefineClarificationAnswer(BaseModel):
 
 
 class AuthLoginRequest(BaseModel):
-    username: str = Field(..., min_length=1)
-    password: str = Field(..., min_length=1)
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=1024)
 
 class AuthChangePasswordRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    current_password: str = Field(..., min_length=1, alias="currentPassword")
-    new_username: str = Field(..., min_length=1, alias="newUsername")
-    new_password: str = Field(..., min_length=1, alias="newPassword")
+    current_password: str = Field(..., min_length=1, max_length=1024, alias="currentPassword")
+    new_username: str = Field(..., min_length=1, max_length=64, alias="newUsername")
+    new_password: str = Field(..., min_length=1, max_length=1024, alias="newPassword")
 
 class BreakdownSection(BaseModel):
     key: str

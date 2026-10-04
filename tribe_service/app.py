@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import JSONResponse
 
 from tribe_service.schemas import (
     AuthChangePasswordRequest,
@@ -70,9 +71,14 @@ def _env_float(name: str, default: float, minimum: float) -> float:
 TRIBE_SCORE_TIMEOUT_SECONDS = _env_float("TRIBE_SCORE_TIMEOUT_SECONDS", 900.0, 1.0)
 TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS = _env_float("TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS", 30.0, 0.1)
 TRIBE_MAX_SCORE_CONCURRENCY = _env_int("TRIBE_MAX_SCORE_CONCURRENCY", 1, 1)
+TRIBE_MAX_LLM_CONCURRENCY = _env_int("TRIBE_MAX_LLM_CONCURRENCY", 2, 1)
+TRIBE_LLM_TIMEOUT_SECONDS = _env_float("TRIBE_LLM_TIMEOUT_SECONDS", 180.0, 1.0)
 TRIBE_IDLE_UNLOAD_SECONDS = _env_float("TRIBE_IDLE_UNLOAD_SECONDS", 600.0, 0.0)
+MAX_REQUEST_BODY_BYTES = _env_int("PITCHCHECK_MAX_REQUEST_BODY_BYTES", 128 * 1024, 1024)
 
 _score_lock = asyncio.Semaphore(TRIBE_MAX_SCORE_CONCURRENCY)
+_llm_lock = asyncio.Semaphore(TRIBE_MAX_LLM_CONCURRENCY)
+_worker_tasks: set[asyncio.Task] = set()
 _bearer = HTTPBearer(auto_error=False)
 _pipeline_lock = asyncio.Lock()
 _active_scores = 0
@@ -86,6 +92,43 @@ class ScoreQueueTimeoutError(TimeoutError):
 
 class ScoreRunTimeoutError(TimeoutError):
     """Raised when TRIBE keeps running past the client-facing timeout."""
+
+
+class RequestBodyLimitMiddleware:
+    """Bound JSON bodies before FastAPI buffers or validates them, including chunked requests."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] not in {"POST", "PUT", "PATCH"}:
+            return await self.app(scope, receive, send)
+        body = bytearray()
+        try:
+            async with asyncio.timeout(15):
+                while True:
+                    event = await receive()
+                    if event["type"] == "http.disconnect":
+                        return
+                    chunk = event.get("body", b"")
+                    if len(body) + len(chunk) > MAX_REQUEST_BODY_BYTES:
+                        return await JSONResponse({"detail": "Request body too large."}, 413)(scope, receive, send)
+                    body.extend(chunk)
+                    if not event.get("more_body", False):
+                        break
+        except TimeoutError:
+            return await JSONResponse({"detail": "Request body timed out."}, 408)(scope, receive, send)
+
+        delivered = False
+
+        async def buffered_receive():
+            nonlocal delivered
+            if delivered:
+                return await receive()
+            delivered = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self.app(scope, buffered_receive, send)
 
 
 @contextlib.asynccontextmanager
@@ -109,6 +152,8 @@ async def lifespan(_: FastAPI):
             with contextlib.suppress(asyncio.CancelledError):
                 await _idle_unload_task
             _idle_unload_task = None
+        if _worker_tasks:
+            await asyncio.gather(*tuple(_worker_tasks), return_exceptions=True)
         await _unload_pipeline("shutdown")
 
 
@@ -118,6 +163,7 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+app.add_middleware(RequestBodyLimitMiddleware)
 
 # CORS
 app.add_middleware(
@@ -196,45 +242,61 @@ async def _unload_pipeline(reason: str) -> dict:
         }
 
 
-def _release_timed_out_score_resources(task: asyncio.Task) -> None:
+def _log_detached_worker_result(task: asyncio.Task) -> None:
     try:
         exception = task.exception()
     except asyncio.CancelledError:
         exception = None
     if exception is not None:
         LOGGER.warning(
-            "Timed-out TRIBE score finished with %s",
+            "Detached worker finished with %s",
             exception.__class__.__name__,
         )
-    _score_lock.release()
-    asyncio.create_task(_finish_runtime_activity())
 
 
-async def _score_text_with_backpressure(message: str):
+async def _run_with_backpressure(function, *args, lock, timeout, track_runtime=False, **kwargs):
     try:
         await asyncio.wait_for(
-            _score_lock.acquire(),
+            lock.acquire(),
             timeout=TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
         raise ScoreQueueTimeoutError from exc
 
-    await _begin_runtime_activity()
-    score_task = asyncio.create_task(run_in_threadpool(score_text, message))
-    release_now = True
+    async def run_worker():
+        runtime_started = False
+        try:
+            if track_runtime:
+                await _begin_runtime_activity()
+                runtime_started = True
+            return await run_in_threadpool(function, *args, **kwargs)
+        finally:
+            if runtime_started:
+                await _finish_runtime_activity()
+            lock.release()
+
+    # The worker owns its slot; HTTP timeout/cancellation cannot stop a running thread.
+    score_task = asyncio.create_task(run_worker())
+    _worker_tasks.add(score_task)
+    score_task.add_done_callback(_worker_tasks.discard)
     try:
         return await asyncio.wait_for(
             asyncio.shield(score_task),
-            timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
     except asyncio.TimeoutError as exc:
-        release_now = False
-        score_task.add_done_callback(_release_timed_out_score_resources)
+        score_task.add_done_callback(_log_detached_worker_result)
         raise ScoreRunTimeoutError from exc
-    finally:
-        if release_now:
-            _score_lock.release()
-            await _finish_runtime_activity()
+    except asyncio.CancelledError:
+        score_task.add_done_callback(_log_detached_worker_result)
+        raise
+
+
+async def _score_text_with_backpressure(message: str):
+    return await _run_with_backpressure(
+        score_text, message, lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
+        track_runtime=True,
+    )
 
 
 async def _idle_unload_loop() -> None:
@@ -252,7 +314,7 @@ async def _idle_unload_loop() -> None:
             await _unload_pipeline("idle_timeout")
 
 
-async def require_auth(
+def require_auth(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> str:
     try:
@@ -279,7 +341,7 @@ async def health():
 
 
 @app.post("/auth/login")
-async def auth_login(request: AuthLoginRequest):
+def auth_login(request: AuthLoginRequest):
     try:
         return AUTH_STORE.login(request.username, request.password)
     except Exception as error:
@@ -287,7 +349,7 @@ async def auth_login(request: AuthLoginRequest):
 
 
 @app.post("/auth/change-password")
-async def auth_change_password(
+def auth_change_password(
     request: AuthChangePasswordRequest,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ):
@@ -310,14 +372,15 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         predictions = await _score_text_with_backpressure(request.message)
 
         # 2. Extract raw features, fMRI summary, and neural signals.
-        raw_features, fmri_data, neural_signals = analyze_predictions(
-            predictions,
+        raw_features, fmri_data, neural_signals = await run_in_threadpool(
+            analyze_predictions, predictions,
             text_input_mode=TRIBE_TEXT_INPUT_MODE,
         )
 
         # 3. LLM interpretation or deterministic neural-only report.
-        llm_result = await run_in_threadpool(
+        llm_result = await _run_with_backpressure(
             interpret_persuasion,
+            lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
             message=request.message,
             persona=request.persona,
             platform=request.platform,
@@ -395,22 +458,23 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         LOGGER.warning("Scoring queue timed out")
         raise HTTPException(
             status_code=429,
+            headers={"Retry-After": "5"},
             detail=(
                 "Scoring service is busy. Try again shortly or increase "
                 "TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS."
             ),
         )
     except ScoreRunTimeoutError:
-        LOGGER.exception("Scoring timed out while TRIBE continues cleanup in the background")
+        LOGGER.warning("Scoring timed out; the running worker retains its slot until completion")
         raise HTTPException(
             status_code=504,
             detail=(
-                "Scoring timed out while running TRIBE. "
+                "Scoring timed out while processing the request. "
                 "Try again shortly, use a shorter message, or reconnect the runtime."
             ),
         )
-    except Exception:
-        LOGGER.exception("Scoring failed")
+    except Exception as exc:
+        LOGGER.error("Scoring failed (%s)", type(exc).__name__)
         raise HTTPException(
             status_code=500,
             detail="Scoring failed while running TRIBE. Check service logs for the internal error code.",
@@ -421,8 +485,9 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
 async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_auth)):
     """Rewrite a pitch with the configured LLM refiner without TRIBE candidate re-scoring."""
     try:
-        result = await run_in_threadpool(
+        result = await _run_with_backpressure(
             refine_pitch_message,
+            lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
             message=request.message,
             persona=request.persona,
             platform=request.platform,
@@ -433,12 +498,17 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
             openrouter_model=request.open_router_model,
         )
         return PitchRefineResponse(**result).model_dump()
+    except ScoreQueueTimeoutError as exc:
+        raise HTTPException(status_code=429, detail="Refine service is busy. Try again shortly.",
+                            headers={"Retry-After": "5"}) from exc
+    except ScoreRunTimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Refine service timed out.") from exc
     except RuntimeError as exc:
         detail = str(exc)
         status_code = 503 if "API key is missing" in detail else 502
         raise HTTPException(status_code=status_code, detail=detail) from exc
-    except Exception:
-        LOGGER.exception("Refine failed")
+    except Exception as exc:
+        LOGGER.error("Refine failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Refine failed while calling the LLM refiner.")
 
 

@@ -659,11 +659,11 @@ def _call_openrouter_once(
                 return None
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
-                LOGGER.warning("OpenRouter HTTP %s: %s", status, exc.response.text[:500])
+                LOGGER.warning("OpenRouter HTTP %s", status)
                 if status not in {408, 409, 425, 429, 500, 502, 503, 504} or attempt >= OPENROUTER_MAX_RETRIES:
                     return None
             except Exception as exc:
-                LOGGER.warning("OpenRouter call failed: %s", exc)
+                LOGGER.warning("OpenRouter call failed (%s)", type(exc).__name__)
                 if attempt >= OPENROUTER_MAX_RETRIES:
                     return None
         if attempt < OPENROUTER_MAX_RETRIES:
@@ -1593,10 +1593,10 @@ def refine_pitch_message(
             temperature=_refine_temperature(selected_model),
         )
     except httpx.HTTPStatusError as exc:
-        LOGGER.warning("OpenRouter refine HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+        LOGGER.warning("OpenRouter refine HTTP %s", exc.response.status_code)
         raise RuntimeError("OpenRouter refine failed.") from exc
     except Exception as exc:
-        LOGGER.warning("OpenRouter refine call failed: %s", exc)
+        LOGGER.warning("OpenRouter refine call failed (%s)", type(exc).__name__)
         raise RuntimeError("OpenRouter refine failed.") from exc
 
     parsed = _parse_json_content(content)

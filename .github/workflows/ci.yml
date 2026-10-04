@@ -13,6 +13,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  tribe:
+    name: TRIBE service (mock runtime)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install -r tribe_service/requirements-test.txt
+      - run: python -m pytest tribe_service/tests -q
+
   web:
     name: Web app
     runs-on: ubuntu-24.04
@@ -63,3 +74,9 @@ jobs:
       - uses: actions/checkout@v6
       - run: cp .env.example .env
       - run: docker compose config
+      - name: Validate shared-server resource limits and routing
+        run: |
+          touch /tmp/pitchcheck-service.env
+          PITCHSERVER_IMAGE=pitchcheck-tribe:ci \
+            PITCHSERVER_ENV_FILE=/tmp/pitchcheck-service.env \
+            docker compose -f deploy/pitchserver.compose.yml config --quiet

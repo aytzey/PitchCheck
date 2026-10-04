@@ -55,6 +55,7 @@ if TRIBE_OOM_FALLBACK_TEXT_DEVICE in {"0", "false", "none", "off"}:
     TRIBE_OOM_FALLBACK_TEXT_DEVICE = ""
 TRIBE_OOM_FALLBACK_TEXT_BATCH_SIZE = _env_int("TRIBE_OOM_FALLBACK_TEXT_BATCH_SIZE", 1, 1)
 TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE = os.getenv("TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE", "0") == "1"
+TRIBE_CUDA_MEMORY_LIMIT_GB = _env_float("TRIBE_CUDA_MEMORY_LIMIT_GB", 0.0, 0.0)
 TRIBE_PREDICTION_CACHE_SIZE = _env_int("TRIBE_PREDICTION_CACHE_SIZE", 8, 0)
 TRIBE_PREDICTION_CACHE_MAX_BYTES = _env_int(
     "TRIBE_PREDICTION_CACHE_MAX_BYTES",
@@ -233,8 +234,8 @@ def _accelerate_max_memory() -> dict[Any, str] | None:
         if memory is None:
             gpu_limit_gb = None
         else:
-            _, total_gb = memory
-            gpu_limit_gb = max(1.0, total_gb - 2.0)
+            free_gb, _ = memory
+            gpu_limit_gb = max(1.0, free_gb - 2.0)
     else:
         try:
             gpu_limit_gb = max(1.0, float(value))
@@ -244,6 +245,8 @@ def _accelerate_max_memory() -> dict[Any, str] | None:
 
     max_memory: dict[Any, str] = {}
     if gpu_limit_gb is not None:
+        if TRIBE_CUDA_MEMORY_LIMIT_GB:
+            gpu_limit_gb = min(gpu_limit_gb, max(1.0, TRIBE_CUDA_MEMORY_LIMIT_GB - 2.0))
         max_memory[0] = f"{gpu_limit_gb:.0f}GiB"
 
     try:
@@ -403,6 +406,13 @@ def _patch_neuralset_hf_text_runtime() -> None:
     if getattr(HuggingFaceText, "_pitchscore_accelerate_patched", False):
         return
 
+    if os.getenv("HF_HUB_OFFLINE") == "1":
+        from huggingface_hub import try_to_load_from_cache
+        # neuralset's existence check otherwise calls the Hub even when weights are cached.
+        if isinstance(try_to_load_from_cache(TRIBE_TEXT_MODEL, "config.json"), str):
+            if TRIBE_TEXT_MODEL not in HuggingFaceText._REPOS:
+                HuggingFaceText._REPOS.append(TRIBE_TEXT_MODEL)
+
     def _load_model(self: Any, **kwargs: Any) -> Any:
         from transformers import AutoModel as Model
 
@@ -440,8 +450,73 @@ def _patch_neuralset_hf_text_runtime() -> None:
         return model
 
     HuggingFaceText._load_model = _load_model
+    # Preserve exca's cache wrapper. Copy only target-token states to CPU, rather
+    # than every layer of every context token; token/layer aggregation stays identical.
+    import importlib
+    text_module = importlib.import_module("neuralset.extractors.text")
+
+    def _get_data(self, events):
+        import torch
+        from torch.utils.data import DataLoader
+
+        loader = DataLoader(text_module.TextDataset(events), batch_size=self.batch_size, shuffle=False)
+        device = "auto" if self.device == "accelerate" else self.device
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        with torch.no_grad():
+            for target_words, context in loader:
+                text = list(context if self.contextualized else target_words)
+                if not all(text):
+                    raise ValueError("Empty text or context for word embeddings")
+                inputs = self.tokenizer(
+                    text, add_special_tokens=False, return_tensors="pt",
+                    padding=True, truncation=True,
+                ).to(device)
+                outputs = self.model(**inputs, output_hidden_states=True)
+                states = (outputs.hidden_states if "hidden_states" in outputs
+                          else outputs.encoder_hidden_states + outputs.decoder_hidden_states)
+                n_tokens = states[0].shape[1]
+                input_ids = inputs["input_ids"].cpu().numpy()
+                for i, target_word in enumerate(target_words):
+                    n_pads = int((input_ids[i] == self._pad_id).sum())
+                    stop = n_tokens - n_pads
+                    start = 0
+                    if self.contextualized:
+                        prefix = context[i][: -len(target_word)].rstrip()
+                        n_prefix = len(self.tokenizer.encode(prefix, add_special_tokens=False)) if prefix else 0
+                        start = max(0, stop - max(1, n_tokens - n_pads - n_prefix))
+                    word_state = torch.stack([layer[i, start:stop].cpu() for layer in states])
+                    out = self._aggregate_tokens(word_state).cpu().numpy()
+                    if not self.cache_all_layers and self.cache_n_layers is None:
+                        out = self._aggregate_layers(out)
+                    if np.isnan(out).any():
+                        raise ValueError("NaN in word embeddings")
+                    yield out
+                del states, outputs, inputs, word_state
+                if self.device == "accelerate" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+    HuggingFaceText._get_data.fget.method = _get_data
     HuggingFaceText._pitchscore_accelerate_patched = True
     LOGGER.info("neuralset HuggingFaceText Accelerate/offload patch applied")
+
+
+def _patch_tribe_text_model_lifetime() -> None:
+    """Honor our existing unload policy: upstream frees the text encoder after every pitch."""
+    import importlib
+    main = importlib.import_module("tribev2.main")
+    text = importlib.import_module("neuralset.extractors.text")
+    if getattr(main, "_pitchcheck_lifetime_patched", False):
+        return
+    original = main._free_extractor_model
+
+    def free_extractor(extractor):
+        if isinstance(extractor, text.HuggingFaceText) and not TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE:
+            return
+        original(extractor)
+
+    main._free_extractor_model = free_extractor
+    main._pitchcheck_lifetime_patched = True
 
 
 # ── Model singleton ──
@@ -647,12 +722,19 @@ def _load_model() -> Any:
             _patch_exca_no_value_alias()
             _patch_whisperx_runtime()
             _patch_neuralset_hf_text_runtime()
+            _patch_tribe_text_model_lifetime()
             from tribev2.demo_utils import TribeModel
 
             device = TRIBE_DEVICE
             if device == "auto":
                 import torch
                 device = "cuda" if torch.cuda.is_available() else "cpu"
+            if device == "cuda" and TRIBE_CUDA_MEMORY_LIMIT_GB:
+                import torch
+                total_bytes = torch.cuda.get_device_properties(0).total_memory
+                torch.cuda.set_per_process_memory_fraction(
+                    min(1.0, TRIBE_CUDA_MEMORY_LIMIT_GB * 1024**3 / total_bytes),
+                )
             text_device = _resolve_requested_text_device(
                 _runtime_text_device_override or TRIBE_TEXT_DEVICE,
                 device,
@@ -670,6 +752,7 @@ def _load_model() -> Any:
                 cache_folder=str(TRIBE_CACHE_DIR),
                 device=device,
                 config_update={
+                    "data.num_workers": 0,
                     "data.text_feature.model_name": TRIBE_TEXT_MODEL,
                     "data.text_feature.device": text_device,
                     "data.text_feature.batch_size": text_batch_size,
@@ -713,6 +796,7 @@ def runtime_config() -> dict[str, Any]:
     return {
         "configured_device": TRIBE_DEVICE,
         "configured_text_device": TRIBE_TEXT_DEVICE,
+        "cuda_memory_limit_gb": TRIBE_CUDA_MEMORY_LIMIT_GB,
         "configured_oom_fallback_text_devices": _parse_oom_fallback_devices(),
         "prediction_cache_size": TRIBE_PREDICTION_CACHE_SIZE,
         "prediction_cache_entries": prediction_cache_entries,
@@ -753,10 +837,16 @@ def unload_text_model(model: Any) -> None:
 
 
 def _is_cuda_oom(exc: BaseException) -> bool:
-    if exc.__class__.__name__ == "OutOfMemoryError":
-        return True
-    message = str(exc).lower()
-    return "cuda out of memory" in message or "cublas_status_alloc_failed" in message
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if exc.__class__.__name__ == "OutOfMemoryError":
+            return True
+        message = str(exc).lower()
+        if "cuda out of memory" in message or "cublas_status_alloc_failed" in message:
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
 
 
 # ── Text scoring ──
@@ -898,10 +988,17 @@ def _score_text_once(message: str, *, retry_index: int) -> tuple[np.ndarray, dic
         }
         return predictions, metrics
     finally:
-        if TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE:
-            unload_text_model(model)
-        else:
-            _release_cuda_cache()
+        try:
+            text_feature = getattr(getattr(model, "data", None), "text_feature", None)
+            if text_feature is not None:
+                # Features belong to this inference; retain only the bounded prediction cache.
+                # exca clears its own feature folder/RAM, separately from HF model weights.
+                text_feature.infra.cache_dict.clear()
+        finally:
+            if TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE:
+                unload_text_model(model)
+            else:
+                _release_cuda_cache()
 
 
 def score_text(message: str) -> np.ndarray:

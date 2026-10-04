@@ -179,6 +179,87 @@ class TestScore:
 
         asyncio.run(run_case())
 
+    def test_cancelled_request_keeps_gpu_busy_until_worker_finishes(self, monkeypatch):
+        started, finish = threading.Event(), threading.Event()
+
+        def blocked_score(_):
+            started.set()
+            assert finish.wait(2)
+            return [[1.0]]
+
+        async def run_case():
+            monkeypatch.setattr(service_app, "_score_lock", asyncio.Semaphore(1))
+            monkeypatch.setattr(service_app, "_pipeline_lock", asyncio.Lock())
+            monkeypatch.setattr(service_app, "_active_scores", 0)
+            monkeypatch.setattr(service_app, "score_text", blocked_score)
+            task = asyncio.create_task(service_app._score_text_with_backpressure("valid pitch"))
+            try:
+                assert await asyncio.to_thread(started.wait, 1)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                assert (await service_app._pipeline_status())["active_scores"] == 1
+                assert service_app._score_lock.locked()
+                assert (await service_app._unload_pipeline("test"))["reason"] == "score_in_progress"
+            finally:
+                finish.set()
+                for _ in range(100):
+                    if not service_app._score_lock.locked():
+                        break
+                    await asyncio.sleep(0.01)
+            assert not service_app._score_lock.locked()
+            assert service_app._active_scores == 0
+
+        asyncio.run(run_case())
+
+    def test_streamed_oversized_body_rejected_before_validation(self):
+        res = client.post("/score", content=iter([b" " * 70_000, b" " * 70_000]),
+                          headers={"Content-Type": "application/json"})
+        assert res.status_code == 413
+
+    def test_llm_worker_retains_its_slot_after_timeout_and_recovers_after_failure(self, monkeypatch):
+        started, finish = threading.Event(), threading.Event()
+
+        def blocked_llm():
+            started.set()
+            assert finish.wait(2)
+            raise RuntimeError("provider failed")
+
+        async def run_case():
+            lock = asyncio.Semaphore(1)
+            monkeypatch.setattr(service_app, "TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS", 0.01)
+            try:
+                with pytest.raises(service_app.ScoreRunTimeoutError):
+                    await service_app._run_with_backpressure(blocked_llm, lock=lock, timeout=0.01)
+                assert started.is_set() and lock.locked()
+                with pytest.raises(service_app.ScoreQueueTimeoutError):
+                    await service_app._run_with_backpressure(lambda: None, lock=lock, timeout=1)
+            finally:
+                finish.set()
+                await asyncio.gather(*service_app._worker_tasks, return_exceptions=True)
+            assert not lock.locked()
+            assert await service_app._run_with_backpressure(lambda: "recovered", lock=lock, timeout=1) == "recovered"
+
+        asyncio.run(run_case())
+
+    def test_refine_suggestion_length_is_bounded(self):
+        res = client.post("/refine", json={
+            "message": "A valid pitch message for engineering teams",
+            "persona": "Engineering manager", "suggestions": ["x" * 2001],
+        })
+        assert res.status_code == 422
+
+    def test_scoring_failure_does_not_log_customer_copy(self, monkeypatch, caplog):
+        def fail_score(_):
+            raise ValueError("confidential customer copy")
+        monkeypatch.setattr(service_app, "score_text", fail_score)
+        response = client.post("/score", json={
+            "message": "A valid pitch for the engineering team", "persona": "Engineering manager",
+        })
+        assert response.status_code == 500
+        assert "Scoring failed (ValueError)" in caplog.text
+        assert "confidential customer copy" not in caplog.text
+
     def test_refine_uses_llm_without_tribe_rescore(self, monkeypatch):
         def fail_score_text(_: str):
             raise AssertionError("/refine should not call TRIBE scoring")
@@ -265,6 +346,19 @@ class TestScore:
 
 
 class TestPitchServerAuth:
+    def test_session_store_prunes_expired_logins_and_stays_bounded(self, monkeypatch):
+        from tribe_service.auth import AuthStore
+        store = AuthStore()
+        monkeypatch.setenv("PITCHSERVER_AUTH_REQUIRED", "0")
+        monkeypatch.setattr("tribe_service.auth._now", lambda: 0)
+        first = store.login("unused", "unused")["token"]
+        monkeypatch.setattr("tribe_service.auth._now", lambda: 100_000)
+        store.login("unused", "unused")
+        assert first not in store._sessions
+        for _ in range(130):
+            store.login("unused", "unused")
+        assert len(store._sessions) <= 128
+
     def _enable_auth(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         monkeypatch.setenv("PITCHSERVER_AUTH_REQUIRED", "1")
         monkeypatch.setenv("PITCHSERVER_AUTH_FILE", str(tmp_path / "auth.json"))

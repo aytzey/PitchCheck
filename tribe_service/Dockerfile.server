@@ -1,0 +1,5 @@
+# Keep the verified GPU/dependency runtime; update only this service's code.
+ARG TRIBE_BASE_IMAGE=ghcr.io/aytzey/pitchcheck-tribe@sha256:6b7f32e7b932c3645f9ddbdc1e932c1101a028b6d4ac8818ab51ac5bf2d26768
+FROM ${TRIBE_BASE_IMAGE}
+COPY tribe_service /app/tribe_service
+CMD ["uvicorn", "tribe_service.app:app", "--host", "0.0.0.0", "--port", "8090", "--limit-concurrency", "32", "--timeout-keep-alive", "5", "--timeout-graceful-shutdown", "30"]

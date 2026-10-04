@@ -1,6 +1,6 @@
 import os
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -60,6 +60,126 @@ class TestHelpers:
 
 
 class TestScoreText:
+    def test_feature_cache_is_cleared_on_success_and_failure(self, monkeypatch):
+        from tribe_service import engine
+        cache = {"customer-context": np.ones((2, 3))}
+        model = engine._MockModel()
+        model.data = SimpleNamespace(text_feature=SimpleNamespace(infra=SimpleNamespace(cache_dict=cache)))
+        monkeypatch.setattr(engine, "get_model", lambda: model)
+        engine._score_text_once("A valid feature-cache cleanup test", retry_index=0)
+        assert not cache
+        cache["customer-context"] = np.ones((2, 3))
+        def fail(_):
+            raise RuntimeError("predict failed")
+        monkeypatch.setattr(model, "predict", fail)
+        with pytest.raises(RuntimeError, match="predict failed"):
+            engine._score_text_once("A valid feature-cache failure test", retry_index=0)
+        assert not cache
+
+    def test_target_token_copy_matches_upstream_with_padding_and_multi_token_targets(self, monkeypatch):
+        torch = pytest.importorskip("torch")
+        text = pytest.importorskip("neuralset.extractors.text")
+        from tribe_service import engine
+        original = text.HuggingFaceText._get_data.fget.method
+        monkeypatch.setattr(text.HuggingFaceText._get_data.fget, "method", original)
+        monkeypatch.setattr(text.HuggingFaceText, "_load_model", text.HuggingFaceText._load_model)
+        monkeypatch.setattr(text.HuggingFaceText, "_pitchscore_accelerate_patched", False, raising=False)
+        monkeypatch.setenv("HF_HUB_OFFLINE", "0")
+        engine._patch_neuralset_hf_text_runtime()
+        optimized = text.HuggingFaceText._get_data.fget.method
+
+        class Inputs(dict):
+            def to(self, _):
+                return self
+
+        class Tokenizer:
+            def encode(self, value, **_):
+                return list(range(1, len(value.split()) + 1))
+            def __call__(self, values, **_):
+                tokens = [self.encode(value) for value in values]
+                width = max(map(len, tokens))
+                return Inputs(input_ids=torch.tensor([row + [0] * (width-len(row)) for row in tokens]))
+
+        class Model:
+            def __call__(self, input_ids, **_):
+                states = tuple(input_ids[..., None].float().repeat(1, 1, 3) + layer for layer in range(4))
+                return type("Outputs", (dict,), {"hidden_states": states})(hidden_states=states)
+
+        feature = SimpleNamespace(batch_size=2, device="cpu", contextualized=True, tokenizer=Tokenizer(),
+                                  model=Model(), _pad_id=0, cache_all_layers=True, cache_n_layers=None,
+                                  _aggregate_tokens=lambda value: value.float().mean(dim=1),
+                                  _aggregate_layers=lambda value: value.mean(axis=0))
+        events = [SimpleNamespace(text="two words", context="a prefix two words"),
+                  SimpleNamespace(text="short", context="short")]
+        for contextualized in [True, False]:
+            feature.contextualized = contextualized
+            expected, actual = list(original(feature, events)), list(optimized(feature, events))
+            for before, after in zip(expected, actual, strict=True):
+                np.testing.assert_array_equal(before, after)
+    def test_offline_text_model_check_uses_only_existing_cached_config(self, monkeypatch):
+        from tribe_service import engine
+        text, hub = ModuleType("neuralset.extractors.text"), ModuleType("huggingface_hub")
+
+        class TextFeature:
+            _REPOS = []
+            _get_data = SimpleNamespace(fget=SimpleNamespace(method=None))
+
+        text.HuggingFaceText, text.part_reversal = TextFeature, lambda _: None
+        hub.try_to_load_from_cache = lambda *args: "/cached/config.json"
+        monkeypatch.setitem(sys.modules, "torch", ModuleType("torch"))
+        monkeypatch.setitem(sys.modules, "neuralset.extractors.text", text)
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+        monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+        engine._patch_neuralset_hf_text_runtime()
+        assert TextFeature._REPOS == [engine.TRIBE_TEXT_MODEL]
+        del TextFeature._pitchscore_accelerate_patched
+        TextFeature._REPOS = []
+        hub.try_to_load_from_cache = lambda *args: None
+        engine._patch_neuralset_hf_text_runtime()
+        assert TextFeature._REPOS == []
+
+    def test_wrapped_cuda_oom_is_recovered_by_cpu_fallback(self, monkeypatch):
+        from tribe_service import engine
+        attempts = []
+
+        def predict(message, *, retry_index):
+            attempts.append(retry_index)
+            if retry_index == 0:
+                try:
+                    raise RuntimeError("CUDA out of memory")
+                except RuntimeError as cause:
+                    raise RuntimeError("Model loading went wrong") from cause
+            return np.ones((2, 3), dtype=np.float32), {"ok": True}
+
+        monkeypatch.setattr(engine, "TRIBE_OOM_FALLBACK_TEXT_DEVICE", "cpu")
+        monkeypatch.setattr(engine, "_score_text_once", predict)
+        monkeypatch.setattr(engine, "unload_model", lambda **kwargs: None)
+        result = engine.score_text("Wrapped OOM recovery regression check")
+        assert result.shape == (2, 3)
+        assert attempts == [0, 1]
+
+    def test_text_model_survives_between_pitches_but_unload_option_is_respected(self, monkeypatch):
+        from tribe_service import engine
+
+        class TextFeature:
+            _model = object()
+
+        main = ModuleType("tribev2.main")
+        text = ModuleType("neuralset.extractors.text")
+        text.HuggingFaceText = TextFeature
+        main._free_extractor_model = lambda extractor: delattr(extractor, "_model")
+        monkeypatch.setitem(sys.modules, "tribev2.main", main)
+        monkeypatch.setitem(sys.modules, "neuralset.extractors.text", text)
+        monkeypatch.setattr(engine, "TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE", False)
+        engine._patch_tribe_text_model_lifetime()
+        feature = TextFeature()
+        feature._model = object()
+        main._free_extractor_model(feature)
+        assert hasattr(feature, "_model")
+        monkeypatch.setattr(engine, "TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE", True)
+        main._free_extractor_model(feature)
+        assert "_model" not in vars(feature)
+
     def test_patch_exca_no_value_alias_restores_legacy_path(self, monkeypatch):
         class SentinelNoValue:
             pass

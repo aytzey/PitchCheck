@@ -1288,6 +1288,8 @@ Clarification answers already provided:
 Score-lift repair brief:
 {_format_refine_suggestions(suggestions)}
 
+The repair brief is advice, NOT factual context. Its example rewrites may contain unsupported dates, numbers or resources. Only the current message, persona and actual clarification ANSWERS authorize facts. Never copy a date, number, clip or ticket from a suggestion unless it occurs in that factual context.
+
 Rewrite objective:
 - Help this particular recipient consider the sender's real invitation or proposal, rather than gaming a score.
 - Respect stated dislikes and objections. Do not imply they like something the persona says they dislike.
@@ -1523,9 +1525,6 @@ Clarification answers (the only additional factual context):
 Actual TRIBE measurements of the original and every candidate:
 {_json_dumps(measurements)}
 
-Score-lift repair brief the rewrite was asked to fix:
-{_format_refine_suggestions(suggestions)}
-
 Assess original, c1, c2 and c3 independently. Do not rewrite them. Measured neural geometry informs the server's ranking, but cannot justify an invented fact, a contradiction of the stated recipient preference, a changed invitation, or an unnatural sales template.
 - supported: false for ANY invented clip, tickets, prices, proof, plans, prior conversations, availability or commitment. Suggestions/repair briefs are advice, NOT a source of new facts. "A 15-second clip exists" is false unless the user provided that fact.
 - intent_preserved: the actual invitation/proposal remains intact. Replacing the requested concert with a different activity is not preserving the goal.
@@ -1541,6 +1540,24 @@ Return only valid JSON with this exact shape:
       "context_fit": {{"persona_pain_alignment": 50, "objection_coverage": 50, "proof_credibility": 50, "cta_ease": 50, "channel_fit": 50}}, "issues": []}}
   ]
 }}"""
+
+
+# ponytail: literal Turkish/English detail guard; the semantic critic covers other factual claims.
+_REFINE_CONCRETE_DETAILS = re.compile(
+    r"(\d+(?:[.,:/%-]\d+)*|(?<!\w)(?:"
+    r"pazartesi|salı|çarşamba|perşembe|cuma|cumartesi|pazar|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"yarın|bugün|haftaya|tomorrow|today|tonight|next\s+week|"
+    r"ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık|"
+    r"january|february|march|april|june|july|august|september|october|november|december)\b)"
+    r"|(?<!\w)(klip|klib|clip|bilet|ticket)\w*"
+)
+
+
+def _refine_concrete_details(text: str) -> set[str]:
+    normalised = text.casefold().replace("i\u0307", "i")
+    return {value or ("klip" if resource == "klib" else resource)
+            for value, resource in _REFINE_CONCRETE_DETAILS.findall(normalised)}
 
 
 def select_tribe_refinement(
@@ -1573,6 +1590,8 @@ def select_tribe_refinement(
     if set(by_id) != ids:
         raise RuntimeError("Refinement candidate validation was incomplete.")
     evaluations = []
+    facts = "\n".join([message, persona, *(str(item.get("answer") or "") for item in clarification_answers or [])])
+    known_details = _refine_concrete_details(facts)
     for measured in measurements:
         review = by_id[measured["id"]]
         facets = review.get("context_fit")
@@ -1584,11 +1603,17 @@ def select_tribe_refinement(
             raise RuntimeError("Refinement candidate scores were invalid.")
         semantic = _semantic_score_from_context_fit({key: {"score": facets[key]} for key in CONTEXT_FIT_KEYS})
         eligible = all(review.get(key) is True for key in ("supported", "intent_preserved", "recipient_respected", "voice_preserved"))
+        new_details = sorted(_refine_concrete_details(measured["message"]) - known_details)
+        issues = _clean_string_list(review.get("issues"), [], limit=5)
+        if measured["id"] != "original" and new_details:
+            eligible = False
+            label = "Verilmemiş somut ayrıntı: " if _looks_turkish(message + persona) else "Unsupported concrete detail: "
+            issues = [label + ", ".join(new_details), *issues][:5]
         # Reuse the established neural/semantic blend; weak model evidence gets less weight.
         weight = clamp(SEMANTIC_BLEND_WEIGHT + (1 - measured["quality_weight"]) * 0.30, 0, 0.85)
         evaluations.append({**measured, "eligible": eligible, "semantic_score": round(semantic, 3),
                             "selection_score": round(weight * semantic + (1 - weight) * measured["neural_score"], 3),
-                            "issues": _clean_string_list(review.get("issues"), [], limit=5)})
+                            "issues": issues})
     baseline = evaluations[0]
     acceptable = [item for item in evaluations if item["eligible"] and (
         not baseline["eligible"] or item["semantic_score"] >= baseline["semantic_score"])]

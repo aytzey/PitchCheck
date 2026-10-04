@@ -406,6 +406,21 @@ class TestScore:
         res = client.post("/refine", json=payload)
         assert res.json()["refined_message"] == candidates[0]
 
+        # Even a mistaken critic cannot authorize invented calendar/resource facts.
+        fabricated = "Konser haftaya cuma, iki bilet aldım; benimle gelir misin?"
+        candidates[0] = fabricated
+        scores[fabricated] = 99
+        res = client.post("/refine", json=payload)
+        assert res.json()["tribe_guidance"]["evaluations"][1]["eligible"] is False
+        assert res.json()["refined_message"] != fabricated
+        payload["clarificationAnswers"] = [{"id": "date", "question": "Konser haftaya cuma mı, bilet var mı?", "answer": ""}]
+        res = client.post("/refine", json=payload)
+        assert res.json()["tribe_guidance"]["evaluations"][1]["eligible"] is False
+        payload["clarificationAnswers"][0]["answer"] = "Konser haftaya cuma; iki bilet aldım."
+        res = client.post("/refine", json=payload)
+        assert res.json()["tribe_guidance"]["evaluations"][1]["eligible"] is True
+        assert res.json()["refined_message"] == fabricated
+
     def test_refine_can_return_clarifying_questions(self, monkeypatch):
         def fake_refine_pitch_message(**kwargs):
             return {

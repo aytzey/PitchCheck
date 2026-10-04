@@ -217,6 +217,12 @@ class TestRefinePitchMessage:
         assert "stated dislikes" in prompt
         assert "clips" in prompt
         assert "Do not output the drafts" not in prompt
+        assert "NOT factual context" in prompt
+
+    def test_detail_guard_does_not_mistake_ordinary_english_for_calendar_facts(self):
+        from tribe_service.llm_layer import _refine_concrete_details
+        assert _refine_concrete_details("Maybe you may enjoy marketing.") == set()
+        assert _refine_concrete_details("klibi izleyelim, biletleri bakalım") == {"klip", "bilet"}
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")

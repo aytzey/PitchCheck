@@ -600,3 +600,84 @@ class TestPitchServerAuth:
 
         assert changed.status_code == 200
         assert changed.json()["username"] == "desktopuser"
+
+
+def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_drafts(monkeypatch):
+    import json
+    import httpx
+    from tribe_service import llm_layer
+    original = 'benimle çilekeş konserine gelmelisin harika bi grup çok eğlencez'
+    drafts = ['Çilekeş konserine benimle gelir misin? Yanımda sen ol istiyorum.',
+              'Çilekeş zevkime güvenmediğini biliyorum, eşlik etme teklifim hâlâ var. Beraber gidelim mi?',
+              'İki bilet aldım, cuma günü konsere gidelim mi?']
+    events = []
+    winner = ['c2']
+    monkeypatch.setattr(llm_layer, 'OPENROUTER_API_KEY', 'test-key')
+    def measure(text):
+        events.append(('measure', text))
+        return [[.2]]
+    def analysis(*args, **kwargs):
+        return ({}, {'segments': 4, 'voxel_count': 20484, 'temporal_trace': [.2, .5, .1, .3],
+                     'temporal_trace_basis': 'synthetic_word_order'},
+                {key: 50.0 for key in service_app.PERSUASION_SIGNAL_LABELS})
+    def post(url, **kwargs):
+        payload = kwargs['json']
+        if url.endswith('/decisions'):
+            state, questions = payload['state'], payload['questions']
+            events.append(('jev', state))
+            if 'relationship' in questions:
+                assert events[0] == ('measure', original)
+                assert state['baseline']['voxel_count'] == 20484
+                assert state['baseline']['temporal_trace'] == [.2, .5, .1, .3]
+                selected = {'relationship': 'romantic', 'objection': 'taste', 'angle': 'company',
+                            'tone': 'warm', 'repair': 'recipient'}
+            else:
+                assert [row['message'] for row in state['measurements']] == [original, *drafts]
+                selected = {'winner': winner[0]}
+            answers = {}
+            for name, q in questions.items():
+                if q['type'] == 'choice':
+                    choice = selected[name]
+                    answers[name] = {'type': 'choice', 'choice': choice, 'confidence': .95,
+                                     'probabilities': {key: float(key == choice) for key in q['criteria']}}
+                elif q['type'] == 'noul':
+                    # A mistaken editor cannot authorize fabricated ticket/date facts.
+                    answers[name] = {'type': 'noul', 'noul': .99}
+                else:
+                    score = 2.0 if name.startswith('original_') else 3.9
+                    answers[name] = {'type': 'score', 'score': score, 'confidence': .9,
+                                     'probabilities': {str(i): (float(i == 2) if score == 2 else .1 if i == 3 else .9 if i == 4 else 0) for i in range(5)}}
+            body = {'model': 'typesafe/jev-1.13-20260917', 'answers': answers}
+        else:
+            events.append(('writer', payload))
+            assert payload['model'] == 'google/gemini-3.5-flash-lite'
+            prompt = payload['messages'][1]['content']
+            assert 'company' in prompt and 'synthetic_word_order' in prompt
+            assert '0.5' in prompt
+            assert '15 saniyelik klip' not in prompt
+            body = {'choices': [{'message': {'content': json.dumps({'candidates': drafts})}}]}
+        return httpx.Response(200, json=body, request=httpx.Request('POST', url))
+    monkeypatch.setattr(service_app, 'score_text', measure)
+    monkeypatch.setattr(service_app, 'analyze_predictions', analysis)
+    monkeypatch.setattr(llm_layer.httpx, 'post', post)
+    response = client.post('/refine', json={'message': original, 'persona': 'çilekeşi sevmeyen flörtüm',
+        'openRouterModel': 'google/gemini-3.5-flash-lite', 'jevStrategy': True, 'forceRewrite': True,
+        'suggestions': ['15 saniyelik klip var, izlesin.']})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['refined_message'] == drafts[1]
+    assert [kind for kind, _ in events] == ['measure', 'jev', 'writer', 'measure', 'measure', 'measure', 'jev']
+    assert result['decision_strategy']['choices']['angle'] == 'company'
+    proof = result['tribe_guidance']
+    assert proof['writer_passes'] == 1
+    assert proof['quality_model'].startswith('typesafe/jev-')
+    assert proof['evaluations'][3]['eligible'] is False
+    assert result['methodology'] == 'tribe_jev_planned_refinement'
+    # Even Jev's preferred candidate cannot bypass the deterministic fact guard.
+    events.clear()
+    winner[0] = 'c3'
+    response = client.post('/refine', json={'message': original, 'persona': 'çilekeşi sevmeyen flörtüm',
+        'openRouterModel': 'google/gemini-3.5-flash-lite', 'jevStrategy': True, 'forceRewrite': True})
+    assert response.status_code == 200
+    assert response.json()['refined_message'] in drafts[:2]
+    assert sum(kind == 'writer' for kind, _ in events) == 1

@@ -46,6 +46,8 @@ from tribe_service.llm_layer import (
     refine_pitch_message,
     select_tribe_refinement,
     _augment_persuasion_evidence,
+    _openrouter_enabled,
+    plan_tribe_refinement,
     OPENROUTER_ENABLED,
 )
 from tribe_service.persuasion_features import calibration_quality_weight, evidence_score_from_analysis, neuro_axes_from_analysis
@@ -509,9 +511,11 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         )
 
 
-def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str) -> list[dict]:
-    measurements = []
-    for index, text in enumerate([message, *candidates]):
+def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str,
+                               baseline: dict | None = None) -> list[dict]:
+    measurements = [baseline] if baseline is not None else []
+    texts = candidates if baseline is not None else [message, *candidates]
+    for index, text in enumerate(texts, start=1 if baseline is not None else 0):
         predictions = score_text(text)
         raw, fmri, signals = analyze_predictions(predictions, text_input_mode=TRIBE_TEXT_INPUT_MODE)
         evidence = _augment_persuasion_evidence(text, persona, platform, raw, fmri)
@@ -522,6 +526,8 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
             "quality_weight": calibration_quality_weight(evidence),
             "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
             "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
+            "temporal_trace": fmri.get("temporal_trace", []),
+            "temporal_trace_basis": fmri.get("temporal_trace_basis", "unknown"),
         })
     return measurements
 
@@ -530,6 +536,19 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
 async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_auth)):
     """Generate drafts, measure each with TRIBE, then select a context-validated measured draft."""
     try:
+        baseline = strategy = None
+        if request.jev_strategy:
+            if not _openrouter_enabled(request.open_router_model):
+                raise RuntimeError("OpenRouter API key is missing.")
+            baseline = (await _run_with_backpressure(
+                _measure_refine_candidates, request.message, [], request.persona, request.platform,
+                lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS, track_runtime=True,
+            ))[0]
+            strategy = await _run_with_backpressure(
+                plan_tribe_refinement, request.message, request.persona, request.platform, baseline,
+                [item.model_dump() for item in request.clarification_answers],
+                lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
+            )
         result = await _run_with_backpressure(
             refine_pitch_message,
             lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
@@ -541,10 +560,12 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
             clarification_round=request.clarification_round,
             force_rewrite=request.force_rewrite,
             openrouter_model=request.open_router_model,
+            **({"decision_strategy": strategy} if strategy is not None else {}),
         )
         if not result.get("needs_clarification"):
             measurements = await _run_with_backpressure(
                 _measure_refine_candidates, request.message, result["candidates"], request.persona, request.platform,
+                baseline,
                 lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS, track_runtime=True,
             )
             result = await _run_with_backpressure(

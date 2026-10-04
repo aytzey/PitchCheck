@@ -1028,3 +1028,29 @@ class TestDeterministicNeuralReportRisks:
         risk_text = "Weak attention capture can bury the value proposition"
         assert risk_text not in strong_result["risks"]
         assert risk_text in weak_result["risks"]
+
+
+@pytest.mark.parametrize('invalid', ['model', 'missing', 'choice', 'confidence', 'probabilities', 'score'])
+def test_invalid_jev_decisions_cannot_authorize_a_draft(monkeypatch, invalid):
+    from tribe_service import llm_layer
+    monkeypatch.setattr(llm_layer, 'OPENROUTER_API_KEY', 'test-key')
+    questions = {'angle': {'type': 'choice', 'criteria': {'company':'Shared experience', 'direct':'Direct ask'}},
+                 'quality': {'type':'score','criteria':['Fails','Adequate','Excellent']}}
+    body = {'model': 'typesafe/jev-1.13-20260917', 'answers': {
+        'angle': {'type':'choice','choice':'company','confidence':.95,'probabilities':{'company':.98,'direct':.02}},
+        'quality': {'type':'score','score':1.8,'confidence':.9,'probabilities':{'0':0,'1':.2,'2':.8}}}}
+    if invalid == 'model': body['model'] = 'google/gemini-3.5-flash-lite'
+    if invalid == 'missing': del body['answers']['angle']
+    if invalid == 'choice': body['answers']['angle']['choice'] = 'unmeasured'
+    if invalid == 'confidence': body['answers']['angle']['confidence'] = True
+    if invalid == 'probabilities': body['answers']['angle']['probabilities']['company'] = float('nan')
+    if invalid == 'score': body['answers']['quality']['score'] = 0
+    monkeypatch.setattr(llm_layer.httpx,'post',lambda url,**kwargs: httpx.Response(200,json=body,request=httpx.Request('POST',url)))
+    with pytest.raises(RuntimeError, match='Jev decision validation failed'):
+        llm_layer._post_jev_decisions({'message':'A supported invitation'}, questions)
+
+
+def test_concrete_time_claim_is_not_authorized_by_a_generic_invitation():
+    from tribe_service.llm_layer import _refine_concrete_details
+    assert 'bu akşam' in _refine_concrete_details('Bu akşam Çilekeş konserine gidelim mi?')
+    assert 'bu akşam' not in _refine_concrete_details('Çilekeş konserine gidelim mi?')

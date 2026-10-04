@@ -77,6 +77,7 @@ class PitchRefineRequest(PitchScoreRequest):
     )
     clarification_round: int = Field(default=0, ge=0, le=2, alias="clarificationRound")
     force_rewrite: bool = Field(default=False, alias="forceRewrite")
+    jev_strategy: bool = Field(default=False, alias="jevStrategy")
 
 
 class PitchRefineClarificationAnswer(BaseModel):
@@ -172,6 +173,7 @@ class PitchRefineResponse(BaseModel):
     model: str
     refined_message: str | None = None
     needs_clarification: bool = False
+    decision_strategy: dict[str, Any] | None = None
     questions: list[PitchRefineQuestion] = Field(default_factory=list, max_length=5)
     safety_notes: list[str] = Field(default_factory=list, max_length=5)
     critic_notes: list[str] = Field(default_factory=list, max_length=5)

@@ -176,4 +176,5 @@ class PitchRefineResponse(BaseModel):
     safety_notes: list[str] = Field(default_factory=list, max_length=5)
     critic_notes: list[str] = Field(default_factory=list, max_length=5)
     persuasion_profile: dict[str, Any] | None = None
+    tribe_guidance: dict[str, Any] | None = None
     methodology: str = "llm_semantic_refine_no_tribe_rescore"

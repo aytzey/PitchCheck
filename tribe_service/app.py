@@ -39,12 +39,16 @@ from tribe_service.engine import (
     TRIBE_DEVICE,
     TRIBE_MODEL_ID,
     TRIBE_TEXT_INPUT_MODE,
+    TRIBE_ALLOW_MOCK,
 )
 from tribe_service.llm_layer import (
     interpret_persuasion,
     refine_pitch_message,
+    select_tribe_refinement,
+    _augment_persuasion_evidence,
     OPENROUTER_ENABLED,
 )
+from tribe_service.persuasion_features import calibration_quality_weight, evidence_score_from_analysis, neuro_axes_from_analysis
 from tribe_service.auth import (
     AUTH_STORE,
     AuthConfigurationError,
@@ -505,9 +509,26 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         )
 
 
+def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str) -> list[dict]:
+    measurements = []
+    for index, text in enumerate([message, *candidates]):
+        predictions = score_text(text)
+        raw, fmri, signals = analyze_predictions(predictions, text_input_mode=TRIBE_TEXT_INPUT_MODE)
+        evidence = _augment_persuasion_evidence(text, persona, platform, raw, fmri)
+        measurements.append({
+            "id": "original" if index == 0 else f"c{index}", "message": text,
+            "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
+            "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
+            "quality_weight": calibration_quality_weight(evidence),
+            "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
+            "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
+        })
+    return measurements
+
+
 @app.post("/refine")
 async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_auth)):
-    """Rewrite a pitch with the configured LLM refiner without TRIBE candidate re-scoring."""
+    """Generate drafts, measure each with TRIBE, then select a context-validated measured draft."""
     try:
         result = await _run_with_backpressure(
             refine_pitch_message,
@@ -521,6 +542,17 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
             force_rewrite=request.force_rewrite,
             openrouter_model=request.open_router_model,
         )
+        if not result.get("needs_clarification"):
+            measurements = await _run_with_backpressure(
+                _measure_refine_candidates, request.message, result["candidates"], request.persona, request.platform,
+                lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS, track_runtime=True,
+            )
+            result = await _run_with_backpressure(
+                select_tribe_refinement, request.message, request.persona, request.platform,
+                request.suggestions, result, measurements,
+                [item.model_dump() for item in request.clarification_answers],
+                lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
+            )
         return PitchRefineResponse(**result).model_dump()
     except ScoreQueueTimeoutError as exc:
         raise HTTPException(status_code=429, detail="Refine service is busy. Try again shortly.",
@@ -528,12 +560,14 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
     except ScoreRunTimeoutError as exc:
         raise HTTPException(status_code=504, detail="Refine service timed out.") from exc
     except RuntimeError as exc:
-        detail = str(exc)
-        status_code = 503 if "API key is missing" in detail else 502
+        missing_key = "API key is missing" in str(exc)
+        status_code = 503 if missing_key else 502
+        detail = "OpenRouter API key is missing." if missing_key else "Refine candidates could not be measured and validated."
+        LOGGER.warning("Refine failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=status_code, detail=detail) from exc
     except Exception as exc:
         LOGGER.error("Refine failed (%s)", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="Refine failed while calling the LLM refiner.")
+        raise HTTPException(status_code=500, detail="Refine failed while evaluating candidates.")
 
 
 @app.post("/runtime/load")

@@ -252,6 +252,45 @@ class TestScore:
 
         asyncio.run(run_case())
 
+    def test_cancelled_refine_holds_gpu_slot_for_the_entire_candidate_batch(self, monkeypatch):
+        started, finish = threading.Event(), threading.Event()
+        selected = []
+
+        def blocked_batch(*args):
+            started.set()
+            assert finish.wait(2)
+            return []
+
+        async def run_case():
+            monkeypatch.setattr(service_app, "_score_lock", asyncio.Semaphore(1))
+            monkeypatch.setattr(service_app, "_llm_lock", asyncio.Semaphore(2))
+            monkeypatch.setattr(service_app, "_pipeline_lock", asyncio.Lock())
+            monkeypatch.setattr(service_app, "_active_scores", 0)
+            monkeypatch.setattr(service_app, "refine_pitch_message", lambda **kwargs: {"candidates": ["First draft", "Second draft", "Third draft"]})
+            monkeypatch.setattr(service_app, "_measure_refine_candidates", blocked_batch)
+            monkeypatch.setattr(service_app, "select_tribe_refinement", lambda *args: selected.append(True))
+            request = service_app.PitchRefineRequest(message="A valid invitation", persona="A friend", platform="general")
+            task = asyncio.create_task(service_app.refine_pitch(request, _="test"))
+            try:
+                assert await asyncio.to_thread(started.wait, 1)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+                assert service_app._score_lock.locked()
+                assert (await service_app._pipeline_status())["active_scores"] == 1
+                assert (await service_app._unload_pipeline("test"))["reason"] == "score_in_progress"
+                assert not selected
+            finally:
+                finish.set()
+                for _ in range(100):
+                    if not service_app._score_lock.locked():
+                        break
+                    await asyncio.sleep(0.01)
+            assert not service_app._score_lock.locked()
+            assert service_app._active_scores == 0
+
+        asyncio.run(run_case())
+
     def test_streamed_oversized_body_rejected_before_validation(self):
         res = client.post("/score", content=iter([b" " * 70_000, b" " * 70_000]),
                           headers={"Content-Type": "application/json"})
@@ -300,43 +339,72 @@ class TestScore:
         assert "Scoring failed (ValueError)" in caplog.text
         assert "confidential customer copy" not in caplog.text
 
-    def test_refine_uses_llm_without_tribe_rescore(self, monkeypatch):
-        def fail_score_text(_: str):
-            raise AssertionError("/refine should not call TRIBE scoring")
+    def test_refine_selects_a_measured_candidate_and_rejects_invented_proof(self, monkeypatch):
+        from tribe_service import llm_layer
+        measured = []
+        original = "Benimle Çilekeş konserine gelmelisin, çok eğleneceğiz."
+        candidates = [
+            "Çilekeş sana göre değil biliyorum; benimle bir akşam geçirmek ister misin?",
+            "Çilekeş favorin değil ama seninle konsere gitmeyi isterim. Bana eşlik eder misin?",
+            "Sana iki ücretsiz bilet aldım, 15 saniyelik klibi izle ve beraber gidelim.",
+        ]
+        scores = {original: 35, candidates[0]: 45, candidates[1]: 80, candidates[2]: 99}
+        def fake_score(text):
+            measured.append(text)
+            return scores[text]
+
+        def fake_analysis(value, **kwargs):
+            signals = {key: value for key in service_app.PERSUASION_SIGNAL_LABELS}
+            signals["cognitive_friction"] = 100 - value
+            return ({"mean_abs": .25, "peak_abs": .6, "temporal_std": .08,
+                     "spatial_spread": .07, "focus_ratio": .35, "sustain_ratio": .6},
+                    {"segments": 4, "voxel_count": 20484, "temporal_trace": [.12, .31, .28, .18]}, signals)
 
         def fake_refine_pitch_message(**kwargs):
             assert kwargs["suggestions"] == ["Make the CTA easier"]
-            assert kwargs["clarification_answers"][0]["answer"] == "Use a screen-share proof path."
             assert kwargs["clarification_round"] == 1
             assert kwargs["force_rewrite"] is True
             return {
-                "refined_message": "Improved message with a lower-friction CTA.",
-                "model": "test-refiner",
-                "methodology": "llm_semantic_refine_no_tribe_rescore",
+                "candidates": candidates, "model": "test-refiner",
+                "refined_message": None, "safety_notes": [], "questions": [],
             }
 
-        monkeypatch.setattr(service_app, "score_text", fail_score_text)
-        monkeypatch.setattr(service_app, "refine_pitch_message", fake_refine_pitch_message)
+        def fake_chat(system, prompt, model, temperature):
+            import json
+            assert "Actual TRIBE measurements" in prompt
+            assert "Çilekeş" in prompt
+            return json.dumps({"evaluations": [
+                {"id": key, "supported": key != "c3", "intent_preserved": True,
+                 "recipient_respected": True, "voice_preserved": True,
+                 "context_fit": {facet: 40 if key == "original" else 80
+                                 for facet in llm_layer.CONTEXT_FIT_KEYS},
+                 "issues": ["Invented tickets and clip"] if key == "c3" else []}
+                for key in ["original", "c1", "c2", "c3"]
+            ]})
 
-        res = client.post("/refine", json={
-            "message": "Our platform reduces deployment time by 80% for enterprise teams",
-            "persona": "CTO at a mid-stage startup, technical background",
-            "platform": "email",
+        monkeypatch.setattr(service_app, "score_text", fake_score)
+        monkeypatch.setattr(service_app, "analyze_predictions", fake_analysis)
+        monkeypatch.setattr(service_app, "refine_pitch_message", fake_refine_pitch_message)
+        monkeypatch.setattr(llm_layer, "_post_refine_chat", fake_chat)
+        payload = {
+            "message": original, "persona": "Çilekeş'i sevmeyen flörtüm", "platform": "general",
             "suggestions": ["Make the CTA easier"],
-            "clarificationAnswers": [{
-                "id": "proof",
-                "question": "Can we name this customer?",
-                "answer": "Use a screen-share proof path.",
-            }],
             "clarificationRound": 1,
             "forceRewrite": True,
-        })
-
+        }
+        res = client.post("/refine", json=payload)
         assert res.status_code == 200
         data = res.json()
-        assert data["refined_message"] == "Improved message with a lower-friction CTA."
+        assert data["refined_message"] == candidates[1]
         assert data["model"] == "test-refiner"
-        assert data["methodology"] == "llm_semantic_refine_no_tribe_rescore"
+        assert measured == [original, *candidates]
+        assert data["tribe_guidance"]["candidate_count"] == 3
+        assert data["tribe_guidance"]["selected_id"] == "c2"
+        assert data["tribe_guidance"]["evaluations"][3]["eligible"] is False
+        # Same semantic judgment, different real-model evidence: selection must change.
+        scores[candidates[0]], scores[candidates[1]] = 90, 20
+        res = client.post("/refine", json=payload)
+        assert res.json()["refined_message"] == candidates[0]
 
     def test_refine_can_return_clarifying_questions(self, monkeypatch):
         def fake_refine_pitch_message(**kwargs):
@@ -369,6 +437,16 @@ class TestScore:
         assert data["needs_clarification"] is True
         assert data["questions"][0]["id"] == "proof"
         assert data["safety_notes"] == ["No unverified claims added"]
+
+    def test_refine_model_failure_does_not_expose_private_worker_details(self, monkeypatch, caplog):
+        monkeypatch.setattr(service_app, "refine_pitch_message", lambda **kwargs: {"candidates": ["First draft", "Second draft", "Third draft"]})
+        def fail_batch(*args):
+            raise RuntimeError("confidential customer copy and private model path")
+        monkeypatch.setattr(service_app, "_measure_refine_candidates", fail_batch)
+        response = client.post("/refine", json={"message": "A valid invitation", "persona": "A friend", "platform": "general"})
+        assert response.status_code == 502
+        assert "confidential" not in response.text
+        assert "confidential" not in caplog.text
 
     def test_refine_reports_missing_openrouter_key(self, monkeypatch):
         def fake_refine_pitch_message(**kwargs):

@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch, MagicMock
 
 import httpx
+import pytest
 
 from tribe_service.llm_layer import (
     _build_user_prompt,
@@ -12,6 +13,7 @@ from tribe_service.llm_layer import (
     _openrouter_payload,
     interpret_persuasion,
     refine_pitch_message,
+    select_tribe_refinement,
 )
 
 # ── Fixtures ──
@@ -202,12 +204,26 @@ class TestNeuralOnlyWithoutApiKey:
 
 
 class TestRefinePitchMessage:
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_generation_exposes_three_distinct_candidates_for_real_measurement(self, mock_post):
+        candidates = ["A warm personal invitation.", "A playful shared-evening invitation.", "A direct low-pressure invitation."]
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": candidates}))
+        result = refine_pitch_message("Come to this concert with me.", "A date who dislikes this band", "general", [])
+        assert result["candidates"] == candidates
+        assert result["refined_message"] is None
+        assert mock_post.call_count == 1
+        prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
+        assert "stated dislikes" in prompt
+        assert "clips" in prompt
+        assert "Do not output the drafts" not in prompt
+
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_refine_pitch_message_returns_clean_rewrite(self, mock_post: MagicMock):
-        mock_post.return_value = _mock_openrouter_response("```text\nBetter pitch text.\n```")
+    def test_refine_pitch_message_returns_clean_candidates(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["```text\nBetter pitch text.\n```", "A second supported invitation.", "A third supported invitation."]}))
 
         result = refine_pitch_message(
             SAMPLE_MESSAGE,
@@ -221,9 +237,9 @@ class TestRefinePitchMessage:
             }],
         )
 
-        assert result["refined_message"] == "Better pitch text."
+        assert result["candidates"][0] == "Better pitch text."
         assert result["model"] == "anthropic/refiner-test"
-        assert result["methodology"] == "llm_semantic_refine_no_tribe_rescore"
+        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
         request_body = mock_post.call_args.kwargs["json"]
         assert request_body["temperature"] == 0.35
         assert request_body["response_format"] == {"type": "json_object"}
@@ -244,7 +260,7 @@ class TestRefinePitchMessage:
         mock_post.return_value = _mock_openrouter_response(json.dumps({
             "needs_clarification": False,
             "questions": [],
-            "refined_message": "Safe low-claim rewrite.",
+            "candidates": ["Safe low-claim rewrite.", "Another safe low-claim rewrite.", "A third safe low-claim rewrite."],
             "safety_notes": ["No unverified claims added"],
         }))
 
@@ -262,7 +278,7 @@ class TestRefinePitchMessage:
             force_rewrite=True,
         )
 
-        assert result["refined_message"] == "Safe low-claim rewrite."
+        assert result["candidates"][0] == "Safe low-claim rewrite."
         prompt = mock_post.call_args_list[0].kwargs["json"]["messages"][1]["content"]
         assert "No answer provided; proceed without inventing this fact." in prompt
         assert "Force rewrite now: true" in prompt
@@ -317,96 +333,29 @@ class TestRefinePitchMessage:
         else:
             raise AssertionError("Expected RuntimeError")
 
-    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer._post_refine_chat")
+    def test_critic_failure_cannot_release_an_unvalidated_draft(self, chat):
+        chat.side_effect = httpx.ConnectError("private upstream content")
+        with pytest.raises(RuntimeError, match="validation failed"):
+            select_tribe_refinement(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [],
+                                   {"model": "test-refiner"}, [{"id": "original"}])
+
+    @patch("tribe_service.llm_layer._post_refine_chat")
+    def test_incomplete_critic_cannot_release_a_draft(self, chat):
+        chat.return_value = '{"evaluations": []}'
+        with pytest.raises(RuntimeError, match="incomplete"):
+            select_tribe_refinement(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [],
+                                   {"model": "test-refiner"}, [{"id": "original"}, {"id": "c1"}])
+
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_critic_pass_improves_stage_one_rewrite(self, mock_post: MagicMock):
-        stage_one = json.dumps({
-            "needs_clarification": False,
-            "questions": [],
-            "refined_message": "Stage one rewrite.",
-            "safety_notes": ["No unverified claims added"],
-        })
-        critic = json.dumps({
-            "verdict": "improved",
-            "remaining_issues_fixed": ["Tightened the CTA to one specific ask"],
-            "final_message": "Final critic-approved rewrite.",
-        })
-        mock_post.side_effect = [
-            _mock_openrouter_response(stage_one),
-            _mock_openrouter_response(critic),
-        ]
-
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            ["Lower the CTA friction"],
-        )
-
-        assert result["refined_message"] == "Final critic-approved rewrite."
-        assert result["methodology"] == "llm_semantic_refine_two_pass_critic"
-        assert result["critic_notes"] == ["Tightened the CTA to one specific ask"]
-        assert mock_post.call_count == 2
-        critic_prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
-        assert "Candidate rewrite to critique" in critic_prompt
-        assert "Stage one rewrite." in critic_prompt
-        assert "Lower the CTA friction" in critic_prompt
+    def test_duplicate_candidates_are_rejected(self, mock_post):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["One duplicate invitation."] * 3}))
+        with pytest.raises(RuntimeError, match="three distinct"):
+            refine_pitch_message(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [])
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
-    @patch("tribe_service.llm_layer.httpx.post")
-    def test_critic_pass_failure_keeps_stage_one_rewrite(self, mock_post: MagicMock):
-        stage_one = json.dumps({
-            "needs_clarification": False,
-            "questions": [],
-            "refined_message": "Stage one rewrite.",
-        })
-        mock_post.side_effect = [
-            _mock_openrouter_response(stage_one),
-            httpx.ConnectError("network down"),
-        ]
-
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            ["Lower the CTA friction"],
-        )
-
-        assert result["refined_message"] == "Stage one rewrite."
-        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
-
-    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
-    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
-    @patch("tribe_service.llm_layer.httpx.post")
-    def test_critic_pass_can_be_disabled(self, mock_post: MagicMock):
-        stage_one = json.dumps({
-            "needs_clarification": False,
-            "questions": [],
-            "refined_message": "Stage one rewrite.",
-        })
-        mock_post.return_value = _mock_openrouter_response(stage_one)
-
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            [],
-        )
-
-        assert result["refined_message"] == "Stage one rewrite."
-        assert mock_post.call_count == 1
-
-    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
-    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
     @patch("tribe_service.llm_layer.httpx.post")
     def test_deepseek_reasoning_output_is_handled(self, mock_post: MagicMock):
         """DeepSeek-style responses with <think> blocks parse cleanly."""
@@ -416,7 +365,7 @@ class TestRefinePitchMessage:
             + json.dumps({
                 "needs_clarification": False,
                 "questions": [],
-                "refined_message": "Reliability-first rewrite with one CTA.",
+                "candidates": ["Reliability-first rewrite with one CTA.", "A second reliability-first rewrite.", "A third reliability-first rewrite."],
                 "safety_notes": [],
             })
         )
@@ -430,21 +379,20 @@ class TestRefinePitchMessage:
             openrouter_model="deepseek/deepseek-v4-pro",
         )
 
-        assert result["refined_message"] == "Reliability-first rewrite with one CTA."
+        assert result["candidates"][0] == "Reliability-first rewrite with one CTA."
         assert result["model"] == "deepseek/deepseek-v4-pro"
         # DeepSeek gets a higher rewrite temperature than the default.
         assert mock_post.call_args.kwargs["json"]["temperature"] == 0.7
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
     @patch("tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT", "high")
     @patch("tribe_service.llm_layer.httpx.post")
     def test_reasoning_effort_is_forwarded_when_configured(self, mock_post: MagicMock):
         mock_post.return_value = _mock_openrouter_response(json.dumps({
             "needs_clarification": False,
             "questions": [],
-            "refined_message": "Rewrite.",
+            "candidates": ["A supported rewrite.", "Another supported rewrite.", "A third supported rewrite."],
         }))
 
         refine_pitch_message(
@@ -459,29 +407,21 @@ class TestRefinePitchMessage:
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_plain_text_fallback_strips_think_blocks(self, mock_post: MagicMock):
+    def test_plain_text_cannot_bypass_candidate_measurement(self, mock_post: MagicMock):
         mock_post.return_value = _mock_openrouter_response(
             "<think>planning the rewrite</think>\nFinal rewritten pitch text."
         )
 
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            [],
-            openrouter_model="deepseek/deepseek-v4-pro",
-        )
-
-        assert result["refined_message"] == "Final rewritten pitch text."
+        with pytest.raises(RuntimeError, match="candidates as JSON"):
+            refine_pitch_message(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [], openrouter_model="deepseek/deepseek-v4-pro")
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
     @patch("tribe_service.llm_layer.httpx.post")
     def test_refine_prompt_includes_candidate_protocol_and_channel_norms(self, mock_post: MagicMock):
-        mock_post.return_value = _mock_openrouter_response("Plain rewrite without JSON.")
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["A supported invitation.", "Another supported invitation.", "A third supported invitation."]}))
 
         refine_pitch_message(
             SAMPLE_MESSAGE,

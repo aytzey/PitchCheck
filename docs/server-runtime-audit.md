@@ -258,3 +258,37 @@ Son dağıtımda aynı test edilmiş **`sha256:cc75b22ee19f23163e58f654d734e15df
 Son durumda model boşaltılmıştır. Host GPU belleği bütün iş yükleriyle **4.217 MiB kullanılan / 11.624 MiB boş**, GPU kullanım oranı `%0`; bizim konteynerin Docker working-set'i **836,8 MiB / 12 GiB** idi. Working-set süreç RSS değildir ve unload'un bütün CPU belleğini serbest bıraktığı anlamına gelmez.
 
 Tekrar üretim betiği, iki encoder'ın ham `.npy` matrisleri, `metrics.json` ve bakım snapshot'ları sunucuda `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/encoder-ab-20261005/run3-fixed/` altındadır. Koşullar aynı sınırlı, sıralı konteynerlerde iki tekrar, prediction/feature cache temizliği ve read-only HF ağırlıklarıdır; işletim sistemi önbelleği silinmez. Canlı dağıtım ve public yükleme kanıtları `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/audit-encoder-stability-final-20261005-f6b5cd9/` altında `deployment.json` ve `canonical-public-load.json` dosyalarındadır. Önceki imaj ve Hermes ayarına hedefli dönüş `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/rollback-encoder-stability-final-20261005-f6b5cd9-20261005T005719Z/rollback.sh` ile yapılır; bu script korumalı yedeklerden `.env` ve gerçek `runtime.env` dosyalarını geri getirip yalnız `tribe` servisini yeniler.
+
+## GLM Flash geçişi — 5 Ekim 2026
+
+Taskfulight İkna stüdyosunun yazım ve açık model seçimiyle analiz istekleri `z-ai/glm-5.3-flash` kullanır. Eski uygulamanın `jevStrategy: true` ile gönderdiği Gemini model kimliği de sunucuda aynı GLM yazara yönlenir. Jev strateji/editör, orijinal `meta-llama/Llama-3.2-3B` encoder, gerçek TRIBE ölçümleri ve deneysel seçim formülü korunmuştur. Uygulama, yanıttaki gerçekten kullanılan model kimliğini gösterir. Ürün kodunu Sol 6.1 xhigh yazdı; ebeveyn ajan diff, gerçek çıktı ve dağıtım kontrollerini yaptı.
+
+Yazar tek uygulama isteğinde üç aday üretir; `reasoning.effort=low`, `exclude=true`, toplam completion sınırı **1.536 token**. `exclude` düşünmeyi kapatmaz; GLM katalogda zorunlu reasoning bildirir. Açık GLM analiz isteği low/4.096 token kullanır. Baseten FP8, Fireworks ve CoreWeave sırasıyla önceliklidir; kapasite yetmezse gerekli parametreleri destekleyen aynı model sağlayıcılarına geçiş açıktır. Yazarda uygulama seviyesinde tekrar veya yeniden üretim döngüsü yoktur.
+
+İlk aday imajı sekiz isteği tamamladı, fakat altı istek yavaş sağlayıcılara düştü: tam refine medyanı **15,531 sn**, en uzunu **28,513 sn** oldu. Tutum tersine çevirme, verilmemiş geçmiş ve emir kopyalama örnekleri de görüldü. Yalnız hızlı sağlayıcılara izin veren sonraki aday, üçüncü istekte upstream `429` nedeniyle durdu. Ücretli anahtarda kullanılabilir kota vardı; Baseten, Fireworks ve CoreWeave ayrı küçük bağlantı denemelerinde de upstream kota hatası verdi. Bu nedenle hız tercihi korunurken aynı model kapasite yedekleri yeniden açıldı. Her başarısız aday kaldırıldı ve önceki imaj sağlıklı geri getirildi.
+
+Son yazım talimatı gönderenin hevesini ve amacını korur, kaynak emri gönüllü davete dönüştürür; verilmemiş önceki istek/onay/tarih ve yer tutucu eklememesini ister. Jev, kaynaktan kopyalanmış veya arkasına soru eklenmiş emri de baskı olarak değerlendirir. Bunlar semantik model talimatlarıdır; deterministik dil kalitesi garantisi değildir.
+
+Son imajın sekiz sentetik davet/iş örneği ve bir analiz isteği başarılıdır. Her refine tek yazar isteği, gerçek Jev ve orijinal dahil dört gerçek **20.484 voxel** TRIBE ölçümü içerir; encoder eşleşmesi doğrulandı. Sekiz örneğin üçü Baseten, dördü Fireworks, biri CoreWeave üzerinden yazıldı.
+
+| Son doğrulama | Sonuç |
+|---|---:|
+| Sekiz refine, medyan / en uzun | 5,346 / 12,686 sn |
+| Sekiz yazım isteği, medyan / en uzun | 2,782 / 9,516 sn |
+| Sekiz yazım isteğinin toplam bedeli | $0,00285966 |
+| Aday imajındaki ayrı analiz | 12,792 sn |
+| Dağıtım sonrası public HTTPS soğuk refine | 10,898 sn |
+| Aynı public refine içindeki yazım | 1,467 sn / $0,000285813 |
+| Dağıtım sonrası public HTTPS ayrı analiz | 21,024 sn |
+
+Bedeller **yalnız yazım isteğidir**; Jev ve analiz maliyeti bu yanıtlarda verilmez. İki tur farklı sağlayıcı kapasitesiyle çalıştı; tablodan kontrollü hız üstünlüğü veya sürekli gecikme garantisi çıkarılmaz. Güçlendirme ve analiz ayrı işlemlerdir. Bazı yaratıcı adaylar desteksiz ayrıntı nedeniyle elendi; bazı seçilenler kaynakla aynı veya çok yalın kaldı. Son public davet de yalın bir soru olarak seçildi. Bir adayda ikinci retorik soru editörden geçti. Dolayısıyla bu geçiş **her örnekte daha ikna edici metin** kanıtı değildir. Analiz anlatısındaki ilgi/tepki yorumları da model varsayımıdır; bireysel fMRI veya davranış ölçümü sayılmaz.
+
+Canlı kaynak **`8210fae1d9c09bd8db7e29dcd4425e11a6e9e2b6`**, imaj **`sha256:601ae4665476244c93abbebd699b34be5ce80d747b7c4e5bfc51876a50f2796d`**. `/app/tribe_service` içindeki 28 izlenen dosyanın SHA-256 değerleri bu kaynakla eşleşti. Aynı CUDA bağımlılık imajında **174 Python testi** geçti; hafif yerelde 170 geçti/4 bağımlılık testi atlandı. Mobilde **136 Flutter testi** ve analiz geçti; CI native iOS güvenlik/owner akışı, imzalama ve IPA üretimini tamamladı.
+
+Mobil kaynak **`40ce6af826c6ab5202c0a54df387e4e6324cafcb`**, [Codemagic derlemesi `6ac366ce70f9b1c8e1a9db28`](https://codemagic.io/app/6a6e4304766592d1996c4c2b/build/6ac366ce70f9b1c8e1a9db28), **1.0.0 (1791191321)** olarak Apple tarafından işlendi ve yalnız mevcut **Taskfulight Owner** grubuna eklendi. App Store yayını yapılmadı; bu turda fiziksel iPhone etkileşimi denenmedi.
+
+Yalnız `tribe` servisi yenilendi; mevcut 4 CPU / 12 GiB RAM / 8 GiB CUDA sınırları korundu. Dağıtım anındaki diğer **173 konteyner** değişmedi. Çalışma sırasında ayrı bir `systemtest2` çalışması yeni konteynerler başlattı: son adayın ham tam-snapshot kontrolü 168→172 sayımı nedeniyle `ok=false` verdi; bütün mevcut 168 satır aynıydı ve gerçek API kabulü `ok=true` idi. Ham sonuç korunup ayrı `concurrent-service-verification.json` açıklaması eklendi. Public kontrol sonrasında aynı dış test çalışmasının worker sağlık durumu değişti; sonraki salt okunur gözlemde yeniden oluşturulmuş ve sağlıklıydı. O servise müdahale edilmedi. Başlangıçtaki **165 kalıcı servisin** kimliği, başlangıç zamanı, restart ve sağlık durumu aynı kaldı.
+
+Son sağlık kontrolü başarılı, aktif GPU işi **0**, hem TRIBE hem text encoder boşaltılmıştır; logout başarılıdır ve geçici aday konteyner kalmamıştır. Unload sonrası Docker working-set **2,033 GiB / 12 GiB** idi; bu süreç RSS veya bütün CPU belleğinin boşaldığı iddiası değildir.
+
+Sunucu kökü `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/` altında son aday kanıtı `audit-glm-candidate-20261005-122351-20ad4a03/`; canlı kaynak/HTTPS/servis kayıtları `audit-glm-final-20261005-8210fae/` dizinindedir. Hedefli geri dönüş **`rollback-glm-final-20261005-8210fae-20261005T092748Z/rollback.sh`** ile yapılır; önceki imajı ve korumalı runtime ayarlarını geri getirip yalnız `tribe` servisini yeniler. Sentetik metinlerin tam yanıtları özel sunucu kayıtlarında tutulur; token veya API anahtarı bu dokümana eklenmez.

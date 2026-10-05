@@ -112,6 +112,30 @@ def _mock_openrouter_response(content: str, status_code: int = 200) -> httpx.Res
 class TestValidResponseParsed:
     """Mock OpenRouter returning valid JSON -> assert all fields present."""
 
+    @pytest.mark.parametrize('configured_effort, expected_effort', [('', 'low'), ('high', 'high')])
+    @patch('tribe_service.llm_layer.OPENROUTER_ENABLED', True)
+    @patch('tribe_service.llm_layer.OPENROUTER_API_KEY', 'sk-test-key')
+    @patch('tribe_service.llm_layer.httpx.post')
+    def test_glm_analysis_prefers_baseten_with_bounded_output(
+        self, mock_post: MagicMock, monkeypatch, configured_effort, expected_effort,
+    ):
+        monkeypatch.setattr('tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT', configured_effort)
+        mock_post.return_value = _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES,
+            openrouter_model='z-ai/glm-5.3-flash',
+        )
+
+        assert result['robustness']['llm_model'] == 'z-ai/glm-5.3-flash'
+        payload = mock_post.call_args.kwargs['json']
+        assert payload['provider'] == {'order': ['baseten'], 'allow_fallbacks': True,
+                                       'require_parameters': True}
+        assert payload['reasoning'] == {'effort': expected_effort}
+        assert payload['max_tokens'] == 4096
+        assert 'models' not in payload
+
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.httpx.post")
@@ -1180,7 +1204,9 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
     def post(url, **kwargs):
         calls.append('writer')
         payload = kwargs['json']
-        assert payload['model'] == 'google/gemini-3.5-flash-lite'
+        assert payload['model'] == 'z-ai/glm-5.3-flash'
+        assert payload['provider'] == {'order': ['baseten'], 'allow_fallbacks': True,
+                                       'require_parameters': True}
         assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
         assert payload['max_tokens'] == 1536
         system = payload['messages'][0]['content']

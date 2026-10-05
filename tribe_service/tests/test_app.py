@@ -612,7 +612,9 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
               'İki bilet aldım, cuma günü konsere gidelim mi?']
     events = []
     winner = ['c2']
+    served_model = 'z-ai/glm-5.3-flash:served-version'
     monkeypatch.setattr(llm_layer, 'OPENROUTER_API_KEY', 'test-key')
+    monkeypatch.setattr(llm_layer, 'OPENROUTER_REASONING_EFFORT', 'high')
     def measure(text):
         events.append(('measure', text))
         return [[.2]]
@@ -650,7 +652,13 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
             body = {'model': 'typesafe/jev-1.13-20260917', 'answers': answers}
         else:
             events.append(('writer', payload))
-            assert payload['model'] == 'google/gemini-3.5-flash-lite'
+            assert payload['model'] == 'z-ai/glm-5.3-flash'
+            assert payload['provider'] == {'order': ['baseten'], 'allow_fallbacks': True,
+                                           'require_parameters': True}
+            assert 'models' not in payload
+            assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
+            assert payload['max_tokens'] == 1536
+            assert kwargs['timeout'] == llm_layer.OPENROUTER_TIMEOUT
             prompt = payload['messages'][1]['content']
             assert 'company' in prompt and 'approximate_word_order' in prompt
             assert 'continuity' in prompt
@@ -658,7 +666,9 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
             assert '15 saniyelik klip' not in prompt
             plans = [{'anchor': 'çilekeş', 'idea': idea, 'message': draft}
                      for idea, draft in zip(['Kendine takılan davet', 'Birlikte deneyim', 'Yalın davet'], drafts)]
-            body = {'choices': [{'message': {'content': json.dumps({'drafts': plans})}}]}
+            body = {'model': served_model, 'provider': 'BaseTen',
+                    'usage': {'completion_tokens': 300, 'cost': .0002},
+                    'choices': [{'message': {'content': json.dumps({'drafts': plans})}}]}
         return httpx.Response(200, json=body, request=httpx.Request('POST', url))
     monkeypatch.setattr(service_app, 'score_text', measure)
     monkeypatch.setattr(service_app, 'analyze_predictions', analysis)
@@ -668,11 +678,18 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
         'suggestions': ['15 saniyelik klip var, izlesin.']})
     assert response.status_code == 200, response.text
     result = response.json()
+    assert result['model'] == served_model
     assert result['refined_message'] == drafts[1]
     assert [kind for kind, _ in events] == ['measure', 'jev', 'writer', 'measure', 'measure', 'measure', 'jev']
     assert result['decision_strategy']['choices']['angle'] == 'company'
     proof = result['tribe_guidance']
     assert proof['writer_passes'] == 1
+    assert proof['writer_call']['requested_model'] == 'z-ai/glm-5.3-flash'
+    assert proof['writer_call']['served_model'] == served_model
+    assert proof['writer_call']['provider'] == 'BaseTen'
+    assert proof['writer_call']['reasoning'] == {'effort': 'low', 'exclude': True}
+    assert proof['writer_call']['reasoning_effort'] == 'low'
+    assert proof['writer_call']['usage'] == {'completion_tokens': 300, 'cost': .0002}
     assert proof['quality_model'].startswith('typesafe/jev-')
     assert proof['evaluations'][3]['eligible'] is False
     assert result['methodology'] == 'tribe_jev_planned_refinement'

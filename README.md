@@ -267,16 +267,25 @@ cargo test --manifest-path src-tauri/Cargo.toml
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | High-quality model for interpreting neural output |
-| `OPENROUTER_REFINER_MODEL` | `google/gemini-3.8-flash` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_REFINER_MODEL` | `google/gemini-3.8-flash` | Which model writes rewrite drafts for requests without `jevStrategy` |
 | `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
 | `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |
 | `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |
-| `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout; prompt/output caps are not applied |
+| `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |
 | `TRIBE_ALLOW_MOCK` | `0` | Deterministic mock for tests |
 | `TRIBE_PREDICTION_CACHE_SIZE` | `8` | In-memory LRU cache for repeated TRIBE text predictions |
 | `TRIBE_SCORE_TIMEOUT_SECONDS` | `900` | Timeout (first run downloads ~8GB of weights) |
+
+Requests with `jevStrategy: true` use one `z-ai/glm-5.3-flash` writer call after Jev's
+decision, regardless of the client's `openRouterModel`. GLM requests prefer Baseten;
+OpenRouter may route to another provider of the same model that supports the
+requested parameters. The writer uses low
+reasoning, excludes reasoning text and caps completion at 1,536 tokens. Explicit
+GLM analysis requests default to low reasoning and cap completion at 4,096 tokens.
+Refine responses include the served model and provider in `writer_call` when the
+provider returns them; `model` uses the served model when available.
 
 <details>
 <summary>Full variable list</summary>

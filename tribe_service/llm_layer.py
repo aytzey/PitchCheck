@@ -55,7 +55,7 @@ OPENROUTER_MODEL = os.getenv(
 ).strip()
 # Existing clients may override their rewrite model independently of the Jev workflow.
 DEFAULT_REFINER_MODEL = "google/gemini-3.8-flash"
-JEV_REFINER_MODEL = "google/gemini-3.5-flash-lite"
+JEV_REFINER_MODEL = "z-ai/glm-5.3-flash"
 OPENROUTER_REFINER_MODEL = (
     os.getenv("OPENROUTER_REFINER_MODEL", "").strip() or DEFAULT_REFINER_MODEL
 )
@@ -575,6 +575,9 @@ def _openrouter_enabled(model: str | None = None) -> bool:
 def _reasoning_payload(model: str | None = None) -> dict[str, Any] | None:
     if OPENROUTER_REASONING_EFFORT in {"minimal", "low", "medium", "high", "xhigh"}:
         return {"effort": OPENROUTER_REASONING_EFFORT}
+    # GLM requires reasoning; keep its default max effort out of the interactive path.
+    if model == JEV_REFINER_MODEL:
+        return {"effort": "low"}
     # Flash defaults to high thinking, which can exceed the public HTTPS deadline.
     if model == "deepseek/deepseek-v4-flash":
         return {"enabled": False}
@@ -599,6 +602,9 @@ def _openrouter_payload(
     reasoning = _reasoning_payload(payload["model"])
     if reasoning is not None:
         payload["reasoning"] = reasoning
+    if payload["model"] == JEV_REFINER_MODEL:
+        payload.update(provider={"order": ["baseten"], "allow_fallbacks": True,
+                                 "require_parameters": True}, max_tokens=4096)
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
     return payload
@@ -1449,6 +1455,9 @@ def _post_refine_chat(system_prompt: str, user_prompt: str, model: str, temperat
         "temperature": temperature,
         "response_format": {"type": "json_object"},
     }
+    if model == JEV_REFINER_MODEL:
+        payload.update(provider={"order": ["baseten"], "allow_fallbacks": True,
+                                 "require_parameters": True}, max_tokens=4096)
     if single_pass:
         payload.update(reasoning={"effort": "low", "exclude": True}, max_tokens=1536)
     reasoning = None if single_pass else _reasoning_payload(model)
@@ -1489,8 +1498,10 @@ def _post_refine_chat(system_prompt: str, user_prompt: str, model: str, temperat
     if audit is not None:
         usage = body.get("usage")
         audit.update(requested_model=model, served_model=body.get("model"),
+                     provider=body.get("provider"), reasoning=payload.get("reasoning"),
                      seconds=round(time.monotonic() - started, 3),
-                     reasoning_effort="low", max_tokens=1536,
+                     reasoning_effort=payload.get("reasoning", {}).get("effort"),
+                     max_tokens=payload.get("max_tokens"),
                      usage={key: value for key, value in usage.items() if key in {
                          "prompt_tokens", "completion_tokens", "total_tokens", "cost", "completion_tokens_details",
                      }} if isinstance(usage, dict) else {})
@@ -2139,7 +2150,7 @@ For allowed clarification, use needs_clarification true and drafts empty.
         parsed = {**parsed, "candidates": candidates}
     result = _normalise_refine_result(
         parsed,
-        selected_model,
+        _clean_string(writer_call.get("served_model"), selected_model, max_len=160) if decision_strategy else selected_model,
         allow_clarification=allow_clarification,
         question_limit=question_limit,
     )

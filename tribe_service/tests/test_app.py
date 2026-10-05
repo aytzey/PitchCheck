@@ -653,8 +653,8 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
         else:
             events.append(('writer', payload))
             assert payload['model'] == 'z-ai/glm-5.3-flash'
-            assert payload['provider'] == {'order': ['baseten'], 'allow_fallbacks': True,
-                                           'require_parameters': True}
+            assert payload['provider'] == {'order': ['baseten/fp8', 'fireworks', 'coreweave/nvfp4'],
+                                           'allow_fallbacks': True, 'require_parameters': True}
             assert 'models' not in payload
             assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
             assert payload['max_tokens'] == 1536

@@ -130,8 +130,8 @@ class TestValidResponseParsed:
 
         assert result['robustness']['llm_model'] == 'z-ai/glm-5.3-flash'
         payload = mock_post.call_args.kwargs['json']
-        assert payload['provider'] == {'order': ['baseten'], 'allow_fallbacks': True,
-                                       'require_parameters': True}
+        assert payload['provider'] == {'order': ['baseten/fp8', 'fireworks', 'coreweave/nvfp4'],
+                                       'allow_fallbacks': True, 'require_parameters': True}
         assert payload['reasoning'] == {'effort': expected_effort}
         assert payload['max_tokens'] == 4096
         assert 'models' not in payload
@@ -1098,6 +1098,16 @@ def test_jev_support_checks_asserted_facts_separately_from_proposals(monkeypatch
             assert 'asserts or presupposes' in criteria['false']
             assert 'open proposals' in criteria['true'] and 'figurative' in criteria['true']
             assert 'timing, resources or history' in criteria['true']
+            assert 'prior request' in criteria['false']
+            intent = questions[row['id'] + '_intent_preserved']['criteria']
+            assert "sender's stated stance" in intent['false']
+            assert 'enthusiasm' in intent['true']
+            voice = questions[row['id'] + '_voice_preserved']['criteria']
+            assert 'multiple asks' in voice['false']
+            assert 'one clear ask' in voice['true']
+            assert 'Turning an order into a voluntary request preserves intent' in intent['true']
+            respect = questions[row['id'] + '_recipient_respected']['criteria']
+            assert 'even if copied from the original or followed by a question' in respect['false']
             assert measurements[1]['message'] not in str(criteria)
         for name, question in questions.items():
             answers[name] = ({'noul': .75} if question['type'] == 'noul' else
@@ -1205,19 +1215,27 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         calls.append('writer')
         payload = kwargs['json']
         assert payload['model'] == 'z-ai/glm-5.3-flash'
-        assert payload['provider'] == {'order': ['baseten'], 'allow_fallbacks': True,
-                                       'require_parameters': True}
+        assert payload['provider'] == {'order': ['baseten/fp8', 'fireworks', 'coreweave/nvfp4'],
+                                       'allow_fallbacks': True, 'require_parameters': True}
         assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
         assert payload['max_tokens'] == 1536
         system = payload['messages'][0]['content']
         assert 'doğal Türkçeyle' in system
         assert 'satranç oynayalım mı?' in system
         assert 'birlikte eğleneceğinizi vaat etme' in system
+        assert 'hevesini ve asıl amacını koru' in system
+        assert 'gönüllü davet sorusuna çevir' in system
+        assert 'tek soru' in system
+        assert 'önceki bir isteği' in system
         assert 'Çilekeş' not in system
         assert 'candidate_roles' in payload['messages'][1]['content']
         assert 'neural_score' not in payload['messages'][1]['content']
         assert 'temporal_trace' not in payload['messages'][1]['content']
         assert 'shared activity' in payload['messages'][1]['content']
+        assert "Preserve the sender's enthusiasm and actual goal" in payload['messages'][1]['content']
+        assert 'turn orders into one voluntary invitation' in payload['messages'][1]['content']
+        assert 'one question or request' in payload['messages'][1]['content']
+        assert 'ready to send without placeholders' in payload['messages'][1]['content']
         assert plan['structural_hypothesis']['objective'] in payload['messages'][1]['content']
         schema = payload['messages'][1]['content'].split('Return JSON only:')[1]
         assert schema.index('idea') < schema.index('message')

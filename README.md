@@ -279,9 +279,12 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | `TRIBE_SCORE_TIMEOUT_SECONDS` | `900` | Timeout (first run downloads ~8GB of weights) |
 
 Requests with `jevStrategy: true` use one `z-ai/glm-5.3-flash` writer call after Jev's
-decision, regardless of the client's `openRouterModel`. GLM requests prefer Baseten;
-OpenRouter may route to another provider of the same model that supports the
-requested parameters. The writer uses low
+decision, regardless of the client's `openRouterModel`. GLM requests prefer
+Baseten FP8 (`baseten/fp8`), Fireworks (`fireworks`) and CoreWeave (`coreweave/nvfp4`),
+in that order. When upstream capacity is unavailable, OpenRouter can use another
+provider of the same model that supports the requested parameters; latency may
+increase. The Jev writer sends one request without application retries or
+regeneration. It uses low
 reasoning, excludes reasoning text and caps completion at 1,536 tokens. Explicit
 GLM analysis requests default to low reasoning and cap completion at 4,096 tokens.
 Refine responses include the served model and provider in `writer_call` when the

@@ -231,3 +231,30 @@ Kısa fikir+mesaj denemesi de kaliteyi geçmedi: ilk aday soru yerine hoş bir b
 Sonraki **editör replay**, aynı kayıtlı dört metin ve aynı gerçek ölçümler üzerinde yalnız **bir Jev çağrısı** yaptı (**0,727 sn / $0,00037611**); yeni yazım veya GPU ölçümü yapılmadı. Düzeltilmiş ölçütle c1'in mecazi ortak an önerisi uygun bulunup seçildi; c2 baskı nedeniyle, c3 verilmemiş `bu akşamı` → `bu akşam` zamanı nedeniyle elendi. Seçim c3'ten c1'e değişti. c1'in bağlam puanı **47,062**, deneysel katkı sonrası seçim puanı **47,008** oldu: negatif ölçüm katkısı korunmuştur, nöral veya insani ikna artışı iddia edilmez. Bu kanıt yeni kodun tam uçtan uca public kabulü değildir. Yerel kontroller **168 geçti / 1 bağımlılık testi atlandı**; sonraki imaj/dağıtım kanıtı ayrıca kaydedilir.
 
 TaskFlight `8a3fde4`, CI `6ac2d597ff057bd79546477f` üzerinden **1.0.0 (1791154203)** olarak Apple tarafından işlendi ve yalnız mevcut **Taskfulight Owner** TestFlight grubuna teslim edildi; kaynak ve özel grup teslimi doğrulandı. Bu editör düzeltmesinde mobil kod değiştirilmedi. Canlı ve replay artefaktları sırasıyla `pitchcheck-empirical-final-live.json` ve `pitchcheck-editor-replay-results.json` kayıtlarıdır.
+
+## Encoder karşılaştırması ve özellik önbelleği düzeltmesi — 5 Ekim 2026
+
+İlk gerçek, önbelleksiz A/B'de aynı metnin iki ölçümü arasında **0,35–0,74 bağıl L2 farkı** görüldü. CPU üzerinde neden yeniden üretildi: exca 0.5.20 önbelleği silerken eski dosyanın memmap'ini ve JSONL okuma konumlarını tutuyordu. Aynı dosya adı yeniden kullanılıp kelimelerin hesaplama sırası değişince 11/22 özellikleri 22/11 olarak okunuyordu. `f6b5cd9`, başarılı ve başarısız işlem temizliğinde yalnız ilgili özellik önbelleğinin okuma durumunu aynı klasör/politikayla yeniden başlatır. Ayrıca Hermes'in farklı pad/EOS kimlikleri yerine gerçek attention mask kullanılır; sol/sağ dolgu ve gerçek EOS korunur. HF ağırlık önbelleği, seed, decoder ve diğer özellik klasörleri değiştirilmez. Kurulu runtime'da **172 test geçti**.
+
+Düzeltilmiş `cc75b22…` imajında iki encoder ayrı süreçlerde, aynı checkpoint/native CUDA/BF16, batch 4, iki işlemci thread'i, **4 CPU / 12 GiB RAM / 8 GiB CUDA** sınırlarıyla karşılaştırıldı. 42/126/378 kelimelik metinler ve kısa kişisel davet için ikişer gerçek, önbelleksiz ölçüm yapıldı. Soğuk yükleme yeni model sürecidir; HF dosyaları hazırdır, işletim sistemi sayfa önbelleği silinmemiştir. Süreler iki ölçümün medyanıdır; 42 kelime için ilk inference ısınması dahildir.
+
+| Ölçüm | Hermes | Checkpoint'in Llama-3.2-3B encoder'ı |
+|---|---:|---:|
+| Soğuk yükleme | 4,022 sn | 4,066 sn |
+| 42 / 126 / 378 kelime | 0,753 / 1,863 / 10,204 sn | 0,752 / 1,873 / 10,316 sn |
+| Kısa davet | 0,315 sn | 0,306 sn |
+| Süreç tepe RSS | 5,814 GiB | 5,815 GiB |
+| CUDA peak allocated / reserved | 7,020 / 7,039 GiB | 7,201 / 7,287 GiB |
+| Cgroup `memory.peak` | 1,805 GiB | 1,973 GiB |
+| Aynı girdinin bağıl L2 farkı | 0,001183–0,005123 | 0,003429–0,006076 |
+| En düşük tekrar korelasyonu | 0,9999837 | 0,9999786 |
+
+Bütün matrisler sonlu ve 20.484 voxel içerir; fallback olmadı. Büyük yanlış-özellik sapması giderildi, fakat BF16 ve değişen batch bileşimiyle uyumlu küçük farklar kaldı: **`allclose(rtol=1e-4, atol=1e-5)` geçmedi**, bit düzeyinde eşitlik veya kusursuz kararlılık iddia edilmez. Cgroup ve RSS farklı ölçümlerdir; paylaşılan dosya önbelleğinin cgroup'a atfedilmesi nedeniyle düşük cgroup değeri RAM tüketiminin dramatik azaldığını kanıtlamaz. Önceki büyük sapmalı ölçümler bu koşuyla doğrulanmış sayılmaz. Bu A/B model davranışını karşılaştırır; ikna başarısı veya fizyolojik doğruluk deneyi değildir. Canonical encoder'ın gerekçesi checkpoint'in eğitildiği özellik eşleşmesidir; hız üstünlüğü iddiası yoktur.
+
+Bu karşılaştırmada **yazar/Jev çağrısı ve API maliyeti sıfırdır**; ucuz tek yazım akışı ve mobil kaynak korunur. İki koşunun toplam bakım aralığı **68,086 sn** oldu; önceki canlı Hermes imajı tekrar başlatıldı, diğer **165 servisin** kimliği, başlangıcı, restart ve sağlık durumu değişmedi. Canonical canlı geçiş ve rollback kanıtı ayrı kaydedilir.
+
+Son dağıtımda aynı test edilmiş **`sha256:cc75b22ee19f23163e58f654d734e15dfab009256726b375de430ffa24cad3b1`** imajı yalnız `tribe` için etkinleştirildi; Compose'un kullandığı gerçek `runtime.env` içinde encoder `meta-llama/Llama-3.2-3B` seçildi. Sağlık kontrolü geçti, diğer **165 servis** değişmedi ve ek konteyner kalmadı. Public HTTPS üzerinden gerçek auth ile ilk yükleme **4,764 sn**, idempotent tekrar yükleme **0,257 sn** sürdü; gerçek/beklenen encoder canonical, `text_feature_compatible=true`, CUDA ve batch 4 doğrulandı. Unload `200 / model_loaded=false`, logout `200` verdi; bu kontrol yeni skor veya yazar/Jev çağrısı içermez.
+
+Son durumda model boşaltılmıştır. Host GPU belleği bütün iş yükleriyle **4.217 MiB kullanılan / 11.624 MiB boş**, GPU kullanım oranı `%0`; bizim konteynerin Docker working-set'i **836,8 MiB / 12 GiB** idi. Working-set süreç RSS değildir ve unload'un bütün CPU belleğini serbest bıraktığı anlamına gelmez.
+
+Tekrar üretim betiği, iki encoder'ın ham `.npy` matrisleri, `metrics.json` ve bakım snapshot'ları sunucuda `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/encoder-ab-20261005/run3-fixed/` altındadır. Koşullar aynı sınırlı, sıralı konteynerlerde iki tekrar, prediction/feature cache temizliği ve read-only HF ağırlıklarıdır; işletim sistemi önbelleği silinmez. Canlı dağıtım ve public yükleme kanıtları `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/audit-encoder-stability-final-20261005-f6b5cd9/` altında `deployment.json` ve `canonical-public-load.json` dosyalarındadır. Önceki imaj ve Hermes ayarına hedefli dönüş `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/rollback-encoder-stability-final-20261005-f6b5cd9-20261005T005719Z/rollback.sh` ile yapılır; bu script korumalı yedeklerden `.env` ve gerçek `runtime.env` dosyalarını geri getirip yalnız `tribe` servisini yeniler.

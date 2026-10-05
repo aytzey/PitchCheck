@@ -60,6 +60,38 @@ class TestHelpers:
 
 
 class TestScoreText:
+    @pytest.mark.parametrize("prediction_fails", [False, True])
+    def test_feature_cleanup_reloads_recreated_memmap_files(self, monkeypatch, tmp_path, prediction_fails):
+        cachedict = pytest.importorskip("exca.cachedict")
+        from tribe_service import engine
+        cache = cachedict.CacheDict(tmp_path, cache_type="MemmapArrayFile", permissions=0o700)
+        with cache.write():
+            cache["first"] = np.full((2, 3), 11, dtype=np.float32)
+            cache["second"] = np.full((2, 3), 22, dtype=np.float32)
+        for key, value in [("first", 11), ("second", 22)]:
+            np.testing.assert_array_equal(cache[key], np.full((2, 3), value))
+        model = engine._MockModel()
+        model.data = SimpleNamespace(text_feature=SimpleNamespace(infra=SimpleNamespace(cache_dict=cache)))
+        monkeypatch.setattr(engine, "get_model", lambda: model)
+        if prediction_fails:
+            def fail(_):
+                raise RuntimeError("predict failed")
+            monkeypatch.setattr(model, "predict", fail)
+            with pytest.raises(RuntimeError, match="predict failed"):
+                engine._score_text_once("A valid cleanup failure test", retry_index=0)
+        else:
+            engine._score_text_once("A valid cleanup success test", retry_index=0)
+        assert not cache
+        # exca reshuffles extraction: new offsets must never read the old, unlinked inode.
+        # A new writer also requires fresh JSONL reader offsets, not just fresh array maps.
+        writer = cachedict.CacheDict(tmp_path, cache_type="MemmapArrayFile", permissions=0o700)
+        with writer.write():
+            writer["second"] = np.full((2, 3), 22, dtype=np.float32)
+            writer["first"] = np.full((2, 3), 11, dtype=np.float32)
+        for key, value in [("first", 11), ("second", 22)]:
+            np.testing.assert_array_equal(cache[key], np.full((2, 3), value))
+        assert cache.permissions == 0o700 and cache.cache_type == "MemmapArrayFile"
+
     def test_feature_cache_is_cleared_on_success_and_failure(self, monkeypatch):
         from tribe_service import engine
         cache = {"customer-context": np.ones((2, 3))}
@@ -76,7 +108,8 @@ class TestScoreText:
             engine._score_text_once("A valid feature-cache failure test", retry_index=0)
         assert not cache
 
-    def test_target_token_copy_matches_upstream_with_padding_and_multi_token_targets(self, monkeypatch):
+    @pytest.mark.parametrize("padding_side", ["left", "right"])
+    def test_target_token_copy_uses_mask_with_distinct_pad_eos_ids(self, monkeypatch, padding_side):
         torch = pytest.importorskip("torch")
         text = pytest.importorskip("neuralset.extractors.text")
         from tribe_service import engine
@@ -94,11 +127,16 @@ class TestScoreText:
 
         class Tokenizer:
             def encode(self, value, **_):
-                return list(range(1, len(value.split()) + 1))
+                return [128039 if word == "<eos>" else i + 1 for i, word in enumerate(value.split())]
             def __call__(self, values, **_):
                 tokens = [self.encode(value) for value in values]
                 width = max(map(len, tokens))
-                return Inputs(input_ids=torch.tensor([row + [0] * (width-len(row)) for row in tokens]))
+                padded, masks = [], []
+                for row in tokens:
+                    pads = [0] * (width - len(row))
+                    padded.append(pads + row if padding_side == "left" else row + pads)
+                    masks.append([int(token != 0) for token in padded[-1]])
+                return Inputs(input_ids=torch.tensor(padded), attention_mask=torch.tensor(masks))
 
         class Model:
             def __call__(self, input_ids, **_):
@@ -106,16 +144,22 @@ class TestScoreText:
                 return type("Outputs", (dict,), {"hidden_states": states})(hidden_states=states)
 
         feature = SimpleNamespace(batch_size=2, device="cpu", contextualized=True, tokenizer=Tokenizer(),
-                                  model=Model(), _pad_id=0, cache_all_layers=True, cache_n_layers=None,
+                                  model=Model(), _pad_id=128039, cache_all_layers=True, cache_n_layers=None,
                                   _aggregate_tokens=lambda value: value.float().mean(dim=1),
                                   _aggregate_layers=lambda value: value.mean(axis=0))
         events = [SimpleNamespace(text="two words", context="a prefix two words"),
                   SimpleNamespace(text="short", context="short")]
         for contextualized in [True, False]:
             feature.contextualized = contextualized
-            expected, actual = list(original(feature, events)), list(optimized(feature, events))
+            feature.batch_size = 1  # No padding: upstream gives the target-token reference.
+            expected = list(original(feature, events))
+            feature.batch_size = 2
+            actual = list(optimized(feature, events))
             for before, after in zip(expected, actual, strict=True):
                 np.testing.assert_array_equal(before, after)
+        eos_events = [SimpleNamespace(text="<eos>", context=""), SimpleNamespace(text="three real tokens", context="")]
+        eos_state = list(optimized(feature, eos_events))[0]
+        np.testing.assert_array_equal(eos_state, np.array([[128039 + layer] * 3 for layer in range(4)]))
     def test_offline_text_model_check_uses_only_existing_cached_config(self, monkeypatch):
         from tribe_service import engine
         text, hub = ModuleType("neuralset.extractors.text"), ModuleType("huggingface_hub")

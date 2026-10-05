@@ -477,16 +477,18 @@ def _patch_neuralset_hf_text_runtime() -> None:
                 outputs = self.model(**inputs, output_hidden_states=True)
                 states = (outputs.hidden_states if "hidden_states" in outputs
                           else outputs.encoder_hidden_states + outputs.decoder_hidden_states)
-                n_tokens = states[0].shape[1]
-                input_ids = inputs["input_ids"].cpu().numpy()
+                attention_mask = inputs["attention_mask"].cpu().numpy()
                 for i, target_word in enumerate(target_words):
-                    n_pads = int((input_ids[i] == self._pad_id).sum())
-                    stop = n_tokens - n_pads
-                    start = 0
+                    # Hermes' pad ID differs from its EOS ID. Use the real mask,
+                    # including left padding, rather than neuralset's EOS-based _pad_id.
+                    token_indices = np.flatnonzero(attention_mask[i])
+                    if not token_indices.size:
+                        raise ValueError("No unpadded tokens for word embeddings")
+                    start, stop = int(token_indices[0]), int(token_indices[-1]) + 1
                     if self.contextualized:
                         prefix = context[i][: -len(target_word)].rstrip()
                         n_prefix = len(self.tokenizer.encode(prefix, add_special_tokens=False)) if prefix else 0
-                        start = max(0, stop - max(1, n_tokens - n_pads - n_prefix))
+                        start = max(start, stop - max(1, stop - start - n_prefix))
                     word_state = torch.stack([layer[i, start:stop].cpu() for layer in states])
                     out = self._aggregate_tokens(word_state).cpu().numpy()
                     if not self.cache_all_layers and self.cache_n_layers is None:
@@ -1019,7 +1021,14 @@ def _score_text_once(message: str, *, retry_index: int) -> tuple[np.ndarray, dic
             if text_feature is not None:
                 # Features belong to this inference; retain only the bounded prediction cache.
                 # exca clears its own feature folder/RAM, separately from HF model weights.
-                text_feature.infra.cache_dict.clear()
+                cache = text_feature.infra.cache_dict
+                cache.clear()
+                # exca 0.5.20 retains memmaps of deleted inodes and old JSONL offsets.
+                # Reused filenames/reshuffled offsets can return another word's embedding.
+                # Reinitialize only this cache's read state, preserving its identity/policy.
+                if getattr(cache, "folder", None) is not None:
+                    cache.__init__(cache.folder, keep_in_ram=cache._keep_in_ram,
+                                   cache_type=cache.cache_type, permissions=cache.permissions)
         finally:
             if TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE:
                 unload_text_model(model)

@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch, MagicMock
 
 import httpx
+import pytest
 
 from tribe_service.llm_layer import (
     _build_user_prompt,
@@ -12,6 +13,7 @@ from tribe_service.llm_layer import (
     _openrouter_payload,
     interpret_persuasion,
     refine_pitch_message,
+    select_tribe_refinement,
 )
 
 # ── Fixtures ──
@@ -110,6 +112,30 @@ def _mock_openrouter_response(content: str, status_code: int = 200) -> httpx.Res
 class TestValidResponseParsed:
     """Mock OpenRouter returning valid JSON -> assert all fields present."""
 
+    @pytest.mark.parametrize('configured_effort, expected_effort', [('', 'low'), ('high', 'high')])
+    @patch('tribe_service.llm_layer.OPENROUTER_ENABLED', True)
+    @patch('tribe_service.llm_layer.OPENROUTER_API_KEY', 'sk-test-key')
+    @patch('tribe_service.llm_layer.httpx.post')
+    def test_glm_analysis_prefers_baseten_with_bounded_output(
+        self, mock_post: MagicMock, monkeypatch, configured_effort, expected_effort,
+    ):
+        monkeypatch.setattr('tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT', configured_effort)
+        mock_post.return_value = _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE))
+
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES,
+            openrouter_model='z-ai/glm-5.3-flash',
+        )
+
+        assert result['robustness']['llm_model'] == 'z-ai/glm-5.3-flash'
+        payload = mock_post.call_args.kwargs['json']
+        assert payload['provider'] == {'order': ['baseten/fp8', 'fireworks', 'coreweave/nvfp4'],
+                                       'allow_fallbacks': True, 'require_parameters': True}
+        assert payload['reasoning'] == {'effort': expected_effort}
+        assert payload['max_tokens'] == 4096
+        assert 'models' not in payload
+
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.httpx.post")
@@ -202,12 +228,144 @@ class TestNeuralOnlyWithoutApiKey:
 
 
 class TestRefinePitchMessage:
+    @pytest.mark.parametrize("jev", [False, True])
+    def test_preservation_excludes_commands_and_promised_recipient_reactions(self, monkeypatch, jev):
+        from tribe_service import llm_layer
+        message = "Benimle Çilekeş konserine gelmelisin, harika bir grup, çok eğleneceğiz."
+        persona = "Çilekeş dinlemeyi sevmeyen flörtüm."
+        candidates = ["Çilekeş konserine benimle gelir misin? Yanımda seni isterim.",
+                      "Çilekeş'i çok seviyorum; konsere benimle gelir misin?",
+                      "Sevdiğim grubu seninle dinlemek isterim; Çilekeş konserine gidelim mi?"]
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        def decisions(state, questions):
+            chosen = {"relationship": "romantic", "objection": "taste", "angle": "company", "tone": "warm",
+                      "repair": "recipient", "move": "shared_moment", "repair_target": "whole"}
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, "general", {"id": "original", "message": message}) if jev else None
+        body = {"candidates": candidates}
+        if jev:
+            body = {"drafts": [{"anchor": "Çilekeş", "idea": str(i), "message": draft} for i, draft in enumerate(candidates)]}
+        with patch.object(llm_layer.httpx, "post", return_value=_mock_openrouter_response(json.dumps(body))) as post:
+            result = refine_pitch_message(message, persona, "general", decision_strategy=strategy, force_rewrite=True)
+            prompt = post.call_args.kwargs["json"]["messages"][1]["content"]
+            assert "not details to preserve" in prompt
+            assert "commands, pressure, hype" in prompt
+            assert "unsupported predictions about recipient enjoyment or guaranteed reactions" in prompt
+            assert "take priority over substance preservation" in prompt
+            assert "sender's own perspective" in prompt
+            assert "genuine intent, supported facts and sender enthusiasm" in prompt
+            if jev:
+                system = post.call_args.kwargs["json"]["messages"][0]["content"]
+                assert "korunacak ayrıntılar değildir" in system and "gönderenin bakışından" in system
+            assert post.call_count == 1 and result["candidates"] == candidates
+
+    @pytest.mark.parametrize("jev", [False, True])
+    @pytest.mark.parametrize("case,platform", [
+        ("short", "general"), ("long", "email"), ("long", "linkedin"),
+        ("long", "ad-copy"), ("maximum", "general"),
+    ])
+    def test_writer_preserves_source_length_and_details_in_both_paths(self, monkeypatch, jev, case, platform):
+        from tribe_service import llm_layer
+        message = "Would you join me for a walk?"
+        persona = "A friend who enjoys walking"
+        if case == "long":
+            paragraph = ("Kapı ürün ailesinin tamamını işlemek için gereken çap 1250. "
+                         "Bizim 1000 modelimiz tüm ürünleri kapsamıyor; ihtiyaç ürünlerin tamamını kapsamak. ")
+            message = "\n\n".join([paragraph * 20] * 3).strip()
+            persona = "Ürün ailesinin tamamını işlemek isteyen üretici"
+        elif case == "maximum":
+            message = "kapı " * 5999 + "kapı?"
+        candidates = [message.replace(message.split()[0], word, 1) for word in ("Bunu", "Şunu", "Onu")]
+        if case == "maximum":
+            candidates = [message.replace("kapı", word, 1) for word in ("Kapı", "ürün", "işin")]
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        captured = []
+        def decisions(state, questions):
+            chosen = {"relationship": "business", "objection": "relevance", "angle": "evidence",
+                      "tone": "professional", "repair": "proof", "move": "concrete_value", "repair_target": "whole"}
+            captured.append((state, questions))
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, platform,
+            {"id": "original", "message": message}) if jev else None
+        payloads = []
+        def post(url, **kwargs):
+            payloads.append(kwargs["json"])
+            response = {"candidates": candidates}
+            if jev:
+                response = {"drafts": [{"anchor": message.split()[0], "idea": idea, "message": candidate}
+                    for idea, candidate in zip(("Fit", "Evidence", "Request"), candidates)]}
+            return _mock_openrouter_response(json.dumps(response))
+        monkeypatch.setattr(llm_layer.httpx, "post", post)
+
+        result = refine_pitch_message(message, persona, platform, decision_strategy=strategy, force_rewrite=True,
+                                      openrouter_model=llm_layer.JEV_REFINER_MODEL)
+
+        assert result["candidates"] == candidates
+        assert result["refined_message"] is None
+        assert len(payloads) == 1
+        prompt = payloads[0]["messages"][1]["content"]
+        assert "80–120%" in prompt and "words" in prompt
+        assert "paragraph" in prompt and "details" in prompt
+        assert "not a summary" in prompt
+        assert "actively rewrite the phrasing and organization" in prompt
+        assert "three distinct openings" in prompt
+        assert "not just punctuation or capitalization" in prompt
+        assert "Do not copy the source unchanged" in prompt
+        if jev:
+            assert "1–120 characters" in prompt and "1–200 characters" in prompt
+            assert "verbatim" in prompt
+        for shortening_rule in ("under 35 words", "1–2 sentences", "shortest natural version",
+                                "50-125 words", "under ~80 words", "extreme brevity"):
+            assert shortening_rule not in prompt
+        if case == "short":
+            assert payloads[0]["max_tokens"] == 1536
+        else:
+            assert 1536 < payloads[0]["max_tokens"] <= 65536
+            assert payloads[0]["max_tokens"] >= 3 * len(message.split())
+        if case == "maximum":
+            assert len(message) == 30000
+            assert all(len(candidate) == 30000 for candidate in result["candidates"])
+        if case == "long":
+            assert "1250" in prompt and "1000" in prompt
+            assert "minimum requirement" in prompt and "full product range" in prompt
+            assert "do not name or denigrate competitors" in prompt
+            assert "do not infer units" in prompt
+            if jev:
+                criteria = captured[0][1]["move"]["criteria"]
+                assert "minimum requirement" in criteria["concrete_value"]
+                assert "full product range" in criteria["existing_evidence"]
+                assert "1250" not in str(criteria) and "1000" not in str(criteria)
+
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_generation_exposes_three_distinct_candidates_for_real_measurement(self, mock_post):
+        candidates = ["A warm personal invitation.", "A playful shared-evening invitation.", "A direct low-pressure invitation."]
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": candidates}))
+        result = refine_pitch_message("Come to this concert with me.", "A date who dislikes this band", "general", [])
+        assert result["candidates"] == candidates
+        assert result["refined_message"] is None
+        assert mock_post.call_count == 1
+        prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
+        assert "stated dislikes" in prompt
+        assert "clips" in prompt
+        assert "Do not output the drafts" not in prompt
+        assert "Only the current message, persona and actual clarification ANSWERS authorize facts" in prompt
+
+    def test_detail_guard_does_not_mistake_ordinary_english_for_calendar_facts(self):
+        from tribe_service.llm_layer import _refine_concrete_details
+        assert _refine_concrete_details("Maybe you may enjoy marketing.") == set()
+        assert _refine_concrete_details("klibi izleyelim, biletleri bakalım") == {"klip", "bilet"}
+
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_refine_pitch_message_returns_clean_rewrite(self, mock_post: MagicMock):
-        mock_post.return_value = _mock_openrouter_response("```text\nBetter pitch text.\n```")
+    def test_refine_pitch_message_returns_clean_candidates(self, mock_post: MagicMock):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["```text\nBetter pitch text.\n```", "A second supported invitation.", "A third supported invitation."]}))
 
         result = refine_pitch_message(
             SAMPLE_MESSAGE,
@@ -221,14 +379,14 @@ class TestRefinePitchMessage:
             }],
         )
 
-        assert result["refined_message"] == "Better pitch text."
+        assert result["candidates"][0] == "Better pitch text."
         assert result["model"] == "anthropic/refiner-test"
-        assert result["methodology"] == "llm_semantic_refine_no_tribe_rescore"
+        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
         request_body = mock_post.call_args.kwargs["json"]
         assert request_body["temperature"] == 0.35
         assert request_body["response_format"] == {"type": "json_object"}
         assert "untrusted input" in request_body["messages"][0]["content"]
-        assert "Reduce cognitive friction" in request_body["messages"][1]["content"]
+        assert "Reduce cognitive friction" not in request_body["messages"][1]["content"]
         assert "Clarification answers already provided" in request_body["messages"][1]["content"]
         assert "Use production teams" in request_body["messages"][1]["content"]
         assert "do not ask the same or equivalent question again" in request_body["messages"][1]["content"]
@@ -244,7 +402,7 @@ class TestRefinePitchMessage:
         mock_post.return_value = _mock_openrouter_response(json.dumps({
             "needs_clarification": False,
             "questions": [],
-            "refined_message": "Safe low-claim rewrite.",
+            "candidates": ["Safe low-claim rewrite.", "Another safe low-claim rewrite.", "A third safe low-claim rewrite."],
             "safety_notes": ["No unverified claims added"],
         }))
 
@@ -262,7 +420,7 @@ class TestRefinePitchMessage:
             force_rewrite=True,
         )
 
-        assert result["refined_message"] == "Safe low-claim rewrite."
+        assert result["candidates"][0] == "Safe low-claim rewrite."
         prompt = mock_post.call_args_list[0].kwargs["json"]["messages"][1]["content"]
         assert "No answer provided; proceed without inventing this fact." in prompt
         assert "Force rewrite now: true" in prompt
@@ -317,96 +475,56 @@ class TestRefinePitchMessage:
         else:
             raise AssertionError("Expected RuntimeError")
 
-    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer._post_refine_chat")
+    def test_critic_failure_cannot_release_an_unvalidated_draft(self, chat):
+        chat.side_effect = httpx.ConnectError("private upstream content")
+        with pytest.raises(RuntimeError, match="validation failed"):
+            select_tribe_refinement(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [],
+                                   {"model": "test-refiner"}, [{"id": "original"}])
+
+    @patch("tribe_service.llm_layer._post_refine_chat")
+    def test_incomplete_critic_cannot_release_a_draft(self, chat):
+        chat.return_value = '{"evaluations": []}'
+        with pytest.raises(RuntimeError, match="incomplete"):
+            select_tribe_refinement(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [],
+                                   {"model": "test-refiner"}, [{"id": "original"}, {"id": "c1"}])
+
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_critic_pass_improves_stage_one_rewrite(self, mock_post: MagicMock):
-        stage_one = json.dumps({
-            "needs_clarification": False,
-            "questions": [],
-            "refined_message": "Stage one rewrite.",
-            "safety_notes": ["No unverified claims added"],
-        })
-        critic = json.dumps({
-            "verdict": "improved",
-            "remaining_issues_fixed": ["Tightened the CTA to one specific ask"],
-            "final_message": "Final critic-approved rewrite.",
-        })
-        mock_post.side_effect = [
-            _mock_openrouter_response(stage_one),
-            _mock_openrouter_response(critic),
-        ]
+    def test_duplicate_candidates_are_rejected(self, mock_post):
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["One duplicate invitation."] * 3}))
+        with pytest.raises(RuntimeError, match="three distinct"):
+            refine_pitch_message(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [])
 
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            ["Lower the CTA friction"],
-        )
-
-        assert result["refined_message"] == "Final critic-approved rewrite."
-        assert result["methodology"] == "llm_semantic_refine_two_pass_critic"
-        assert result["critic_notes"] == ["Tightened the CTA to one specific ask"]
-        assert mock_post.call_count == 2
-        critic_prompt = mock_post.call_args.kwargs["json"]["messages"][1]["content"]
-        assert "Candidate rewrite to critique" in critic_prompt
-        assert "Stage one rewrite." in critic_prompt
-        assert "Lower the CTA friction" in critic_prompt
-
-    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
-    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", True)
-    @patch("tribe_service.llm_layer.httpx.post")
-    def test_critic_pass_failure_keeps_stage_one_rewrite(self, mock_post: MagicMock):
-        stage_one = json.dumps({
-            "needs_clarification": False,
-            "questions": [],
-            "refined_message": "Stage one rewrite.",
-        })
-        mock_post.side_effect = [
-            _mock_openrouter_response(stage_one),
-            httpx.ConnectError("network down"),
-        ]
-
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            ["Lower the CTA friction"],
-        )
-
-        assert result["refined_message"] == "Stage one rewrite."
-        assert result["methodology"] == "llm_semantic_refine_with_optional_clarifying_questions"
+    @pytest.mark.parametrize("jev", [False, True])
+    def test_three_complete_source_clones_are_rejected_without_retry(self, monkeypatch, jev):
+        from tribe_service import llm_layer
+        message = "\n\n".join([
+            " ".join(["Tüm kapı ürün ailesini kapsamak için gereken çap 1250."] * 12),
+            " ".join(["Bizim 1000 modelimiz ürünlerin bir bölümünü işleyebiliyor, fakat tüm ürün ailesini kapsamıyor."] * 10),
+        ])
+        persona = "Tüm kapı ürün ailesini işlemek isteyen üretim sorumlusu."
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        def decisions(state, questions):
+            chosen = {"relationship": "business", "objection": "relevance", "angle": "evidence", "tone": "professional",
+                      "repair": "proof", "move": "concrete_value", "repair_target": "whole"}
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, "email", {"id": "original", "message": message}) if jev else None
+        body = {"candidates": [message] * 3}
+        if jev:
+            body = {"drafts": [{"anchor": anchor, "idea": idea, "message": message}
+                for anchor, idea in (("gereken çap 1250", "Asgari ihtiyaç"),
+                                     ("1000 modelimiz", "Kapsam boşluğu"),
+                                     ("tüm ürün ailesini kapsamıyor", "Yalın karşılaştırma"))]}
+        with patch.object(llm_layer.httpx, "post", return_value=_mock_openrouter_response(json.dumps(body))) as post:
+            with pytest.raises(RuntimeError, match="three distinct refinement candidates"):
+                refine_pitch_message(message, persona, "email", decision_strategy=strategy, force_rewrite=True)
+            assert post.call_count == 1
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
-    @patch("tribe_service.llm_layer.httpx.post")
-    def test_critic_pass_can_be_disabled(self, mock_post: MagicMock):
-        stage_one = json.dumps({
-            "needs_clarification": False,
-            "questions": [],
-            "refined_message": "Stage one rewrite.",
-        })
-        mock_post.return_value = _mock_openrouter_response(stage_one)
-
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            [],
-        )
-
-        assert result["refined_message"] == "Stage one rewrite."
-        assert mock_post.call_count == 1
-
-    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
-    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
     @patch("tribe_service.llm_layer.httpx.post")
     def test_deepseek_reasoning_output_is_handled(self, mock_post: MagicMock):
         """DeepSeek-style responses with <think> blocks parse cleanly."""
@@ -416,7 +534,7 @@ class TestRefinePitchMessage:
             + json.dumps({
                 "needs_clarification": False,
                 "questions": [],
-                "refined_message": "Reliability-first rewrite with one CTA.",
+                "candidates": ["Reliability-first rewrite with one CTA.", "A second reliability-first rewrite.", "A third reliability-first rewrite."],
                 "safety_notes": [],
             })
         )
@@ -430,21 +548,20 @@ class TestRefinePitchMessage:
             openrouter_model="deepseek/deepseek-v4-pro",
         )
 
-        assert result["refined_message"] == "Reliability-first rewrite with one CTA."
+        assert result["candidates"][0] == "Reliability-first rewrite with one CTA."
         assert result["model"] == "deepseek/deepseek-v4-pro"
         # DeepSeek gets a higher rewrite temperature than the default.
         assert mock_post.call_args.kwargs["json"]["temperature"] == 0.7
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
     @patch("tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT", "high")
     @patch("tribe_service.llm_layer.httpx.post")
     def test_reasoning_effort_is_forwarded_when_configured(self, mock_post: MagicMock):
         mock_post.return_value = _mock_openrouter_response(json.dumps({
             "needs_clarification": False,
             "questions": [],
-            "refined_message": "Rewrite.",
+            "candidates": ["A supported rewrite.", "Another supported rewrite.", "A third supported rewrite."],
         }))
 
         refine_pitch_message(
@@ -459,29 +576,21 @@ class TestRefinePitchMessage:
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
-    @patch("tribe_service.llm_layer.OPENROUTER_REFINE_CRITIC_PASS", False)
     @patch("tribe_service.llm_layer.httpx.post")
-    def test_plain_text_fallback_strips_think_blocks(self, mock_post: MagicMock):
+    def test_plain_text_cannot_bypass_candidate_measurement(self, mock_post: MagicMock):
         mock_post.return_value = _mock_openrouter_response(
             "<think>planning the rewrite</think>\nFinal rewritten pitch text."
         )
 
-        result = refine_pitch_message(
-            SAMPLE_MESSAGE,
-            SAMPLE_PERSONA,
-            SAMPLE_PLATFORM,
-            [],
-            openrouter_model="deepseek/deepseek-v4-pro",
-        )
-
-        assert result["refined_message"] == "Final rewritten pitch text."
+        with pytest.raises(RuntimeError, match="candidates as JSON"):
+            refine_pitch_message(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [], openrouter_model="deepseek/deepseek-v4-pro")
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_REFINER_MODEL", "anthropic/refiner-test")
     @patch("tribe_service.llm_layer.httpx.post")
     def test_refine_prompt_includes_candidate_protocol_and_channel_norms(self, mock_post: MagicMock):
-        mock_post.return_value = _mock_openrouter_response("Plain rewrite without JSON.")
+        mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["A supported invitation.", "Another supported invitation.", "A third supported invitation."]}))
 
         refine_pitch_message(
             SAMPLE_MESSAGE,
@@ -495,8 +604,9 @@ class TestRefinePitchMessage:
         assert "LinkedIn DM" in prompt
         assert "Persuasion doctrine" in prompt
         assert "Specificity is credibility" in prompt
-        assert "Evidence base" in prompt
-        assert "Carpenter 2013" in prompt
+        assert "Previous analysis templates are deliberately excluded" in prompt
+        assert "Make the opener persona-specific" not in prompt
+        assert "actual TRIBE model" in prompt
         assert "THREE candidate rewrites" in prompt
         assert "Final self-check before answering" in prompt
 
@@ -553,6 +663,19 @@ class TestMalformedJsonNeuralOnlyReport:
         assert mock_post.call_count == 2
         assert result["robustness"]["llm_model"] == "test/model"
 
+    @patch("tribe_service.llm_layer.OPENROUTER_REASONING_EFFORT", "")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_flash_disables_default_thinking_in_analysis_and_refine(self, mock_post: MagicMock):
+        from tribe_service.llm_layer import _post_refine_chat
+
+        payload = _openrouter_payload("Prompt", model="deepseek/deepseek-v4-flash", temperature=.2, json_mode=True)
+        assert payload["reasoning"] == {"enabled": False}
+        mock_post.return_value = _mock_openrouter_response('{"refined_message":"A supported rewrite"}')
+        _post_refine_chat("System", "Prompt", "deepseek/deepseek-v4-flash", .2)
+        assert mock_post.call_args.kwargs["json"]["reasoning"] == {"enabled": False}
+        other = _openrouter_payload("Prompt", model="google/gemini-3.8-flash", temperature=.2, json_mode=True)
+        assert "reasoning" not in other
+
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.OPENROUTER_MAX_RETRIES", 1)
@@ -571,6 +694,24 @@ class TestMalformedJsonNeuralOnlyReport:
 
         assert mock_post.call_count == 2
         assert result["robustness"]["llm_model"] is None
+
+    @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+    @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+    @patch("tribe_service.llm_layer.OPENROUTER_MAX_RETRIES", 1)
+    @patch("tribe_service.llm_layer.time.sleep")
+    @patch("tribe_service.llm_layer.httpx.post")
+    def test_json_without_required_score_is_retried(self, mock_post: MagicMock, _sleep: MagicMock):
+        mock_post.side_effect = [
+            _mock_openrouter_response('{"overall_score": 70, "verdict": "Wrong schema"}'),
+            _mock_openrouter_response(json.dumps(VALID_LLM_RESPONSE)),
+        ]
+        result = interpret_persuasion(
+            SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM,
+            SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES,
+            openrouter_model="test/model",
+        )
+        assert mock_post.call_count == 2
+        assert result["robustness"]["llm_model"] == "test/model"
 
 
 class TestPromptIncludesPersonaAndMessage:
@@ -1050,3 +1191,252 @@ class TestDeterministicNeuralReportRisks:
         risk_text = "Weak attention capture can bury the value proposition"
         assert risk_text not in strong_result["risks"]
         assert risk_text in weak_result["risks"]
+
+
+@pytest.mark.parametrize('invalid', ['model', 'missing', 'choice', 'confidence', 'probabilities', 'score'])
+def test_invalid_jev_decisions_cannot_authorize_a_draft(monkeypatch, invalid):
+    from tribe_service import llm_layer
+    monkeypatch.setattr(llm_layer, 'OPENROUTER_API_KEY', 'test-key')
+    questions = {'angle': {'type': 'choice', 'criteria': {'company':'Shared experience', 'direct':'Direct ask'}},
+                 'quality': {'type':'score','criteria':['Fails','Adequate','Excellent']}}
+    body = {'model': 'typesafe/jev-1.13-20260917', 'answers': {
+        'angle': {'type':'choice','choice':'company','confidence':.95,'probabilities':{'company':.98,'direct':.02}},
+        'quality': {'type':'score','score':1.8,'confidence':.9,'probabilities':{'0':0,'1':.2,'2':.8}}}}
+    if invalid == 'model': body['model'] = 'google/gemini-3.5-flash-lite'
+    if invalid == 'missing': del body['answers']['angle']
+    if invalid == 'choice': body['answers']['angle']['choice'] = 'unmeasured'
+    if invalid == 'confidence': body['answers']['angle']['confidence'] = True
+    if invalid == 'probabilities': body['answers']['angle']['probabilities']['company'] = float('nan')
+    if invalid == 'score': body['answers']['quality']['score'] = 0
+    monkeypatch.setattr(llm_layer.httpx,'post',lambda url,**kwargs: httpx.Response(200,json=body,request=httpx.Request('POST',url)))
+    with pytest.raises(RuntimeError, match='Jev decision validation failed'):
+        llm_layer._post_jev_decisions({'message':'A supported invitation'}, questions)
+
+
+def test_concrete_time_claim_is_not_authorized_by_a_generic_invitation():
+    from tribe_service.llm_layer import _refine_concrete_details
+    assert 'bu akşam' in _refine_concrete_details('Bu akşam Çilekeş konserine gidelim mi?')
+    assert 'bu akşam' not in _refine_concrete_details('Çilekeş konserine gidelim mi?')
+    assert _refine_concrete_details('Bu akşamki konsere gidelim mi?') == {'bu akşam'}
+    assert _refine_concrete_details('A short demo this week?') == {'this week'}
+    for reference in ['bu akşamı', 'bu akşama', 'bu akşamın', 'bu akşamını', 'bu akşamında', 'bu akşamından']:
+        assert _refine_concrete_details(reference) == {'bu akşam'}
+    for reference in ['bu geceyi', 'bu geceye', 'bu gecenin', 'bu gecesi', 'bu gecesinde']:
+        assert _refine_concrete_details(reference) == {'bu gece'}
+
+
+def test_jev_support_checks_asserted_facts_separately_from_proposals(monkeypatch):
+    from tribe_service import llm_layer
+    measurements = [{'id': 'original', 'message': 'Birlikte yürüyüşe çıkar mısın?'},
+                    {'id': 'c1', 'message': 'Biraz adım, biraz sohbet; yürüyüşe çıkalım mı?'}]
+    def decisions(state, questions):
+        assert state['measurements'][1]['message'] == measurements[1]['message']
+        answers = {}
+        for row in measurements:
+            criteria = questions[row['id'] + '_supported']['criteria']
+            assert 'asserts or presupposes' in criteria['false']
+            assert 'open proposals' in criteria['true'] and 'figurative' in criteria['true']
+            assert 'timing, resources or history' in criteria['true']
+            assert 'prior request' in criteria['false']
+            intent = questions[row['id'] + '_intent_preserved']['criteria']
+            assert "sender's stated stance" in intent['false']
+            assert 'enthusiasm' in intent['true']
+            voice = questions[row['id'] + '_voice_preserved']['criteria']
+            assert 'multiple asks' in voice['false']
+            assert 'one clear ask' in voice['true']
+            assert 'Turning an order into a voluntary request preserves intent' in intent['true']
+            respect = questions[row['id'] + '_recipient_respected']['criteria']
+            assert 'even if copied from the original or followed by a question' in respect['false']
+            assert measurements[1]['message'] not in str(criteria)
+        for name, question in questions.items():
+            answers[name] = ({'noul': .75} if question['type'] == 'noul' else
+                             {'score': 3} if question['type'] == 'score' else
+                             {'choice': 'c1', 'confidence': .9})
+        return {'model': 'typesafe/jev-test', 'answers': answers}
+    monkeypatch.setattr(llm_layer, '_post_jev_decisions', decisions)
+    reviews, _, _ = llm_layer._jev_refinement_reviews('Birlikte yürüyüşe çıkar mısın?', 'Bir arkadaş',
+        'general', measurements, {'creative_brief': {}, 'choices': {}, 'instructions': []}, [])
+    assert all(review['supported'] for review in reviews)
+
+
+@pytest.mark.parametrize('case,expected', [
+    ('close', 'c1'), ('swapped_trace', 'c2'), ('quality_gap', 'c2'),
+    ('unverified_encoder', 'c1'), ('mock', 'c2'), ('different_resolution', 'c2'),
+    ('weak_trace', 'c2'), ('runtime_mismatch', 'c2'), ('score_clipping', 'c2'),
+    ('invented_detail', 'c2'), ('unsupported_weather', 'c2'),
+    ('inflected_time', 'c2'), ('supplied_inflected_time', 'c1'),
+    ('all_ineligible', 'original'), ('writer_rejected', None),
+    ('missing_draft', None), ('unsupported_plan_anchor', None), ('invalid_idea', None),
+    ('invalid_message', None), ('duplicate_drafts', None),
+])
+def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeypatch, case, expected):
+    import numpy as np
+    from tribe_service import engine, llm_layer
+    monkeypatch.setattr(engine, 'TRIBE_MODEL_ID', 'facebook/tribev2')
+    monkeypatch.setattr(engine, '_model', object())
+    monkeypatch.setattr(engine.native_core, 'prediction_analysis', lambda *args: ({}, {}, {}))
+    monkeypatch.setattr(engine.native_core, 'summarize_fmri_output', lambda *args: {})
+    for encoder in ['meta-llama/Llama-3.2-3B', 'NousResearch/Hermes-3-Llama-3.2-3B', 'mock', None]:
+        monkeypatch.setattr(engine, '_loaded_runtime_config', {'text_model': encoder})
+        metadata = engine._text_feature_metadata()
+        assert metadata['text_feature_model'] == encoder
+        assert metadata['expected_text_feature_model'] == 'meta-llama/Llama-3.2-3B'
+        assert metadata['text_feature_compatible'] == (encoder == 'meta-llama/Llama-3.2-3B')
+        assert engine.analyze_predictions(np.ones((4, 3)))[1] == metadata
+        assert engine.summarize_fmri_output(np.ones((4, 3))) == metadata
+    original = 'benimle çilekeş konserine gelmelisin harika bi grup çok eğlencez'
+    drafts = ['Çilekeş konserine benimle gelir misin? Yanımda sen ol istiyorum.',
+              'Müzik zevkime kefil olamam, ama sana eşlik etme teklifim var. Çilekeş konserine gidelim mi?',
+              'Çilekeş konserine beraber gidelim mi?']
+    if case == 'invented_detail':
+        drafts[0] = 'Bu akşam iki bilet aldım, Çilekeş konserine beraber gidelim mi?'
+    if case == 'unsupported_weather':
+        drafts[0] = 'Hava da tam konser havası, Çilekeş konserine beraber gidelim mi?'
+    if case in {'inflected_time', 'supplied_inflected_time'}:
+        drafts[0] = 'Çilekeş konserine benimle gelip bu akşamı paylaşır mısın?'
+    measurements = [
+        {'id': name, 'message': text, 'model_id': 'facebook/tribev2', 'mode': 'model',
+         'neural_score': 99 if name == 'c2' else 1, 'quality_weight': 1,
+         'neural_signals': {'personal_relevance': 99}, 'voxel_count': 20484, 'segments': 4,
+         'text_feature_model': 'NousResearch/Hermes-3-Llama-3.2-3B',
+         'text_feature_compatible': False, 'temporal_trace_basis': 'synthetic_word_order',
+         'temporal_trace': [.3, .45, .4, .35] if name == 'c1' else [.3, .5, .1, .3]}
+        for name, text in zip(['original', 'c1', 'c2', 'c3'], [original, *drafts])
+    ]
+    if case == 'swapped_trace':
+        measurements[1]['temporal_trace'], measurements[2]['temporal_trace'] = (
+            measurements[2]['temporal_trace'], measurements[1]['temporal_trace'])
+    if case == 'unverified_encoder':
+        for row in measurements:
+            row.pop('text_feature_compatible')
+    if case == 'mock':
+        for row in measurements:
+            row['mode'] = 'mock'
+    if case == 'different_resolution':
+        measurements[1]['segments'] = 3
+        measurements[1]['temporal_trace'] = [.3, .45, .4]
+    if case == 'weak_trace':
+        for row in measurements:
+            row['temporal_trace'] = [.3, .30002, .3, .30001]
+        measurements[1]['temporal_trace'] = [.3, .30001, .30001, .30001]
+    if case == 'runtime_mismatch':
+        measurements[1]['text_feature_model'] = 'another-feature-space'
+    calls = []
+    def decisions(state, questions):
+        assert 'neural_score' not in json.dumps(state)
+        assert 'personal_relevance' not in json.dumps(state)
+        answers = {}
+        chosen = {'relationship': 'romantic', 'objection': 'taste', 'angle': 'company',
+                  'tone': 'playful', 'repair': 'recipient', 'move': 'self_aware', 'repair_target': 'weakest'}
+        for name, question in questions.items():
+            choice = chosen.get(name, next(iter(question['criteria'])))
+            if choice not in question['criteria']:
+                choice = next(iter(question['criteria']))
+            assert original not in json.dumps(question['criteria'])
+            answers[name] = {'choice': choice, 'confidence': .9}
+        calls.append('plan')
+        return {'model': 'typesafe/jev-1.13-20260917', 'answers': answers}
+    monkeypatch.setattr(llm_layer, '_post_jev_decisions', decisions)
+    plan = llm_layer.plan_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general', measurements[0])
+    usable_baseline = case != 'mock'
+    expected_target = 'benimle çilekeş' if case == 'weak_trace' else 'harika bi'
+    assert plan['creative_brief']['repair']['target']['text'] == (expected_target if usable_baseline else original)
+    assert 'attention_cliff' not in json.dumps(plan)
+    # Holding facts constant and moving the measured weak span must change the actual repair target.
+    other_baseline = {**measurements[0], 'temporal_trace': [.05, .5, .3, .3]}
+    other_plan = llm_layer.plan_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general', other_baseline)
+    assert other_plan['creative_brief']['repair']['target']['text'] == ('benimle çilekeş' if usable_baseline else original)
+    if usable_baseline and case != 'weak_trace':
+        assert plan['structural_hypothesis']['objective'] == 'continuity'
+        assert other_plan['structural_hypothesis']['objective'] == 'opening'
+    monkeypatch.setattr(llm_layer, 'OPENROUTER_API_KEY', 'test-key')
+    def post(url, **kwargs):
+        calls.append('writer')
+        payload = kwargs['json']
+        assert payload['model'] == 'z-ai/glm-5.3-flash'
+        assert payload['provider'] == {'order': ['baseten/fp8', 'fireworks', 'coreweave/nvfp4'],
+                                       'allow_fallbacks': True, 'require_parameters': True}
+        assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
+        assert payload['max_tokens'] == 1536
+        system = payload['messages'][0]['content']
+        assert 'doğal Türkçeyle' in system
+        assert 'satranç oynayalım mı?' in system
+        assert 'birlikte eğleneceğinizi vaat etme' in system
+        assert 'hevesini ve asıl amacını koru' in system
+        assert 'gönüllü davet sorusuna çevir' in system
+        assert 'tek soru' in system
+        assert 'önceki bir isteği' in system
+        assert 'Çilekeş' not in system
+        assert 'candidate_roles' in payload['messages'][1]['content']
+        assert 'neural_score' not in payload['messages'][1]['content']
+        assert 'temporal_trace' not in payload['messages'][1]['content']
+        assert 'shared activity' in payload['messages'][1]['content']
+        assert "Preserve the sender's enthusiasm and actual goal" in payload['messages'][1]['content']
+        assert 'turn orders into one voluntary invitation' in payload['messages'][1]['content']
+        assert 'one question or request' in payload['messages'][1]['content']
+        assert 'ready to send without placeholders' in payload['messages'][1]['content']
+        assert plan['structural_hypothesis']['objective'] in payload['messages'][1]['content']
+        schema = payload['messages'][1]['content'].split('Return JSON only:')[1]
+        assert schema.index('idea') < schema.index('message')
+        plans = [{'anchor': 'çilekeş', 'idea': idea, 'message': draft}
+                 for idea, draft in zip(['Kendine takılan davet', 'Birlikte deneyim', 'Yalın davet'], drafts)]
+        if case == 'missing_draft': plans.pop()
+        if case == 'unsupported_plan_anchor': plans[0]['anchor'] = 'bilet aldım'
+        if case == 'invalid_idea': plans[0]['idea'] = ''
+        if case == 'invalid_message': plans[0]['message'] = None
+        if case == 'duplicate_drafts': plans[1] = plans[0]
+        return httpx.Response(422 if case == 'writer_rejected' else 200,
+            json={'choices': [{'message': {'content': json.dumps({'drafts': plans})}}]},
+            request=httpx.Request('POST', url))
+    monkeypatch.setattr(llm_layer.httpx, 'post', post)
+    if case == 'writer_rejected':
+        with pytest.raises(RuntimeError, match='OpenRouter refine failed'):
+            llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
+                decision_strategy=plan, force_rewrite=True, openrouter_model='legacy/model')
+        assert calls.count('writer') == 1
+        return
+    if case in {'missing_draft', 'unsupported_plan_anchor', 'invalid_idea', 'invalid_message', 'duplicate_drafts'}:
+        with pytest.raises(RuntimeError, match='writing drafts|three distinct'):
+            llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
+                decision_strategy=plan, force_rewrite=True)
+        assert calls.count('writer') == 1
+        return
+    result = llm_layer.refine_pitch_message(original, 'çilekeşi sevmeyen flörtüm', 'general',
+        decision_strategy=plan, force_rewrite=True, openrouter_model='legacy/model')
+    assert result['candidates'] == drafts
+    assert result['writer_call']['draft_plans'][0]['move'] == plan['choices']['move']
+    assert result['writer_call']['draft_plans'][0]['objective'] == plan['structural_hypothesis']['objective']
+    reviews = [
+        {'id': row['id'], 'supported': case != 'all_ineligible' and not (
+             case == 'unsupported_weather' and row['id'] == 'c1'), 'intent_preserved': True,
+         'recipient_respected': True, 'voice_preserved': True,
+         'context_fit': {facet: (40 if row['id'] == 'original' else
+                                65 if row['id'] == 'c1' and case == 'quality_gap' else
+                                99 if row['id'] == 'c1' and case == 'score_clipping' else
+                                100 if row['id'] == 'c2' and case == 'score_clipping' else
+                                79 if row['id'] == 'c1' else 80 if row['id'] == 'c2' else 60)
+                         for facet in llm_layer.CONTEXT_FIT_KEYS}, 'issues': []}
+        for row in measurements
+    ]
+    monkeypatch.setattr(llm_layer, '_jev_refinement_reviews', lambda *args: (
+        reviews, 'typesafe/jev-1.13-20260917', {'type': 'choice', 'choice': 'c2', 'confidence': .9}))
+    selected = llm_layer.select_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general',
+        ['Bu akşam iki bilet var'], result, measurements,
+        clarification_answers=[{'answer': 'Bu akşamki konser.'}] if case == 'supplied_inflected_time' else [])
+    proof = selected['tribe_guidance']
+    assert proof['selected_id'] == expected
+    assert proof['writer_call']['draft_plans'] == result['writer_call']['draft_plans']
+    assert calls.count('writer') == 1
+    assert proof['selection_policy']['basis'] == 'context_first_experimental_trace_tiebreak'
+    assert proof['selection_policy']['trace_preference_applied'] == (case in {
+        'close', 'swapped_trace', 'unverified_encoder', 'different_resolution', 'weak_trace', 'score_clipping', 'supplied_inflected_time'})
+    if case in {'inflected_time', 'supplied_inflected_time'}:
+        assert proof['evaluations'][1]['eligible'] == (case == 'supplied_inflected_time')
+    assert all(0 <= row['selection_score'] <= 100 for row in proof['evaluations'])
+    if case == 'weak_trace':
+        assert 0 < proof['evaluations'][1]['empirical_effect']['weight'] < .1
+    if case == 'different_resolution':
+        assert proof['evaluations'][1]['empirical_effect']['available'] is True
+        assert proof['evaluations'][1]['empirical_effect']['limited_window_sensitivity'] is True
+    if case in {'close', 'swapped_trace', 'unverified_encoder'}:
+        assert proof['evaluations'][1]['empirical_effect']['weight'] > 0

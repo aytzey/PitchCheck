@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import os
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PLATFORM_VALUES = ("email", "linkedin", "cold-call-script", "landing-page", "ad-copy", "general")
@@ -69,7 +69,7 @@ class PitchScoreRequest(BaseModel):
 
 
 class PitchRefineRequest(PitchScoreRequest):
-    suggestions: list[str] = Field(default_factory=list, max_length=12)
+    suggestions: list[Annotated[str, Field(max_length=2000)]] = Field(default_factory=list, max_length=12)
     clarification_answers: list["PitchRefineClarificationAnswer"] = Field(
         default_factory=list,
         max_length=6,
@@ -77,6 +77,7 @@ class PitchRefineRequest(PitchScoreRequest):
     )
     clarification_round: int = Field(default=0, ge=0, le=2, alias="clarificationRound")
     force_rewrite: bool = Field(default=False, alias="forceRewrite")
+    jev_strategy: bool = Field(default=False, alias="jevStrategy")
 
 
 class PitchRefineClarificationAnswer(BaseModel):
@@ -88,15 +89,15 @@ class PitchRefineClarificationAnswer(BaseModel):
 
 
 class AuthLoginRequest(BaseModel):
-    username: str = Field(..., min_length=1)
-    password: str = Field(..., min_length=1)
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=1024)
 
 class AuthChangePasswordRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    current_password: str = Field(..., min_length=1, alias="currentPassword")
-    new_username: str = Field(..., min_length=1, alias="newUsername")
-    new_password: str = Field(..., min_length=1, alias="newPassword")
+    current_password: str = Field(..., min_length=1, max_length=1024, alias="currentPassword")
+    new_username: str = Field(..., min_length=1, max_length=64, alias="newUsername")
+    new_password: str = Field(..., min_length=1, max_length=1024, alias="newPassword")
 
 class BreakdownSection(BaseModel):
     key: str
@@ -125,7 +126,10 @@ class TopMove(BaseModel):
     principle: str = ""  # research principle the move rests on, e.g. "loss aversion"
 
 class FmriOutput(BaseModel):
-    """fMRI summary from TRIBE — temporal trace and top voxel data."""
+    """TRIBE response geometry with feature-encoder provenance."""
+    text_feature_model: str | None = None
+    expected_text_feature_model: str | None = None
+    text_feature_compatible: bool = False
     segments: int
     voxel_count: int
     global_mean_abs: float
@@ -172,8 +176,10 @@ class PitchRefineResponse(BaseModel):
     model: str
     refined_message: str | None = None
     needs_clarification: bool = False
+    decision_strategy: dict[str, Any] | None = None
     questions: list[PitchRefineQuestion] = Field(default_factory=list, max_length=5)
     safety_notes: list[str] = Field(default_factory=list, max_length=5)
     critic_notes: list[str] = Field(default_factory=list, max_length=5)
     persuasion_profile: dict[str, Any] | None = None
+    tribe_guidance: dict[str, Any] | None = None
     methodology: str = "llm_semantic_refine_no_tribe_rescore"

@@ -1,6 +1,6 @@
 import os
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -60,6 +60,170 @@ class TestHelpers:
 
 
 class TestScoreText:
+    @pytest.mark.parametrize("prediction_fails", [False, True])
+    def test_feature_cleanup_reloads_recreated_memmap_files(self, monkeypatch, tmp_path, prediction_fails):
+        cachedict = pytest.importorskip("exca.cachedict")
+        from tribe_service import engine
+        cache = cachedict.CacheDict(tmp_path, cache_type="MemmapArrayFile", permissions=0o700)
+        with cache.write():
+            cache["first"] = np.full((2, 3), 11, dtype=np.float32)
+            cache["second"] = np.full((2, 3), 22, dtype=np.float32)
+        for key, value in [("first", 11), ("second", 22)]:
+            np.testing.assert_array_equal(cache[key], np.full((2, 3), value))
+        model = engine._MockModel()
+        model.data = SimpleNamespace(text_feature=SimpleNamespace(infra=SimpleNamespace(cache_dict=cache)))
+        monkeypatch.setattr(engine, "get_model", lambda: model)
+        if prediction_fails:
+            def fail(_):
+                raise RuntimeError("predict failed")
+            monkeypatch.setattr(model, "predict", fail)
+            with pytest.raises(RuntimeError, match="predict failed"):
+                engine._score_text_once("A valid cleanup failure test", retry_index=0)
+        else:
+            engine._score_text_once("A valid cleanup success test", retry_index=0)
+        assert not cache
+        # exca reshuffles extraction: new offsets must never read the old, unlinked inode.
+        # A new writer also requires fresh JSONL reader offsets, not just fresh array maps.
+        writer = cachedict.CacheDict(tmp_path, cache_type="MemmapArrayFile", permissions=0o700)
+        with writer.write():
+            writer["second"] = np.full((2, 3), 22, dtype=np.float32)
+            writer["first"] = np.full((2, 3), 11, dtype=np.float32)
+        for key, value in [("first", 11), ("second", 22)]:
+            np.testing.assert_array_equal(cache[key], np.full((2, 3), value))
+        assert cache.permissions == 0o700 and cache.cache_type == "MemmapArrayFile"
+
+    def test_feature_cache_is_cleared_on_success_and_failure(self, monkeypatch):
+        from tribe_service import engine
+        cache = {"customer-context": np.ones((2, 3))}
+        model = engine._MockModel()
+        model.data = SimpleNamespace(text_feature=SimpleNamespace(infra=SimpleNamespace(cache_dict=cache)))
+        monkeypatch.setattr(engine, "get_model", lambda: model)
+        engine._score_text_once("A valid feature-cache cleanup test", retry_index=0)
+        assert not cache
+        cache["customer-context"] = np.ones((2, 3))
+        def fail(_):
+            raise RuntimeError("predict failed")
+        monkeypatch.setattr(model, "predict", fail)
+        with pytest.raises(RuntimeError, match="predict failed"):
+            engine._score_text_once("A valid feature-cache failure test", retry_index=0)
+        assert not cache
+
+    @pytest.mark.parametrize("padding_side", ["left", "right"])
+    def test_target_token_copy_uses_mask_with_distinct_pad_eos_ids(self, monkeypatch, padding_side):
+        torch = pytest.importorskip("torch")
+        text = pytest.importorskip("neuralset.extractors.text")
+        from tribe_service import engine
+        original = text.HuggingFaceText._get_data.fget.method
+        monkeypatch.setattr(text.HuggingFaceText._get_data.fget, "method", original)
+        monkeypatch.setattr(text.HuggingFaceText, "_load_model", text.HuggingFaceText._load_model)
+        monkeypatch.setattr(text.HuggingFaceText, "_pitchscore_accelerate_patched", False, raising=False)
+        monkeypatch.setenv("HF_HUB_OFFLINE", "0")
+        engine._patch_neuralset_hf_text_runtime()
+        optimized = text.HuggingFaceText._get_data.fget.method
+
+        class Inputs(dict):
+            def to(self, _):
+                return self
+
+        class Tokenizer:
+            def encode(self, value, **_):
+                return [128039 if word == "<eos>" else i + 1 for i, word in enumerate(value.split())]
+            def __call__(self, values, **_):
+                tokens = [self.encode(value) for value in values]
+                width = max(map(len, tokens))
+                padded, masks = [], []
+                for row in tokens:
+                    pads = [0] * (width - len(row))
+                    padded.append(pads + row if padding_side == "left" else row + pads)
+                    masks.append([int(token != 0) for token in padded[-1]])
+                return Inputs(input_ids=torch.tensor(padded), attention_mask=torch.tensor(masks))
+
+        class Model:
+            def __call__(self, input_ids, **_):
+                states = tuple(input_ids[..., None].float().repeat(1, 1, 3) + layer for layer in range(4))
+                return type("Outputs", (dict,), {"hidden_states": states})(hidden_states=states)
+
+        feature = SimpleNamespace(batch_size=2, device="cpu", contextualized=True, tokenizer=Tokenizer(),
+                                  model=Model(), _pad_id=128039, cache_all_layers=True, cache_n_layers=None,
+                                  _aggregate_tokens=lambda value: value.float().mean(dim=1),
+                                  _aggregate_layers=lambda value: value.mean(axis=0))
+        events = [SimpleNamespace(text="two words", context="a prefix two words"),
+                  SimpleNamespace(text="short", context="short")]
+        for contextualized in [True, False]:
+            feature.contextualized = contextualized
+            feature.batch_size = 1  # No padding: upstream gives the target-token reference.
+            expected = list(original(feature, events))
+            feature.batch_size = 2
+            actual = list(optimized(feature, events))
+            for before, after in zip(expected, actual, strict=True):
+                np.testing.assert_array_equal(before, after)
+        eos_events = [SimpleNamespace(text="<eos>", context=""), SimpleNamespace(text="three real tokens", context="")]
+        eos_state = list(optimized(feature, eos_events))[0]
+        np.testing.assert_array_equal(eos_state, np.array([[128039 + layer] * 3 for layer in range(4)]))
+    def test_offline_text_model_check_uses_only_existing_cached_config(self, monkeypatch):
+        from tribe_service import engine
+        text, hub = ModuleType("neuralset.extractors.text"), ModuleType("huggingface_hub")
+
+        class TextFeature:
+            _REPOS = []
+            _get_data = SimpleNamespace(fget=SimpleNamespace(method=None))
+
+        text.HuggingFaceText, text.part_reversal = TextFeature, lambda _: None
+        hub.try_to_load_from_cache = lambda *args: "/cached/config.json"
+        monkeypatch.setitem(sys.modules, "torch", ModuleType("torch"))
+        monkeypatch.setitem(sys.modules, "neuralset.extractors.text", text)
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+        monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+        engine._patch_neuralset_hf_text_runtime()
+        assert TextFeature._REPOS == [engine.TRIBE_TEXT_MODEL]
+        del TextFeature._pitchscore_accelerate_patched
+        TextFeature._REPOS = []
+        hub.try_to_load_from_cache = lambda *args: None
+        engine._patch_neuralset_hf_text_runtime()
+        assert TextFeature._REPOS == []
+
+    def test_wrapped_cuda_oom_is_recovered_by_cpu_fallback(self, monkeypatch):
+        from tribe_service import engine
+        attempts = []
+
+        def predict(message, *, retry_index):
+            attempts.append(retry_index)
+            if retry_index == 0:
+                try:
+                    raise RuntimeError("CUDA out of memory")
+                except RuntimeError as cause:
+                    raise RuntimeError("Model loading went wrong") from cause
+            return np.ones((2, 3), dtype=np.float32), {"ok": True}
+
+        monkeypatch.setattr(engine, "TRIBE_OOM_FALLBACK_TEXT_DEVICE", "cpu")
+        monkeypatch.setattr(engine, "_score_text_once", predict)
+        monkeypatch.setattr(engine, "unload_model", lambda **kwargs: None)
+        result = engine.score_text("Wrapped OOM recovery regression check")
+        assert result.shape == (2, 3)
+        assert attempts == [0, 1]
+
+    def test_text_model_survives_between_pitches_but_unload_option_is_respected(self, monkeypatch):
+        from tribe_service import engine
+
+        class TextFeature:
+            _model = object()
+
+        main = ModuleType("tribev2.main")
+        text = ModuleType("neuralset.extractors.text")
+        text.HuggingFaceText = TextFeature
+        main._free_extractor_model = lambda extractor: delattr(extractor, "_model")
+        monkeypatch.setitem(sys.modules, "tribev2.main", main)
+        monkeypatch.setitem(sys.modules, "neuralset.extractors.text", text)
+        monkeypatch.setattr(engine, "TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE", False)
+        engine._patch_tribe_text_model_lifetime()
+        feature = TextFeature()
+        feature._model = object()
+        main._free_extractor_model(feature)
+        assert hasattr(feature, "_model")
+        monkeypatch.setattr(engine, "TRIBE_UNLOAD_TEXT_MODEL_AFTER_SCORE", True)
+        main._free_extractor_model(feature)
+        assert "_model" not in vars(feature)
+
     def test_patch_exca_no_value_alias_restores_legacy_path(self, monkeypatch):
         class SentinelNoValue:
             pass

@@ -126,10 +126,10 @@ class AuthStore:
         return {"required": auth_required(), "configured": configured}
 
     def login(self, username: str, password: str) -> dict[str, Any]:
-        if not auth_required():
-            token = self._create_session("dev")
-            return self._session_response("dev", token)
         with self._lock:
+            if not auth_required():
+                token = self._create_session("dev")
+                return self._session_response("dev", token)
             state = self._ensure_state()
             if username.strip() != state.get("username") or not _verify_password(password, state):
                 raise InvalidCredentialsError("Invalid PitchServer username or password.")
@@ -147,6 +147,10 @@ class AuthStore:
             if not session:
                 raise InvalidCredentialsError("Invalid or expired PitchServer auth token.")
             return session.username
+
+    def logout(self, token: str | None) -> None:
+        with self._lock:
+            self._sessions.pop(token, None)
 
     def change_credentials(
         self,
@@ -209,12 +213,16 @@ class AuthStore:
             pass
 
     def _create_session(self, username: str) -> str:
-        token = secrets.token_urlsafe(32)
-        self._sessions[token] = Session(
-            username=username,
-            expires_at=_now() + _session_ttl_seconds(),
-        )
-        return token
+        with self._lock:
+            self._prune_expired_sessions()
+            while len(self._sessions) >= 128:
+                self._sessions.pop(next(iter(self._sessions)))
+            token = secrets.token_urlsafe(32)
+            self._sessions[token] = Session(
+                username=username,
+                expires_at=_now() + _session_ttl_seconds(),
+            )
+            return token
 
     def _session_response(self, username: str, token: str) -> dict[str, Any]:
         session = self._sessions[token]

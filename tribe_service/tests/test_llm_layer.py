@@ -229,6 +229,39 @@ class TestNeuralOnlyWithoutApiKey:
 
 class TestRefinePitchMessage:
     @pytest.mark.parametrize("jev", [False, True])
+    def test_preservation_excludes_commands_and_promised_recipient_reactions(self, monkeypatch, jev):
+        from tribe_service import llm_layer
+        message = "Benimle Çilekeş konserine gelmelisin, harika bir grup, çok eğleneceğiz."
+        persona = "Çilekeş dinlemeyi sevmeyen flörtüm."
+        candidates = ["Çilekeş konserine benimle gelir misin? Yanımda seni isterim.",
+                      "Çilekeş'i çok seviyorum; konsere benimle gelir misin?",
+                      "Sevdiğim grubu seninle dinlemek isterim; Çilekeş konserine gidelim mi?"]
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        def decisions(state, questions):
+            chosen = {"relationship": "romantic", "objection": "taste", "angle": "company", "tone": "warm",
+                      "repair": "recipient", "move": "shared_moment", "repair_target": "whole"}
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, "general", {"id": "original", "message": message}) if jev else None
+        body = {"candidates": candidates}
+        if jev:
+            body = {"drafts": [{"anchor": "Çilekeş", "idea": str(i), "message": draft} for i, draft in enumerate(candidates)]}
+        with patch.object(llm_layer.httpx, "post", return_value=_mock_openrouter_response(json.dumps(body))) as post:
+            result = refine_pitch_message(message, persona, "general", decision_strategy=strategy, force_rewrite=True)
+            prompt = post.call_args.kwargs["json"]["messages"][1]["content"]
+            assert "not details to preserve" in prompt
+            assert "commands, pressure, hype" in prompt
+            assert "unsupported predictions about recipient enjoyment or guaranteed reactions" in prompt
+            assert "take priority over substance preservation" in prompt
+            assert "sender's own perspective" in prompt
+            assert "genuine intent, supported facts and sender enthusiasm" in prompt
+            if jev:
+                system = post.call_args.kwargs["json"]["messages"][0]["content"]
+                assert "korunacak ayrıntılar değildir" in system and "gönderenin bakışından" in system
+            assert post.call_count == 1 and result["candidates"] == candidates
+
+    @pytest.mark.parametrize("jev", [False, True])
     @pytest.mark.parametrize("case,platform", [
         ("short", "general"), ("long", "email"), ("long", "linkedin"),
         ("long", "ad-copy"), ("maximum", "general"),
@@ -278,6 +311,13 @@ class TestRefinePitchMessage:
         assert "80–120%" in prompt and "words" in prompt
         assert "paragraph" in prompt and "details" in prompt
         assert "not a summary" in prompt
+        assert "actively rewrite the phrasing and organization" in prompt
+        assert "three distinct openings" in prompt
+        assert "not just punctuation or capitalization" in prompt
+        assert "Do not copy the source unchanged" in prompt
+        if jev:
+            assert "1–120 characters" in prompt and "1–200 characters" in prompt
+            assert "verbatim" in prompt
         for shortening_rule in ("under 35 words", "1–2 sentences", "shortest natural version",
                                 "50-125 words", "under ~80 words", "extreme brevity"):
             assert shortening_rule not in prompt
@@ -455,6 +495,33 @@ class TestRefinePitchMessage:
         mock_post.return_value = _mock_openrouter_response(json.dumps({"candidates": ["One duplicate invitation."] * 3}))
         with pytest.raises(RuntimeError, match="three distinct"):
             refine_pitch_message(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, [])
+
+    @pytest.mark.parametrize("jev", [False, True])
+    def test_three_complete_source_clones_are_rejected_without_retry(self, monkeypatch, jev):
+        from tribe_service import llm_layer
+        message = "\n\n".join([
+            " ".join(["Tüm kapı ürün ailesini kapsamak için gereken çap 1250."] * 12),
+            " ".join(["Bizim 1000 modelimiz ürünlerin bir bölümünü işleyebiliyor, fakat tüm ürün ailesini kapsamıyor."] * 10),
+        ])
+        persona = "Tüm kapı ürün ailesini işlemek isteyen üretim sorumlusu."
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        def decisions(state, questions):
+            chosen = {"relationship": "business", "objection": "relevance", "angle": "evidence", "tone": "professional",
+                      "repair": "proof", "move": "concrete_value", "repair_target": "whole"}
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, "email", {"id": "original", "message": message}) if jev else None
+        body = {"candidates": [message] * 3}
+        if jev:
+            body = {"drafts": [{"anchor": anchor, "idea": idea, "message": message}
+                for anchor, idea in (("gereken çap 1250", "Asgari ihtiyaç"),
+                                     ("1000 modelimiz", "Kapsam boşluğu"),
+                                     ("tüm ürün ailesini kapsamıyor", "Yalın karşılaştırma"))]}
+        with patch.object(llm_layer.httpx, "post", return_value=_mock_openrouter_response(json.dumps(body))) as post:
+            with pytest.raises(RuntimeError, match="three distinct refinement candidates"):
+                refine_pitch_message(message, persona, "email", decision_strategy=strategy, force_rewrite=True)
+            assert post.call_count == 1
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")

@@ -291,10 +291,13 @@ GLM analysis requests default to low reasoning and cap completion at 4,096 token
 Refine responses include the served model and provider in `writer_call` when the
 provider returns them; `model` uses the served model when available.
 
-Each rewrite preserves the original substance, supporting details and paragraph
-structure, targeting 80–120% of its word count with a five-word tolerance for
+Each rewrite preserves the original meaning, supporting details and paragraph
+coverage while actively rewriting its phrasing and organization, targeting
+80–120% of its word count with a five-word tolerance for
 short inputs. This overrides channel brevity suggestions and also applies to
-the plain-ask candidate. The original and all three drafts still receive TRIBE
+the plain-ask candidate. The three drafts must have different openings and
+recognizable strategies; copied source text or punctuation-only variants are
+not rewrite alternatives. The original and all three drafts still receive TRIBE
 measurements; length-mismatched drafts cannot win even if the critic approves
 them. If no eligible improvement remains, the original is retained. The existing
 30,000-character input limit is unchanged; outputs are never padded or sliced to

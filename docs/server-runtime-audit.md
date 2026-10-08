@@ -292,3 +292,56 @@ Yalnız `tribe` servisi yenilendi; mevcut 4 CPU / 12 GiB RAM / 8 GiB CUDA sını
 Son sağlık kontrolü başarılı, aktif GPU işi **0**, hem TRIBE hem text encoder boşaltılmıştır; logout başarılıdır ve geçici aday konteyner kalmamıştır. Unload sonrası Docker working-set **2,033 GiB / 12 GiB** idi; bu süreç RSS veya bütün CPU belleğinin boşaldığı iddiası değildir.
 
 Sunucu kökü `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/` altında son aday kanıtı `audit-glm-candidate-20261005-122351-20ad4a03/`; canlı kaynak/HTTPS/servis kayıtları `audit-glm-final-20261005-8210fae/` dizinindedir. Hedefli geri dönüş **`rollback-glm-final-20261005-8210fae-20261005T092748Z/rollback.sh`** ile yapılır; önceki imajı ve korumalı runtime ayarlarını geri getirip yalnız `tribe` servisini yeniler. Sentetik metinlerin tam yanıtları özel sunucu kayıtlarında tutulur; token veya API anahtarı bu dokümana eklenmez.
+
+## Uzun metin düzeltmesi ve Haiku karşılaştırması — 8 Ekim 2026
+
+Kaynak `b245723d9dc0a3b7a695766aecd3fb44e53bf183`, uzun girdileri kısa davet kalıbına veya özete çeviren çelişkili yazım talimatlarını kaldırır. Bütün adaylar kaynak kelime sayısının yaklaşık %80–120 aralığını hedefler; kısa metinlerde en az beş kelimelik tolerans vardır. Anlam, destekleyici ayrıntılar, sayılar, koşullar ve her paragrafın kapsamı korunurken ifade ve düzen yeniden yazılır. Üç aday farklı açılışlar ve tanınabilir stratejiler kullanır. Aşırı kısa/uzun adaylar seçilemez; uygun iyileştirme yoksa kaynak korunur. Metinler sınırı tutturmak için kesilmez veya doldurulmaz.
+
+Tek yazım çağrısının completion bütçesi kaynak karakter sayısıyla ölçeklenir: `min(65536, max(1536, ceil(chars * 3.6) + 768))`. Jev planı/editörü, `z-ai/glm-5.3-flash`, canonical `meta-llama/Llama-3.2-3B`, orijinal dahil dört gerçek TRIBE ölçümü ve mevcut seçim formülü korunmuştur. Yeniden üretim döngüsü eklenmemiştir. Mobil ve web çağıranların tam metni taşıdığı doğrulandı; mobil kod veya yeni TestFlight derlemesi gerekmez.
+
+Satış geri bildirimi yalnız iş bağlamına uygulandı: verilen müşteri ihtiyacını asgari gereksinim olarak ortaya koy, sunulan çözümün bütün ürün grubunu kapsayıp kapsamadığını ve verilmiş kapsam açığını göster. Rakip adı, rakibin verilmemiş eksikleri, ölçü birimi, indirim veya garanti uydurulmaz. Görüşmedeki 1250/1000 değerleri ürün kurallarına sabitlenmez.
+
+İlk uzunluk düzeltmesinde GLM'nin kaynağı üç kez aynen döndürdüğü hata ham yanıtla yakalandı. `4f55ffa` canlı HTTPS kontrolünü geçmedi ve önceki imaja hedefli geri dönüş yapıldı. Sonraki talimat anlamı korumak ile cümleleri kopyalamayı ayırır, üç farklı açılış/düzen ister ve mevcut dayanak/fikir alanlarının sınırlarını açıkça söyler. Tekillik ve olgusal doğrulama gevşetilmedi. Son CUDA imajında **192 Python testi** geçti; yerelde **188 geçti / 4 bağımlılık testi atlandı**. İlk değişiklikte web lint, TypeScript ve **49 web testi** de geçti; sonraki talimat düzeltmesi web kodunu değiştirmedi.
+
+Yeni imajın kayıtlı gerçek Jev planıyla üç bağımsız yazım kontrolünde dokuz adayın tamamı farklıydı; hiçbiri kaynakla aynı değildi. 251 kelimelik girdiden **219–255 kelime** üretildi. Ayrı bir yeni Jev planıyla üç aday **250/256/251 kelime** oldu. Bunlar yeni GPU ölçümü içermeyen yazım kontrolleridir. Sonraki plan çağrısı `529`, bir tam akışın editör çağrısı da `503` verdi. Başka bir tam akış yazımdan sonra `502` verdi ancak ham yazar yanıtı kaydedilmediği için kesin nedeni belirlenemedi; sonraki kabul, özel tanılama kaydıyla çalıştırıldı. Bütün başarısız adaylar kaldırılıp önceki sağlıklı imaj geri getirildi; her iki son başarısız aday turunda diğer **184 konteyner** değişmedi.
+
+### Sınırlı yazar A/B deneyi
+
+[Haiku 5.5](https://www.anthropic.com/claude-haiku-5-5) için kısa bağlam liste fiyatı bir milyon girdi/çıktı token başına $0,10/$0,50; seçili hızlı [GLM sağlayıcılarında](https://openrouter.ai/z-ai/glm-5.3-flash) $0,15/$0,50 idi. Liste fiyatı bütün isteğin maliyetini belirlemez. Aynı iki kaynak ve kayıtlı gerçek Jev planlarıyla yalnız yazım karşılaştırıldı; yeni metinler bu A/B sırasında TRIBE ile yeniden ölçülmedi. Karşılaştırma son kopyalama karşıtı talimat düzeltmesinden öncedir.
+
+| Yazıcı / düşünme ayarı | Kısa davet: süre / bedel | 251 kelimelik iş metni: süre / bedel |
+|---|---:|---:|
+| GLM-5.3-Flash / low | 2,768 sn / $0,00033804 | 18,018 sn / $0,00140823 |
+| Haiku 5.5 / low | 10,328 sn / $0,00098485 | 23,393 sn / $0,00371745 |
+| Haiku 5.5 / düşünme kapalı | 3,594 sn / $0,00045560 | 10,831 sn / $0,00195416 |
+
+Haiku-low kısa örnekte bütün 1.536 completion tokenını düşünmeye harcadı ve JSON üretmedi. Düşünme kapalıyken uzun örneği hızlandı, ancak iki taslak aynıydı ve mevcut tekillik kontrolünden geçmedi; kısa örneğin bir adayında verilmemiş `bu akşam` zamanı vardı. Kopyalama ilk GLM talimatında da görüldüğünden bu hata Haiku'ya özgü sayılmaz. Haiku-off bu iki istekte daha çok token kullandı ve yaklaşık %35–39 daha pahalıya geldi. Küçük örneklem genel kalite sıralaması veya insanlarda ikna artışı kanıtı değildir; model geçişini haklı çıkaran bir avantaj görülmediği için GLM korunur. [OpenRouter reasoning ayarlarında](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens) `exclude` düşünmeyi kapatmaz; Haiku'nun hızlı denemesinde ayrıca `enabled:false` kullanıldı ve desteklemediği temperature gönderilmedi.
+
+A/B bedelleri yalnız yazıcı içindir; Jev dahil değildir. Ham sentetik metinler ve ölçümler sunucunun özel `releases/length-20261008/` ve `releases/length-20261008-v2/` dizinlerinde tutulur. API anahtarı veya auth tokenı rapora eklenmez.
+
+### Tam akış ve son düzeltme
+
+Kopyalama karşıtı ilk imajın üç vakalı gerçek ASGI/auth kabulü, gerçek Jev ve her vakada orijinal dahil dört canonical TRIBE ölçümüyle tamamlandı. 251 kelimelik iş metninde 232 kelimelik c1 seçildi; toplam 61,285 sn / yazıcı 13,631 sn sürdü. 439 kelimelik kişisel metnin adayları 453/455/446 kelimeydi; deneysel TRIBE katkısı seçim puanını düşürdüğünden kaynak korundu (toplam 129,395 sn / yazıcı 29,143 sn). Bu, yeni metnin daha uzun olmasıyla otomatik kazanmadığını gösterir. Kısa davette üç aday da emir, desteklenmeyen vaat veya geçmiş iddiası nedeniyle elendi; kaynak döndü. API kabulü dil kalitesi garantisi sayılmadı.
+
+Son altı satırlık talimat düzeltmesi bu kısa örnek için önceliği açıklığa kavuşturur: kaynakta bulunan emir, baskı, abartı ve alıcının eğleneceğine dair desteksiz vaatler korunacak ayrıntılar değildir. Gerçek amaç, olgular ve gönderenin hevesi korunur; heves gönderenin kendi bakışından anlatılır. Jev/eski yol için tek çağrı ve bu önceliği doğrulayan regresyon testi eklendi. Model, eşikler, eleştirmen ve orijinale dönüş politikası değişmedi.
+
+Üç vakalı kabulün kayıtları `audit-length-instrumented-20261008-160904-371c3843/` altındadır. `glm-acceptance.json` ve tanılama başarılıdır. Ham bakım sonucu, eşzamanlı `systemtest2/systemtest3` konteynerlerinin beş satırı değiştiği için `ok=false` kaldı; 179 mevcut satır değişmedi. Salt okunur sonraki kontrolde değişen beş servis sağlıklı, `OOMKilled=false` ve restart sayıları 0 idi. Ham kanıt korunarak `concurrent-service-verification.json` eklendi; operatör yalnız PitchServer üzerinde stop/run/remove/start yaptı.
+
+### Canlı son kabul ve geri dönüş
+
+Son kaynak **`b245723d9dc0a3b7a695766aecd3fb44e53bf183`**, imaj **`sha256:b393b92f4ced9b3740400c9bf97aaf1f2753eab3f8e0cb85ba9043213c817bd0`**. Altı satırlık son öncelik düzeltmesinden sonra tam Python paketi aynı CUDA imajında yeniden geçti (**192 test**). Değişiklikten doğrudan etkilenen uzun iş metni ve kısa davet için iki gerçek ASGI/auth kabulü çalıştırıldı; önceki tamamlanmış 439 kelimelik test gereksiz yere tekrarlanmadı. Final aday kontrolü ve diğer servislerin tam snapshot karşılaştırması başarılıdır.
+
+| Son doğrulama | Kaynak → seçilen kelime | Toplam süre | Tek yazım süresi |
+|---|---:|---:|---:|
+| İzole son aday: iş metni | 251 → 224 | 52,881 sn | 18,057 sn |
+| İzole son aday: kısa davet | 9 → 8 | 5,778 sn | 3,641 sn |
+| Dağıtım sonrası public HTTPS: iş metni | 251 → 242 | 51,623 sn | 15,798 sn |
+| Dağıtım sonrası public HTTPS: kısa davet | 9 → 12 | 13,205 sn | 10,823 sn |
+
+Bu dört isteğin her birinde tek GLM yazımı, gerçek Jev planı/editörü ve **dört gerçek 20.484 voxel TRIBE ölçümü** doğrulandı. Eski mobil istemcinin Gemini model kimliği de gerçek GLM yazımına yönlendi. Son public kısa mesaj: “Çilekeş konserine birlikte gidelim mi? O kadar heyecanlıyım ki seninle izlemek isterim.” Bu örnekte emir ve alıcının eğleneceğine dair vaat kalktı; her metinde aynı kalite sonucu garanti edilmez. Public iki yazımın toplam maliyeti **$0,00175091**, Jev hariçtir.
+
+Yalnız `tribe` yenilendi. Dağıtımda ve public testler sonrasındaki son karşılaştırmada diğer **184 konteynerin** kimliği, başlangıç zamanı, restart ve sağlık durumu aynı kaldı. `/app/tribe_service` altındaki **28 izlenen dosyanın SHA-256 değeri** kaynak commit'iyle eşleşti. 4 CPU / 12 GiB RAM / 12 GiB toplam RAM+swap / 256 PID / 8 GiB PyTorch CUDA allocator sınırları korundu. Sağlık kontrolü başarılı, aktif GPU işi **0**, TRIBE ve text encoder boşaltılmış, logout `200`; geçici aday konteyner kalmadı. Docker working-set unload sonrası **1,658 GiB / 12 GiB** idi; bu süreç RSS veya CPU belleğinin tamamının serbest kalması demek değildir.
+
+Kanıtlar sunucu kökü `/home/dkmserver/Desktop/Machinity/aytug/pitchserver/` altında `audit-length-final-candidate-20261008-162045-1d962b5d/` ve `audit-length-v3-final-20261008-b245723/` dizinlerindedir. İkinci dizin `deployment.json`, `public-length.json`, `source-verification.json`, `final-verification.json` içerir. Test edilen kaynak ve helper'lar `releases/length-20261008-v3/` altındadır. Önceki imaja ve korumalı runtime ayarlarına hedefli geri dönüş **`rollback-length-v3-final-20261008-b245723-20261008T132257Z/rollback.sh`** ile yalnız `tribe` üzerinde yapılır.
+
+30.000 karakter sınırına yakın metinler ve fiziksel iPhone bu turda denenmedi. 439 kelimelik önceki tam akış 129 saniye sürdü; uzun metinlerde dört TRIBE hesabı önemli süre tutar, yalnız yazıcı değişimi bunu kaldırmaz. Dış Jev servisinde gözlenen geçici `503/529` hataları uygulama içi tekrar döngüsüyle gizlenmez. Kaynak koruma ile üslup/olgu değerlendirmesi semantik model kararlarıdır; kaynak benzeri uzunluk tek başına bütün ayrıntıların veya insanlarda ikna başarısının garantisi değildir.

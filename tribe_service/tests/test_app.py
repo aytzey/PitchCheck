@@ -345,7 +345,7 @@ class TestScore:
         original = "Benimle Çilekeş konserine gelmelisin, çok eğleneceğiz."
         candidates = [
             "Çilekeş sana göre değil biliyorum; benimle bir akşam geçirmek ister misin?",
-            "Çilekeş favorin değil ama seninle konsere gitmeyi isterim. Bana eşlik eder misin?",
+            "Çilekeş favorin değil ama seninle konsere gitmeyi isterim. Eşlik eder misin?",
             "Sana iki ücretsiz bilet aldım, 15 saniyelik klibi izle ve beraber gidelim.",
         ]
         scores = {original: 35, candidates[0]: 45, candidates[1]: 80, candidates[2]: 99}
@@ -600,6 +600,85 @@ class TestPitchServerAuth:
 
         assert changed.status_code == 200
         assert changed.json()["username"] == "desktopuser"
+
+
+@pytest.mark.parametrize("jev", [False, True])
+@pytest.mark.parametrize("all_wrong_length", [False, True])
+def test_refine_rejects_length_mismatch_after_measuring_all_candidates(monkeypatch, jev, all_wrong_length):
+    import json
+    import httpx
+    from tribe_service import llm_layer
+    paragraph = "Our proposal covers the complete product range while preserving your stated production constraints."
+    original = "\n\n".join([" ".join([paragraph] * 10)] * 3)
+    drafts = ["Can we review the proposed coverage?",
+              "Would you review the complete coverage?" if all_wrong_length else original.replace("Our", "The", 1),
+              original + "\n\n" + original]
+    measured, writer_payloads, critic_payloads = [], [], []
+    monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm_layer, "OPENROUTER_ENABLED", True)
+    def measure(text):
+        measured.append(text)
+        return [[.2]]
+    def analysis(*args, **kwargs):
+        return ({}, {"segments": 4, "voxel_count": 20484, "temporal_trace": [.2, .5, .1, .3],
+                     "temporal_trace_basis": "synthetic_word_order"},
+                {key: 50.0 for key in service_app.PERSUASION_SIGNAL_LABELS})
+    def review_score(name):
+        return 2 if name.startswith("original") else 3 if name.startswith("c2") else 4
+    def post(url, **kwargs):
+        payload = kwargs["json"]
+        if url.endswith("/decisions"):
+            questions = payload["questions"]
+            chosen = {"relationship": "business", "objection": "relevance", "angle": "evidence",
+                      "tone": "professional", "repair": "proof", "move": "concrete_value", "repair_target": "whole",
+                      "winner": "c1"}
+            if "winner" in questions:
+                critic_payloads.append(payload)
+            answers = {}
+            for name, question in questions.items():
+                kind = question["type"]
+                if kind == "choice":
+                    answers[name] = {"type": kind, "choice": chosen[name], "confidence": .9,
+                                     "probabilities": {key: float(key == chosen[name]) for key in question["criteria"]}}
+                elif kind == "noul":
+                    answers[name] = {"type": kind, "noul": 1.0}
+                else:
+                    score = review_score(name)
+                    answers[name] = {"type": kind, "score": score, "confidence": .9,
+                                     "probabilities": {str(i): float(i == score) for i in range(5)}}
+            body = {"model": "typesafe/jev-test", "answers": answers}
+        elif "Actual TRIBE measurements" in payload["messages"][1]["content"]:
+            critic_payloads.append(payload)
+            body = {"choices": [{"message": {"content": json.dumps({"evaluations": [
+                {"id": key, "supported": True, "intent_preserved": True, "recipient_respected": True,
+                 "voice_preserved": True, "context_fit": {facet: 25 * review_score(key)
+                     for facet in llm_layer.CONTEXT_FIT_KEYS}, "issues": []}
+                for key in ("original", "c1", "c2", "c3")]})}}]}
+        else:
+            writer_payloads.append(payload)
+            content = {"drafts": [{"anchor": "proposal", "idea": idea, "message": draft}
+                for idea, draft in zip(("Coverage", "Evidence", "Request"), drafts)]} if jev else {"candidates": drafts}
+            body = {"choices": [{"message": {"content": json.dumps(content)}}]}
+        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+    monkeypatch.setattr(service_app, "score_text", measure)
+    monkeypatch.setattr(service_app, "analyze_predictions", analysis)
+    monkeypatch.setattr(llm_layer.httpx, "post", post)
+
+    response = client.post("/refine", json={"message": original, "persona": "A manufacturer reviewing product coverage",
+        "platform": "email", "jevStrategy": jev, "forceRewrite": True})
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert measured == [original, *drafts]
+    assert len(writer_payloads) == len(critic_payloads) == 1
+    assert result["tribe_guidance"]["candidate_count"] == 3
+    assert result["refined_message"] == (original if all_wrong_length else drafts[1])
+    evaluations = result["tribe_guidance"]["evaluations"]
+    assert evaluations[1]["eligible"] is evaluations[3]["eligible"] is False
+    assert evaluations[2]["eligible"] is (not all_wrong_length)
+    assert "length" in str(result["critic_notes"]).lower()
+    critic_text = json.dumps(critic_payloads[0], ensure_ascii=False)
+    assert "80–120%" in critic_text and "paragraph" in critic_text and "details" in critic_text
 
 
 def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_drafts(monkeypatch):

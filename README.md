@@ -284,11 +284,23 @@ Baseten FP8 (`baseten/fp8`), Fireworks (`fireworks`) and CoreWeave (`coreweave/n
 in that order. When upstream capacity is unavailable, OpenRouter can use another
 provider of the same model that supports the requested parameters; latency may
 increase. The Jev writer sends one request without application retries or
-regeneration. It uses low
-reasoning, excludes reasoning text and caps completion at 1,536 tokens. Explicit
+regeneration. It uses low reasoning and excludes reasoning text. Both refine
+writer paths scale their completion allowance with the source length for three
+complete JSON drafts, from 1,536 tokens up to 65,536 tokens. Explicit
 GLM analysis requests default to low reasoning and cap completion at 4,096 tokens.
 Refine responses include the served model and provider in `writer_call` when the
 provider returns them; `model` uses the served model when available.
+
+Each rewrite preserves the original substance, supporting details and paragraph
+structure, targeting 80–120% of its word count with a five-word tolerance for
+short inputs. This overrides channel brevity suggestions and also applies to
+the plain-ask candidate. The original and all three drafts still receive TRIBE
+measurements; length-mismatched drafts cannot win even if the critic approves
+them. If no eligible improvement remains, the original is retained. The existing
+30,000-character input limit is unchanged; outputs are never padded or sliced to
+meet the target. Business rewrites use supplied minimum requirements and product
+coverage to explain a factual fit or gap, without naming or denigrating competitors,
+inventing another option's limitations, or assuming unstated units.
 
 <details>
 <summary>Full variable list</summary>

@@ -228,6 +228,78 @@ class TestNeuralOnlyWithoutApiKey:
 
 
 class TestRefinePitchMessage:
+    @pytest.mark.parametrize("jev", [False, True])
+    @pytest.mark.parametrize("case,platform", [
+        ("short", "general"), ("long", "email"), ("long", "linkedin"),
+        ("long", "ad-copy"), ("maximum", "general"),
+    ])
+    def test_writer_preserves_source_length_and_details_in_both_paths(self, monkeypatch, jev, case, platform):
+        from tribe_service import llm_layer
+        message = "Would you join me for a walk?"
+        persona = "A friend who enjoys walking"
+        if case == "long":
+            paragraph = ("Kapı ürün ailesinin tamamını işlemek için gereken çap 1250. "
+                         "Bizim 1000 modelimiz tüm ürünleri kapsamıyor; ihtiyaç ürünlerin tamamını kapsamak. ")
+            message = "\n\n".join([paragraph * 20] * 3).strip()
+            persona = "Ürün ailesinin tamamını işlemek isteyen üretici"
+        elif case == "maximum":
+            message = "kapı " * 5999 + "kapı?"
+        candidates = [message.replace(message.split()[0], word, 1) for word in ("Bunu", "Şunu", "Onu")]
+        if case == "maximum":
+            candidates = [message.replace("kapı", word, 1) for word in ("Kapı", "ürün", "işin")]
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        captured = []
+        def decisions(state, questions):
+            chosen = {"relationship": "business", "objection": "relevance", "angle": "evidence",
+                      "tone": "professional", "repair": "proof", "move": "concrete_value", "repair_target": "whole"}
+            captured.append((state, questions))
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, platform,
+            {"id": "original", "message": message}) if jev else None
+        payloads = []
+        def post(url, **kwargs):
+            payloads.append(kwargs["json"])
+            response = {"candidates": candidates}
+            if jev:
+                response = {"drafts": [{"anchor": message.split()[0], "idea": idea, "message": candidate}
+                    for idea, candidate in zip(("Fit", "Evidence", "Request"), candidates)]}
+            return _mock_openrouter_response(json.dumps(response))
+        monkeypatch.setattr(llm_layer.httpx, "post", post)
+
+        result = refine_pitch_message(message, persona, platform, decision_strategy=strategy, force_rewrite=True,
+                                      openrouter_model=llm_layer.JEV_REFINER_MODEL)
+
+        assert result["candidates"] == candidates
+        assert result["refined_message"] is None
+        assert len(payloads) == 1
+        prompt = payloads[0]["messages"][1]["content"]
+        assert "80–120%" in prompt and "words" in prompt
+        assert "paragraph" in prompt and "details" in prompt
+        assert "not a summary" in prompt
+        for shortening_rule in ("under 35 words", "1–2 sentences", "shortest natural version",
+                                "50-125 words", "under ~80 words", "extreme brevity"):
+            assert shortening_rule not in prompt
+        if case == "short":
+            assert payloads[0]["max_tokens"] == 1536
+        else:
+            assert 1536 < payloads[0]["max_tokens"] <= 65536
+            assert payloads[0]["max_tokens"] >= 3 * len(message.split())
+        if case == "maximum":
+            assert len(message) == 30000
+            assert all(len(candidate) == 30000 for candidate in result["candidates"])
+        if case == "long":
+            assert "1250" in prompt and "1000" in prompt
+            assert "minimum requirement" in prompt and "full product range" in prompt
+            assert "do not name or denigrate competitors" in prompt
+            assert "do not infer units" in prompt
+            if jev:
+                criteria = captured[0][1]["move"]["criteria"]
+                assert "minimum requirement" in criteria["concrete_value"]
+                assert "full product range" in criteria["existing_evidence"]
+                assert "1250" not in str(criteria) and "1000" not in str(criteria)
+
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
     @patch("tribe_service.llm_layer.httpx.post")
     def test_generation_exposes_three_distinct_candidates_for_real_measurement(self, mock_post):

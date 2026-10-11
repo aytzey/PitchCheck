@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/request-body";
 import { refinePitch } from "@/lib/tribe-client";
 import { platformValues, type Platform } from "@/shared/types";
 
@@ -7,12 +8,6 @@ export const dynamic = "force-dynamic";
 const OPENROUTER_MODEL_RE = /^[A-Za-z0-9._:/@+-]{1,160}$/;
 const MAX_MESSAGE_CHARS = parseEnvInt("PITCHCHECK_MAX_MESSAGE_CHARS", 30_000, 10);
 const MAX_PERSONA_CHARS = parseEnvInt("PITCHCHECK_MAX_PERSONA_CHARS", 5_000, 5);
-const MAX_REQUEST_BODY_BYTES = parseEnvInt(
-  "PITCHCHECK_MAX_REQUEST_BODY_BYTES",
-  128 * 1024,
-  1024,
-);
-
 function parseEnvInt(name: string, fallback: number, minimum: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -85,15 +80,11 @@ export async function POST(request: Request) {
       return Response.json({ error: auth.error }, { status: auth.status });
     }
 
-    const rawLength = request.headers.get("content-length");
-    if (rawLength && Number.parseInt(rawLength, 10) > MAX_REQUEST_BODY_BYTES) {
-      return Response.json(
-        { error: `Request body must be at most ${MAX_REQUEST_BODY_BYTES} bytes.` },
-        { status: 413 },
-      );
+    const parsedBody = await readJsonBody(request);
+    if (!parsedBody.ok) {
+      return Response.json({ error: parsedBody.error }, { status: parsedBody.status });
     }
-
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = parsedBody.body as Record<string, unknown> | null;
     if (!body || typeof body !== "object") {
       return Response.json({ error: "Request body must be JSON." }, { status: 400 });
     }

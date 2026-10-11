@@ -22,6 +22,13 @@ describe("GET /api/health", () => {
     expect(data.ok).toBe(true);
     expect(data.service).toBe("pitchscore");
   });
+
+  it("reports unavailable when the scoring service is down", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("connection refused"));
+    const res = await GET();
+    expect(res.status).toBe(503);
+    expect((await res.json()).ok).toBe(false);
+  });
 });
 
 describe("HEAD /api/health", () => {

@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/request-body";
 import { scorePitch } from "@/lib/tribe-client";
 import { isPitchScoreReport, platformValues, type Platform } from "@/shared/types";
 
@@ -7,86 +8,11 @@ export const dynamic = "force-dynamic";
 const OPENROUTER_MODEL_RE = /^[A-Za-z0-9._:/@+-]{1,160}$/;
 const MAX_MESSAGE_CHARS = parseEnvInt("PITCHCHECK_MAX_MESSAGE_CHARS", 30_000, 10);
 const MAX_PERSONA_CHARS = parseEnvInt("PITCHCHECK_MAX_PERSONA_CHARS", 5_000, 5);
-const MAX_REQUEST_BODY_BYTES = parseEnvInt(
-  "PITCHCHECK_MAX_REQUEST_BODY_BYTES",
-  128 * 1024,
-  1024,
-);
-const REQUEST_BODY_TOO_LARGE = Symbol("REQUEST_BODY_TOO_LARGE");
-
 function parseEnvInt(name: string, fallback: number, minimum: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) ? Math.max(minimum, parsed) : fallback;
-}
-
-function bodyIsTooLarge(request: Request): boolean {
-  const rawLength = request.headers.get("content-length");
-  if (!rawLength) return false;
-  const length = Number.parseInt(rawLength, 10);
-  return Number.isFinite(length) && length > MAX_REQUEST_BODY_BYTES;
-}
-
-async function readRequestTextWithLimit(
-  request: Request,
-  maxBytes: number,
-): Promise<string | typeof REQUEST_BODY_TOO_LARGE> {
-  if (!request.body) {
-    return "";
-  }
-
-  const reader = request.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks: string[] = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        await reader.cancel();
-        return REQUEST_BODY_TOO_LARGE;
-      }
-      chunks.push(decoder.decode(value, { stream: true }));
-    }
-    chunks.push(decoder.decode());
-    return chunks.join("");
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-async function readJsonBody(
-  request: Request,
-): Promise<
-  | { ok: true; body: unknown }
-  | { ok: false; status: number; error: string }
-> {
-  if (bodyIsTooLarge(request)) {
-    return {
-      ok: false,
-      status: 413,
-      error: `Request body must be at most ${MAX_REQUEST_BODY_BYTES} bytes.`,
-    };
-  }
-
-  const rawBody = await readRequestTextWithLimit(request, MAX_REQUEST_BODY_BYTES);
-  if (rawBody === REQUEST_BODY_TOO_LARGE) {
-    return {
-      ok: false,
-      status: 413,
-      error: `Request body must be at most ${MAX_REQUEST_BODY_BYTES} bytes.`,
-    };
-  }
-
-  try {
-    return { ok: true, body: JSON.parse(rawBody) };
-  } catch {
-    return { ok: true, body: null };
-  }
 }
 
 function isAuthorized(request: Request): { ok: true } | { ok: false; status: number; error: string } {

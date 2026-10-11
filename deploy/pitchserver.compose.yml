@@ -1,0 +1,87 @@
+name: pitchserver
+services:
+  tribe:
+    image: ${PITCHSERVER_IMAGE:?Set PITCHSERVER_IMAGE to the verified release image}
+    container_name: pitchserver_tribe
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    runtime: nvidia
+    cpus: 4
+    mem_limit: 12g
+    memswap_limit: 12g
+    pids_limit: 256
+    cap_drop: [ALL]
+    # Existing model/auth mounts have mixed ownership; keep only file access capabilities.
+    cap_add: [DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    env_file:
+      - path: ${PITCHSERVER_ENV_FILE:-./service.env}
+        format: raw
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "0"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      TRIBE_MODEL_ID: facebook/tribev2
+      TRIBE_DEVICE: cuda
+      TRIBE_TEXT_DEVICE: auto
+      TRIBE_TEXT_BATCH_SIZE: "4"
+      TRIBE_TEXT_INPUT_MODE: direct
+      TRIBE_CACHE_DIR: /models
+      HF_HOME: /models/huggingface
+      HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
+      XDG_CACHE_HOME: /models/.cache
+      HF_HUB_OFFLINE: "1"
+      TRIBE_CUDA_MEMORY_LIMIT_GB: "8"
+      TRIBE_PREDICTION_CACHE_SIZE: "8"
+      TRIBE_PREDICTION_CACHE_MAX_BYTES: "67108864"
+      TRIBE_MAX_SCORE_CONCURRENCY: "1"
+      TRIBE_MAX_LLM_CONCURRENCY: "2"
+      TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS: "5"
+      TRIBE_SCORE_TIMEOUT_SECONDS: "900"
+      TRIBE_LLM_TIMEOUT_SECONDS: "180"
+      TRIBE_IDLE_UNLOAD_SECONDS: "600"
+      TRIBE_OOM_FALLBACK_TEXT_DEVICE: accelerate,cpu
+      TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB: auto
+      TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB: "8"
+      TRIBE_ACCELERATE_OFFLOAD_FOLDER: /models/offload
+      TRIBE_ALLOW_MOCK: "0"
+      PITCHSERVER_AUTH_REQUIRED: "1"
+      PITCHSERVER_AUTH_FILE: /auth/pitchserver_auth.json
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      TOKENIZERS_PARALLELISM: "false"
+    volumes:
+      - ${PITCHSERVER_ROOT:-.}/models:/models
+      - ${PITCHSERVER_ROOT:-.}/auth:/auth
+    ports:
+      - "127.0.0.1:18090:8090"
+    networks: [machinity_proxy_net]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: machinity_proxy_net
+      traefik.http.routers.pitchserver.rule: Host(`pitchserver.machinity.ai`)
+      traefik.http.routers.pitchserver.entrypoints: websecure
+      traefik.http.routers.pitchserver.tls: "true"
+      traefik.http.routers.pitchserver.tls.certresolver: le
+      traefik.http.services.pitchserver.loadbalancer.server.port: "8090"
+      traefik.http.routers.pitchserver-http.rule: Host(`pitchserver.machinity.ai`)
+      traefik.http.routers.pitchserver-http.entrypoints: web
+      traefik.http.routers.pitchserver-http.middlewares: pitchserver-redirect
+      traefik.http.middlewares.pitchserver-redirect.redirectscheme.scheme: https
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+networks:
+  machinity_proxy_net:
+    external: true

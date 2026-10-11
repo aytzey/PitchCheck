@@ -27,7 +27,6 @@ const PITCH_SERVER_SSH_PORT: &str = "2022";
 const PITCH_SERVER_USER: &str = "dkmserver";
 const PITCH_SERVER_WORKDIR: &str = "/home/dkmserver/Desktop/Machinity/aytug/pitchserver";
 const PITCH_SERVER_REMOTE_PORT: u16 = 18090;
-const PITCH_SERVER_DOMAIN: &str = "pitchserver.machinity.ai";
 const APP_ENV_FILENAME: &str = "runtime.env";
 const SERVICE_ENV_FILENAME: &str = "service.env";
 const TRIBE_PORT: u16 = 8090;
@@ -39,7 +38,6 @@ const OCI_MANIFEST_ACCEPT: &str =
     "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json";
 const TRIBE_SCORE_TIMEOUT_SECONDS: u64 = 900;
 const TRIBE_CLIENT_SCORE_TIMEOUT_SECONDS: u64 = TRIBE_SCORE_TIMEOUT_SECONDS + 30;
-const TRIBE_IDLE_UNLOAD_SECONDS: u64 = 600;
 const SKIPPED_CLARIFICATION_ANSWER: &str =
     "No answer provided; proceed without inventing this fact.";
 const MAX_CLARIFICATION_ROUNDS: u8 = 2;
@@ -396,9 +394,8 @@ async fn connect_runtime(
         if requested_runtime == "pitchserver" {
             stop_pitch_server_tunnel(&state)?;
             clear_pitch_server_auth_token(&state)?;
-            let image = pitch_server_image(&configured_image);
             let (status, tunnel, auth_token) =
-                connect_pitch_server(&state.client, &image, local_gpu, &config).await?;
+                connect_pitch_server(&state.client, local_gpu, &config).await?;
             replace_status(&app, &state, status.clone())?;
             store_pitch_server_tunnel(&state, tunnel)?;
             store_pitch_server_auth_token(&state, auth_token)?;
@@ -972,22 +969,6 @@ fn default_image() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| DEFAULT_IMAGE_FALLBACK.to_string())
-}
-
-fn pitch_server_image(configured_image: &str) -> String {
-    if is_registry_qualified_image(configured_image) {
-        configured_image.to_string()
-    } else {
-        DEFAULT_IMAGE_FALLBACK.to_string()
-    }
-}
-
-fn is_registry_qualified_image(image: &str) -> bool {
-    if !image.contains('/') {
-        return false;
-    }
-    let first_segment = image.split('/').next().unwrap_or("");
-    first_segment == "localhost" || first_segment.contains('.') || first_segment.contains(':')
 }
 
 fn state_path(app: &AppHandle) -> RuntimeResult<PathBuf> {
@@ -1817,7 +1798,6 @@ async fn stop_local_container() -> RuntimeResult<()> {
 
 async fn connect_pitch_server(
     client: &Client,
-    image: &str,
     local_gpu: LocalGpuInfo,
     config: &RuntimeConfig,
 ) -> RuntimeResult<(RuntimeStatus, Child, String)> {
@@ -1847,10 +1827,11 @@ async fn connect_pitch_server(
             RuntimeError::Message("PitchServer password is required for this runtime.".to_string())
         })?;
     ensure_pitch_server_ssh_tools()?;
-    validate_docker_image_reference(image)?;
 
-    let script = pitch_server_remote_script(image, config);
-    pitch_server_ssh_output(password, &script)?;
+    let script = pitch_server_remote_script();
+    let server_image = pitch_server_ssh_output(password, &script)?
+        .trim()
+        .to_string();
 
     let local_port = reserve_local_port()?;
     let mut tunnel = spawn_pitch_server_tunnel(password, local_port)?;
@@ -1867,7 +1848,14 @@ async fn connect_pitch_server(
         let _ = tunnel.wait();
         return Err(error);
     }
-    let token = login_pitch_server(client, &service_url, username, service_password).await?;
+    let token = match login_pitch_server(client, &service_url, username, service_password).await {
+        Ok(token) => token,
+        Err(error) => {
+            let _ = tunnel.kill();
+            let _ = tunnel.wait();
+            return Err(error);
+        }
+    };
 
     Ok((
         RuntimeStatus {
@@ -1878,7 +1866,7 @@ async fn connect_pitch_server(
             container_id: Some("pitchserver_tribe".to_string()),
             vast_instance_id: None,
             offer: None,
-            image: image.to_string(),
+            image: server_image,
             last_error: None,
         },
         tunnel,
@@ -1886,183 +1874,20 @@ async fn connect_pitch_server(
     ))
 }
 
-fn pitch_server_remote_script(image: &str, config: &RuntimeConfig) -> String {
-    let service_env = pitch_server_service_env(config);
+fn pitch_server_remote_script() -> String {
     format!(
         r#"set -euo pipefail
-mkdir -p "{workdir}/models" "{workdir}/logs" "{workdir}/auth"
 cd "{workdir}"
-cat > docker-compose.yml <<'PITCHSERVER_COMPOSE'
-name: pitchserver
-
-services:
-  tribe:
-    image: {image}
-    container_name: pitchserver_tribe
-    restart: unless-stopped
-    runtime: nvidia
-    pull_policy: always
-    env_file:
-      - ../.env
-      - ./service.env
-    environment:
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility
-      PYTHONUNBUFFERED: "1"
-      TRIBE_MODEL_ID: facebook/tribev2
-      TRIBE_DEVICE: cuda
-      TRIBE_TEXT_DEVICE: auto
-      TRIBE_TEXT_BATCH_SIZE: auto
-      TRIBE_TEXT_INPUT_MODE: direct
-      TRIBE_CACHE_DIR: /models
-      HF_HOME: /models/huggingface
-      HUGGINGFACE_HUB_CACHE: /models/huggingface/hub
-      XDG_CACHE_HOME: /models/.cache
-      TRIBE_SCORE_TIMEOUT_SECONDS: "{score_timeout_seconds}"
-      TRIBE_PREDICTION_CACHE_SIZE: "8"
-      TRIBE_MAX_SCORE_CONCURRENCY: "1"
-      TRIBE_IDLE_UNLOAD_SECONDS: "{idle_unload_seconds}"
-      TRIBE_OOM_FALLBACK_TEXT_DEVICE: accelerate,cpu
-      TRIBE_ACCELERATE_MAX_GPU_MEMORY_GB: auto
-      TRIBE_ACCELERATE_MAX_CPU_MEMORY_GB: "32"
-      TRIBE_ACCELERATE_OFFLOAD_FOLDER: /models/offload
-      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-      TRIBE_ALLOW_MOCK: "0"
-      OPENROUTER_API_KEY: ${{OPENROUTER_API_KEY:-}}
-      OPENROUTER_MODEL: ${{OPENROUTER_MODEL:-google/gemini-3.8-flash}}
-      OPENROUTER_REFINER_MODEL: ${{OPENROUTER_REFINER_MODEL:-google/gemini-3.8-flash}}
-    volumes:
-      - ./models:/models
-      - ./logs:/logs
-      - ./auth:/auth
-    ports:
-      - "127.0.0.1:{remote_port}:{tribe_port}"
-    networks:
-      - machinity_proxy_net
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=machinity_proxy_net
-      - traefik.http.routers.pitchserver.rule=Host(`{domain}`)
-      - traefik.http.routers.pitchserver.entrypoints=websecure
-      - traefik.http.routers.pitchserver.tls=true
-      - traefik.http.routers.pitchserver.tls.certresolver=le
-      - traefik.http.services.pitchserver.loadbalancer.server.port={tribe_port}
-      - traefik.http.routers.pitchserver-http.rule=Host(`{domain}`)
-      - traefik.http.routers.pitchserver-http.entrypoints=web
-      - traefik.http.routers.pitchserver-http.middlewares=pitchserver-redirect
-      - traefik.http.middlewares.pitchserver-redirect.redirectscheme.scheme=https
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{tribe_port}/health')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 300s
-
-networks:
-  machinity_proxy_net:
-    external: true
-PITCHSERVER_COMPOSE
-
-cat > service.env <<'PITCHSERVER_SERVICE_ENV'
-{service_env}
-PITCHSERVER_SERVICE_ENV
-chmod 600 service.env
-
-cat > update-pitchserver.sh <<'PITCHSERVER_UPDATE'
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")"
-read_env_value() {{
-  local file="$1"
-  local key="$2"
-  [ -f "$file" ] || return 0
-  awk -v key="$key" 'index($0, key "=") == 1 {{ print substr($0, length(key) + 2); exit }}' "$file"
-}}
-if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
-  OPENROUTER_API_KEY="$(read_env_value ./service.env OPENROUTER_API_KEY)"
+if [ ! -f docker-compose.yml ]; then
+  echo "PitchServer release is not installed. Deploy the managed server release first." >&2
+  exit 1
 fi
-if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
-  OPENROUTER_API_KEY="$(read_env_value ../.env OPENROUTER_API_KEY)"
+if [ "$(docker inspect --format '{{{{.State.Running}}}}' pitchserver_tribe 2>/dev/null || true)" != "true" ]; then
+  docker compose up -d --no-deps --pull never tribe >&2
 fi
-if [ -z "${{OPENROUTER_API_KEY:-}}" ]; then
-  OPENROUTER_API_KEY="$(read_env_value ../../landing/.env OPENROUTER_API_KEY)"
-fi
-if [ -z "${{OPENROUTER_MODEL:-}}" ]; then
-  OPENROUTER_MODEL="$(read_env_value ./service.env OPENROUTER_MODEL)"
-fi
-if [ -z "${{OPENROUTER_MODEL:-}}" ]; then
-  OPENROUTER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_MODEL)"
-fi
-if [ -z "${{OPENROUTER_REFINER_MODEL:-}}" ]; then
-  OPENROUTER_REFINER_MODEL="$(read_env_value ./service.env OPENROUTER_REFINER_MODEL)"
-fi
-if [ -z "${{OPENROUTER_REFINER_MODEL:-}}" ]; then
-  OPENROUTER_REFINER_MODEL="$(read_env_value ../../landing/.env OPENROUTER_REFINER_MODEL)"
-fi
-export OPENROUTER_API_KEY OPENROUTER_MODEL OPENROUTER_REFINER_MODEL
-docker compose pull tribe
-docker compose up -d --remove-orphans
-docker compose ps tribe
-PITCHSERVER_UPDATE
-chmod +x update-pitchserver.sh
-
-if command -v crontab >/dev/null 2>&1; then
-  (crontab -l 2>/dev/null | grep -v -F "{workdir}/update-pitchserver.sh" || true; echo "*/15 * * * * {workdir}/update-pitchserver.sh >> {workdir}/update.log 2>&1") | crontab -
-fi
-
-./update-pitchserver.sh
+docker inspect --format '{{{{.Image}}}}' pitchserver_tribe
 "#,
-        domain = PITCH_SERVER_DOMAIN,
-        image = image,
-        idle_unload_seconds = TRIBE_IDLE_UNLOAD_SECONDS,
-        remote_port = PITCH_SERVER_REMOTE_PORT,
-        score_timeout_seconds = TRIBE_SCORE_TIMEOUT_SECONDS,
-        service_env = service_env,
-        tribe_port = TRIBE_PORT,
         workdir = PITCH_SERVER_WORKDIR,
-    )
-}
-
-fn pitch_server_service_env(config: &RuntimeConfig) -> String {
-    let open_router_model = config
-        .open_router_model
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(DEFAULT_OPENROUTER_MODEL);
-    let open_router_refiner_model = config
-        .open_router_refiner_model
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(open_router_model);
-    let pitch_server_username = config
-        .pitch_server_username
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("pitchserver");
-    let pitch_server_password = config
-        .pitch_server_password
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("");
-    format!(
-        concat!(
-            "OPENROUTER_API_KEY={}\n",
-            "OPENROUTER_MODEL={}\n",
-            "OPENROUTER_REFINER_MODEL={}\n",
-            "PITCHSERVER_AUTH_REQUIRED=1\n",
-            "PITCHSERVER_AUTH_FILE=/auth/pitchserver_auth.json\n",
-            "PITCHSERVER_AUTH_SEED_USERNAME={}\n",
-            "PITCHSERVER_AUTH_SEED_PASSWORD={}\n",
-            "PITCHSERVER_SESSION_TTL_SECONDS=86400\n",
-        ),
-        env_safe(config.open_router_api_key.as_deref().unwrap_or("")),
-        env_safe(open_router_model),
-        env_safe(open_router_refiner_model),
-        env_safe(pitch_server_username),
-        env_safe(pitch_server_password),
     )
 }
 
@@ -2313,18 +2138,6 @@ fn ensure_pitch_server_ssh_tools() -> RuntimeResult<()> {
         }
     }
     Ok(())
-}
-
-fn validate_docker_image_reference(image: &str) -> RuntimeResult<()> {
-    if image.chars().all(|character| {
-        character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-' | ':' | '/' | '@')
-    }) {
-        Ok(())
-    } else {
-        Err(RuntimeError::Message(
-            "Runtime image contains unsupported characters.".to_string(),
-        ))
-    }
 }
 
 fn ensure_docker_available() -> RuntimeResult<()> {
@@ -3138,22 +2951,6 @@ mod tests {
     }
 
     #[test]
-    fn pitch_server_image_ignores_local_aliases() {
-        assert_eq!(
-            pitch_server_image("pitchcheck-tribe:local"),
-            DEFAULT_IMAGE_FALLBACK
-        );
-        assert_eq!(
-            pitch_server_image("ghcr.io/acme/pitchcheck-tribe:canary"),
-            "ghcr.io/acme/pitchcheck-tribe:canary"
-        );
-        assert_eq!(
-            pitch_server_image("localhost:5000/pitchcheck-tribe:dev"),
-            "localhost:5000/pitchcheck-tribe:dev"
-        );
-    }
-
-    #[test]
     fn pitch_server_credential_change_payload_uses_api_field_names() {
         let value = pitch_server_credential_change_payload(&PitchServerCredentialChangeRequest {
             current_password: "old-pass".to_string(),
@@ -3206,18 +3003,18 @@ mod tests {
     }
 
     #[test]
-    fn pitch_server_script_configures_idle_pipeline_unload() {
-        let script = pitch_server_remote_script(
-            DEFAULT_IMAGE_FALLBACK,
-            &RuntimeConfig {
-                runtime_kind: Some("pitchserver".to_string()),
-                pitch_server_username: Some("pitchserver".to_string()),
-                pitch_server_password: Some("password-123".to_string()),
-                ..RuntimeConfig::default()
-            },
-        );
-
-        assert!(script.contains(r#"TRIBE_IDLE_UNLOAD_SECONDS: "600""#));
-        assert!(script.contains(r#"TRIBE_SCORE_TIMEOUT_SECONDS: "900""#));
+    fn pitch_server_connection_preserves_the_managed_release() {
+        let script = pitch_server_remote_script();
+        assert!(script.contains("docker inspect"));
+        assert!(script.contains("--no-deps --pull never tribe"));
+        for unsafe_action in [
+            "cat >",
+            "crontab",
+            "docker compose pull",
+            "--remove-orphans",
+            "service.env",
+        ] {
+            assert!(!script.contains(unsafe_action), "{unsafe_action}");
+        }
     }
 }

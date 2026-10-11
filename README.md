@@ -267,16 +267,43 @@ cargo test --manifest-path src-tauri/Cargo.toml
 |----------|---------|--------------|
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | High-quality model for interpreting neural output |
-| `OPENROUTER_REFINER_MODEL` | `google/gemini-3.8-flash` | Which model writes rewrite drafts in the desktop app and `/refine` service endpoint |
+| `OPENROUTER_REFINER_MODEL` | `google/gemini-3.8-flash` | Which model writes rewrite drafts for requests without `jevStrategy` |
 | `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
 | `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |
 | `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |
-| `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout; prompt/output caps are not applied |
+| `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |
 | `TRIBE_ALLOW_MOCK` | `0` | Deterministic mock for tests |
 | `TRIBE_PREDICTION_CACHE_SIZE` | `8` | In-memory LRU cache for repeated TRIBE text predictions |
 | `TRIBE_SCORE_TIMEOUT_SECONDS` | `900` | Timeout (first run downloads ~8GB of weights) |
+
+Requests with `jevStrategy: true` use one `z-ai/glm-5.3-flash` writer call after Jev's
+decision, regardless of the client's `openRouterModel`. GLM requests prefer
+Baseten FP8 (`baseten/fp8`), Fireworks (`fireworks`) and CoreWeave (`coreweave/nvfp4`),
+in that order. When upstream capacity is unavailable, OpenRouter can use another
+provider of the same model that supports the requested parameters; latency may
+increase. The Jev writer sends one request without application retries or
+regeneration. It uses low reasoning and excludes reasoning text. Both refine
+writer paths scale their completion allowance with the source length for three
+complete JSON drafts, from 1,536 tokens up to 65,536 tokens. Explicit
+GLM analysis requests default to low reasoning and cap completion at 4,096 tokens.
+Refine responses include the served model and provider in `writer_call` when the
+provider returns them; `model` uses the served model when available.
+
+Each rewrite preserves the original meaning, supporting details and paragraph
+coverage while actively rewriting its phrasing and organization, targeting
+80–120% of its word count with a five-word tolerance for
+short inputs. This overrides channel brevity suggestions and also applies to
+the plain-ask candidate. The three drafts must have different openings and
+recognizable strategies; copied source text or punctuation-only variants are
+not rewrite alternatives. The original and all three drafts still receive TRIBE
+measurements; length-mismatched drafts cannot win even if the critic approves
+them. If no eligible improvement remains, the original is retained. The existing
+30,000-character input limit is unchanged; outputs are never padded or sliced to
+meet the target. Business rewrites use supplied minimum requirements and product
+coverage to explain a factual fit or gap, without naming or denigrating competitors,
+inventing another option's limitations, or assuming unstated units.
 
 <details>
 <summary>Full variable list</summary>

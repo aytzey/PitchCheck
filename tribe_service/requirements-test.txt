@@ -1,0 +1,10 @@
+# Match the verified Python 3.11 server runtime without installing GPU dependencies in CI.
+fastapi==0.141.1
+starlette==1.7.0
+pydantic==2.13.5
+anyio==4.15.1
+httpx==0.28.1
+numpy==2.4.6
+pandas==3.0.6
+pytest==9.1.1
+pytest-asyncio==1.4.0

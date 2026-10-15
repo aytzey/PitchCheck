@@ -1,0 +1,2350 @@
+{
+ "date": "2026-10-16",
+ "classifier_model": "claude-sonnet (Anthropic) via Claude Code subagent; generator was OpenAI GPT (different model family)",
+ "blind": "annotator saw only shuffled texts and label definitions; no conditions, hypotheses, ROI names or files",
+ "items": {
+  "S1-000": {
+   "pair_id": "topic19",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-001": {
+   "pair_id": "topic12",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-002": {
+   "pair_id": "topic04",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-003": {
+   "pair_id": "topic19",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-004": {
+   "pair_id": "topic16",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-005": {
+   "pair_id": "topic15",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-006": {
+   "pair_id": "topic17",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-007": {
+   "pair_id": "topic02",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-008": {
+   "pair_id": "topic15",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-009": {
+   "pair_id": "topic03",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-010": {
+   "pair_id": "topic12",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-011": {
+   "pair_id": "topic09",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-012": {
+   "pair_id": "topic11",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-013": {
+   "pair_id": "topic07",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-014": {
+   "pair_id": "topic02",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-015": {
+   "pair_id": "topic04",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-016": {
+   "pair_id": "topic01",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-017": {
+   "pair_id": "topic10",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-018": {
+   "pair_id": "topic11",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-019": {
+   "pair_id": "topic08",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-020": {
+   "pair_id": "topic13",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-021": {
+   "pair_id": "topic03",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-022": {
+   "pair_id": "topic12",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-023": {
+   "pair_id": "topic19",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-024": {
+   "pair_id": "topic00",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-025": {
+   "pair_id": "topic12",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-026": {
+   "pair_id": "topic01",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-027": {
+   "pair_id": "topic19",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-028": {
+   "pair_id": "topic07",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-029": {
+   "pair_id": "topic15",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-030": {
+   "pair_id": "topic06",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-031": {
+   "pair_id": "topic04",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-032": {
+   "pair_id": "topic02",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-033": {
+   "pair_id": "topic02",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-034": {
+   "pair_id": "topic05",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-035": {
+   "pair_id": "topic13",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-036": {
+   "pair_id": "topic08",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-037": {
+   "pair_id": "topic11",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-038": {
+   "pair_id": "topic14",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-039": {
+   "pair_id": "topic00",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-040": {
+   "pair_id": "topic03",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-041": {
+   "pair_id": "topic15",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-042": {
+   "pair_id": "topic08",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-043": {
+   "pair_id": "topic00",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-044": {
+   "pair_id": "topic14",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-045": {
+   "pair_id": "topic18",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-046": {
+   "pair_id": "topic13",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-047": {
+   "pair_id": "topic06",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-048": {
+   "pair_id": "topic16",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-049": {
+   "pair_id": "topic17",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-050": {
+   "pair_id": "topic06",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-051": {
+   "pair_id": "topic18",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-052": {
+   "pair_id": "topic05",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-053": {
+   "pair_id": "topic10",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-054": {
+   "pair_id": "topic10",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-055": {
+   "pair_id": "topic10",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-056": {
+   "pair_id": "topic06",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-057": {
+   "pair_id": "topic09",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-058": {
+   "pair_id": "topic18",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-059": {
+   "pair_id": "topic07",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-060": {
+   "pair_id": "topic09",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-061": {
+   "pair_id": "topic14",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-062": {
+   "pair_id": "topic11",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-063": {
+   "pair_id": "topic00",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-064": {
+   "pair_id": "topic01",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-065": {
+   "pair_id": "topic05",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-066": {
+   "pair_id": "topic01",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-067": {
+   "pair_id": "topic08",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-068": {
+   "pair_id": "topic18",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-069": {
+   "pair_id": "topic07",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-070": {
+   "pair_id": "topic16",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-071": {
+   "pair_id": "topic03",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-072": {
+   "pair_id": "topic05",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-073": {
+   "pair_id": "topic14",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-074": {
+   "pair_id": "topic09",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-075": {
+   "pair_id": "topic17",
+   "condition": "U",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-076": {
+   "pair_id": "topic13",
+   "condition": "T",
+   "expected": "situation-specific",
+   "label": "situation-specific"
+  },
+  "S1-077": {
+   "pair_id": "topic16",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S1-078": {
+   "pair_id": "topic17",
+   "condition": "N",
+   "expected": "reference",
+   "label": "reference"
+  },
+  "S1-079": {
+   "pair_id": "topic04",
+   "condition": "U_you",
+   "expected": "generic",
+   "label": "generic"
+  },
+  "S2-000": {
+   "pair_id": "b2b09",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-001": {
+   "pair_id": "sun13",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-002": {
+   "pair_id": "b2b10",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-003": {
+   "pair_id": "sun13",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-004": {
+   "pair_id": "b2b12",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-005": {
+   "pair_id": "sun07",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-006": {
+   "pair_id": "sun05",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-007": {
+   "pair_id": "b2b01",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-008": {
+   "pair_id": "b2b01",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-009": {
+   "pair_id": "sun01",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-010": {
+   "pair_id": "b2b09",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-011": {
+   "pair_id": "b2b08",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-012": {
+   "pair_id": "sun07",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-013": {
+   "pair_id": "b2b10",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-014": {
+   "pair_id": "sun07",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-015": {
+   "pair_id": "b2b06",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-016": {
+   "pair_id": "sun09",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-017": {
+   "pair_id": "sun11",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-018": {
+   "pair_id": "sun05",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-019": {
+   "pair_id": "sun17",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-020": {
+   "pair_id": "sun19",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-021": {
+   "pair_id": "sun18",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-022": {
+   "pair_id": "sun05",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-023": {
+   "pair_id": "sun01",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-024": {
+   "pair_id": "b2b03",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-025": {
+   "pair_id": "sun06",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-026": {
+   "pair_id": "sun14",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-027": {
+   "pair_id": "sun08",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-028": {
+   "pair_id": "sun04",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-029": {
+   "pair_id": "b2b06",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-030": {
+   "pair_id": "sun06",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-031": {
+   "pair_id": "b2b07",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-032": {
+   "pair_id": "b2b14",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-033": {
+   "pair_id": "b2b16",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-034": {
+   "pair_id": "b2b03",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-035": {
+   "pair_id": "b2b14",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-036": {
+   "pair_id": "sun02",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-037": {
+   "pair_id": "b2b10",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-038": {
+   "pair_id": "b2b18",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-039": {
+   "pair_id": "b2b17",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-040": {
+   "pair_id": "sun08",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-041": {
+   "pair_id": "sun19",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-042": {
+   "pair_id": "sun15",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-043": {
+   "pair_id": "sun02",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-044": {
+   "pair_id": "sun09",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-045": {
+   "pair_id": "sun00",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-046": {
+   "pair_id": "sun00",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-047": {
+   "pair_id": "sun11",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-048": {
+   "pair_id": "sun08",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-049": {
+   "pair_id": "b2b11",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-050": {
+   "pair_id": "b2b00",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-051": {
+   "pair_id": "sun18",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-052": {
+   "pair_id": "b2b04",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-053": {
+   "pair_id": "b2b08",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-054": {
+   "pair_id": "b2b07",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-055": {
+   "pair_id": "sun15",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-056": {
+   "pair_id": "b2b09",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-057": {
+   "pair_id": "sun11",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-058": {
+   "pair_id": "sun17",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-059": {
+   "pair_id": "sun03",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-060": {
+   "pair_id": "b2b12",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-061": {
+   "pair_id": "sun07",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-062": {
+   "pair_id": "sun01",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-063": {
+   "pair_id": "b2b02",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-064": {
+   "pair_id": "b2b18",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-065": {
+   "pair_id": "sun12",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-066": {
+   "pair_id": "b2b15",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-067": {
+   "pair_id": "sun02",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-068": {
+   "pair_id": "b2b08",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-069": {
+   "pair_id": "sun19",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-070": {
+   "pair_id": "b2b17",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-071": {
+   "pair_id": "sun08",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-072": {
+   "pair_id": "sun17",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-073": {
+   "pair_id": "b2b14",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-074": {
+   "pair_id": "sun00",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-075": {
+   "pair_id": "sun14",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-076": {
+   "pair_id": "sun03",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-077": {
+   "pair_id": "b2b19",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-078": {
+   "pair_id": "b2b05",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-079": {
+   "pair_id": "sun09",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-080": {
+   "pair_id": "b2b18",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-081": {
+   "pair_id": "sun13",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-082": {
+   "pair_id": "b2b00",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-083": {
+   "pair_id": "sun15",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-084": {
+   "pair_id": "sun12",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-085": {
+   "pair_id": "sun07",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-086": {
+   "pair_id": "sun06",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-087": {
+   "pair_id": "b2b03",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-088": {
+   "pair_id": "b2b12",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-089": {
+   "pair_id": "sun14",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-090": {
+   "pair_id": "b2b17",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-091": {
+   "pair_id": "sun11",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-092": {
+   "pair_id": "b2b04",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-093": {
+   "pair_id": "sun14",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-094": {
+   "pair_id": "b2b16",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-095": {
+   "pair_id": "b2b07",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-096": {
+   "pair_id": "sun06",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-097": {
+   "pair_id": "b2b19",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-098": {
+   "pair_id": "sun04",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-099": {
+   "pair_id": "b2b05",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-100": {
+   "pair_id": "sun16",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-101": {
+   "pair_id": "b2b10",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-102": {
+   "pair_id": "b2b13",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-103": {
+   "pair_id": "b2b01",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-104": {
+   "pair_id": "b2b05",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-105": {
+   "pair_id": "b2b15",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-106": {
+   "pair_id": "b2b11",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-107": {
+   "pair_id": "b2b12",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-108": {
+   "pair_id": "sun17",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-109": {
+   "pair_id": "b2b14",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-110": {
+   "pair_id": "b2b09",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-111": {
+   "pair_id": "sun18",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-112": {
+   "pair_id": "sun04",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-113": {
+   "pair_id": "sun14",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-114": {
+   "pair_id": "b2b09",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-115": {
+   "pair_id": "sun02",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-116": {
+   "pair_id": "sun13",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-117": {
+   "pair_id": "b2b06",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-118": {
+   "pair_id": "b2b08",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-119": {
+   "pair_id": "b2b13",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-120": {
+   "pair_id": "b2b15",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-121": {
+   "pair_id": "sun18",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-122": {
+   "pair_id": "sun08",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-123": {
+   "pair_id": "b2b01",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-124": {
+   "pair_id": "b2b03",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-125": {
+   "pair_id": "sun19",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-126": {
+   "pair_id": "sun03",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-127": {
+   "pair_id": "b2b19",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-128": {
+   "pair_id": "b2b13",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-129": {
+   "pair_id": "b2b02",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-130": {
+   "pair_id": "sun09",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-131": {
+   "pair_id": "sun13",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-132": {
+   "pair_id": "sun00",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-133": {
+   "pair_id": "sun05",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-134": {
+   "pair_id": "b2b11",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-135": {
+   "pair_id": "sun04",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-136": {
+   "pair_id": "b2b04",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-137": {
+   "pair_id": "sun10",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-138": {
+   "pair_id": "sun15",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-139": {
+   "pair_id": "b2b02",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-140": {
+   "pair_id": "b2b17",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-141": {
+   "pair_id": "b2b08",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-142": {
+   "pair_id": "sun11",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-143": {
+   "pair_id": "b2b13",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-144": {
+   "pair_id": "sun12",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-145": {
+   "pair_id": "b2b06",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-146": {
+   "pair_id": "sun10",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-147": {
+   "pair_id": "sun03",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-148": {
+   "pair_id": "b2b18",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-149": {
+   "pair_id": "sun01",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-150": {
+   "pair_id": "sun00",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-151": {
+   "pair_id": "sun17",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-152": {
+   "pair_id": "sun18",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-153": {
+   "pair_id": "sun10",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-154": {
+   "pair_id": "sun12",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-155": {
+   "pair_id": "b2b14",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-156": {
+   "pair_id": "sun10",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-157": {
+   "pair_id": "sun16",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-158": {
+   "pair_id": "b2b07",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-159": {
+   "pair_id": "b2b07",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-160": {
+   "pair_id": "b2b12",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-161": {
+   "pair_id": "b2b00",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-162": {
+   "pair_id": "b2b04",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-163": {
+   "pair_id": "sun04",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-164": {
+   "pair_id": "b2b01",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-165": {
+   "pair_id": "b2b17",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-166": {
+   "pair_id": "sun02",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-167": {
+   "pair_id": "b2b02",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-168": {
+   "pair_id": "b2b00",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-169": {
+   "pair_id": "b2b19",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-170": {
+   "pair_id": "b2b05",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-171": {
+   "pair_id": "b2b03",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-172": {
+   "pair_id": "sun01",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-173": {
+   "pair_id": "b2b13",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-174": {
+   "pair_id": "b2b04",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-175": {
+   "pair_id": "sun10",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-176": {
+   "pair_id": "sun16",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-177": {
+   "pair_id": "b2b11",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-178": {
+   "pair_id": "b2b16",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-179": {
+   "pair_id": "b2b10",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-180": {
+   "pair_id": "b2b06",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-181": {
+   "pair_id": "b2b18",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-182": {
+   "pair_id": "b2b19",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-183": {
+   "pair_id": "b2b02",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-184": {
+   "pair_id": "sun16",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-185": {
+   "pair_id": "sun16",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-186": {
+   "pair_id": "sun12",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-187": {
+   "pair_id": "b2b11",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-188": {
+   "pair_id": "sun15",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-189": {
+   "pair_id": "sun09",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-190": {
+   "pair_id": "b2b16",
+   "condition": "Fact_you",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-191": {
+   "pair_id": "sun05",
+   "condition": "How_nobody",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-192": {
+   "pair_id": "b2b05",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-193": {
+   "pair_id": "b2b00",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-194": {
+   "pair_id": "sun06",
+   "condition": "Whygain",
+   "expected": "why",
+   "label": "why"
+  },
+  "S2-195": {
+   "pair_id": "sun03",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-196": {
+   "pair_id": "b2b15",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-197": {
+   "pair_id": "b2b15",
+   "condition": "Fact",
+   "expected": "fact",
+   "label": "fact"
+  },
+  "S2-198": {
+   "pair_id": "b2b16",
+   "condition": "How",
+   "expected": "how",
+   "label": "how"
+  },
+  "S2-199": {
+   "pair_id": "sun19",
+   "condition": "Whyloss",
+   "expected": "why",
+   "label": "why"
+  },
+  "S3-000": {
+   "pair_id": "offer16",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-001": {
+   "pair_id": "offer14",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-002": {
+   "pair_id": "offer02",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-003": {
+   "pair_id": "offer07",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-004": {
+   "pair_id": "offer16",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-005": {
+   "pair_id": "offer12",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-006": {
+   "pair_id": "offer13",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-007": {
+   "pair_id": "offer19",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-008": {
+   "pair_id": "offer09",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-009": {
+   "pair_id": "offer11",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-010": {
+   "pair_id": "offer08",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-011": {
+   "pair_id": "offer01",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-012": {
+   "pair_id": "offer01",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-013": {
+   "pair_id": "offer06",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-014": {
+   "pair_id": "offer03",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-015": {
+   "pair_id": "offer16",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-016": {
+   "pair_id": "offer14",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-017": {
+   "pair_id": "offer07",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-018": {
+   "pair_id": "offer00",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-019": {
+   "pair_id": "offer15",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-020": {
+   "pair_id": "offer14",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-021": {
+   "pair_id": "offer01",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-022": {
+   "pair_id": "offer18",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-023": {
+   "pair_id": "offer04",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-024": {
+   "pair_id": "offer17",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-025": {
+   "pair_id": "offer09",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-026": {
+   "pair_id": "offer03",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-027": {
+   "pair_id": "offer07",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-028": {
+   "pair_id": "offer03",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-029": {
+   "pair_id": "offer12",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-030": {
+   "pair_id": "offer00",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-031": {
+   "pair_id": "offer10",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-032": {
+   "pair_id": "offer19",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-033": {
+   "pair_id": "offer10",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-034": {
+   "pair_id": "offer00",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-035": {
+   "pair_id": "offer13",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-036": {
+   "pair_id": "offer16",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-037": {
+   "pair_id": "offer13",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-038": {
+   "pair_id": "offer18",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-039": {
+   "pair_id": "offer05",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-040": {
+   "pair_id": "offer17",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-041": {
+   "pair_id": "offer19",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-042": {
+   "pair_id": "offer17",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-043": {
+   "pair_id": "offer07",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-044": {
+   "pair_id": "offer14",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-045": {
+   "pair_id": "offer15",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-046": {
+   "pair_id": "offer15",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-047": {
+   "pair_id": "offer02",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-048": {
+   "pair_id": "offer12",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-049": {
+   "pair_id": "offer18",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-050": {
+   "pair_id": "offer06",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-051": {
+   "pair_id": "offer11",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-052": {
+   "pair_id": "offer02",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-053": {
+   "pair_id": "offer01",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-054": {
+   "pair_id": "offer00",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-055": {
+   "pair_id": "offer11",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-056": {
+   "pair_id": "offer06",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-057": {
+   "pair_id": "offer03",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-058": {
+   "pair_id": "offer10",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-059": {
+   "pair_id": "offer18",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-060": {
+   "pair_id": "offer11",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-061": {
+   "pair_id": "offer09",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-062": {
+   "pair_id": "offer17",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-063": {
+   "pair_id": "offer04",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-064": {
+   "pair_id": "offer10",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-065": {
+   "pair_id": "offer06",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-066": {
+   "pair_id": "offer05",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-067": {
+   "pair_id": "offer08",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-068": {
+   "pair_id": "offer08",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-069": {
+   "pair_id": "offer13",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-070": {
+   "pair_id": "offer12",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-071": {
+   "pair_id": "offer05",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-072": {
+   "pair_id": "offer02",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  },
+  "S3-073": {
+   "pair_id": "offer19",
+   "condition": "number_low",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-074": {
+   "pair_id": "offer04",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-075": {
+   "pair_id": "offer09",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-076": {
+   "pair_id": "offer04",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-077": {
+   "pair_id": "offer15",
+   "condition": "excessive",
+   "expected": "price-excessive",
+   "label": "price-excessive"
+  },
+  "S3-078": {
+   "pair_id": "offer08",
+   "condition": "number_high",
+   "expected": "number-only",
+   "label": "number-only"
+  },
+  "S3-079": {
+   "pair_id": "offer05",
+   "condition": "reasonable",
+   "expected": "price-reasonable",
+   "label": "price-reasonable"
+  }
+ },
+ "paraphrase_groups": {
+  "P-00": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para00"
+  },
+  "P-01": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para01"
+  },
+  "P-02": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para02"
+  },
+  "P-03": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All carry same facts and request; idx 2 calls the readings \"rehearsal space\" (borderline reframing, not flagged).",
+   "pair_id": "para03"
+  },
+  "P-04": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para04"
+  },
+  "P-05": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para05"
+  },
+  "P-06": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para06"
+  },
+  "P-07": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para07"
+  },
+  "P-08": {
+   "equivalent": true,
+   "issues": [],
+   "note": "Same facts; idx 3 and 4 frame the fleet as switching to electric (mild framing, not flagged).",
+   "pair_id": "para08"
+  },
+  "P-09": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para09"
+  },
+  "P-10": {
+   "equivalent": true,
+   "issues": [],
+   "note": "Same facts; idx 2 says flowers \"on the studio's buying list\" instead of \"already purchased\" (borderline, not flagged).",
+   "pair_id": "para10"
+  },
+  "P-11": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para11"
+  },
+  "P-12": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para12"
+  },
+  "P-13": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para13"
+  },
+  "P-14": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para14"
+  },
+  "P-15": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para15"
+  },
+  "P-16": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para16"
+  },
+  "P-17": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para17"
+  },
+  "P-18": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para18"
+  },
+  "P-19": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para19"
+  },
+  "P-20": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para20"
+  },
+  "P-21": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para21"
+  },
+  "P-22": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para22"
+  },
+  "P-23": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para23"
+  },
+  "P-24": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para24"
+  },
+  "P-25": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para25"
+  },
+  "P-26": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para26"
+  },
+  "P-27": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para27"
+  },
+  "P-28": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para28"
+  },
+  "P-29": {
+   "equivalent": true,
+   "issues": [],
+   "note": "All texts carry the same facts and request.",
+   "pair_id": "para29"
+  }
+ },
+ "post_check_edits": "para08 p2/p3 reworded to keep the 'switching to electric vans' fact constant (annotator borderline note)"
+}

@@ -5,19 +5,31 @@
   "minimum_pairs": 16,
   "target_pairs": 20,
   "generation": {
-    "author": "OpenAI Codex (GPT-6), fixed templates authored in this implementation",
-    "model": "GPT-6",
+    "author": "OpenAI Codex gpt-6.1-sol, hand-written per item",
+    "model": "gpt-6.1-sol",
     "temperature": null,
-    "temperature_note": "Not exposed by the coding harness; no external LLM calls.",
-    "prompt": "Write original English synthetic stimuli for the WS08 condition definitions and length limits. Keep facts and invitations matched; do not copy paper text or use customer data."
+    "temperature_note": "Not exposed by the coding harness; every stimulus was written as complete item-specific prose without templates or external LLM calls.",
+    "prompt": "Hand-write 20 realistic English offers across distinct domains and reader roles. For each write complete reasonable, excessive, number_low, and number_high texts. Reasonable/excessive must differ only in the cost numeral; number_low/high must differ only in the matching catalog numeral without monetary meaning. Change only sentence two between the cost and catalog controls, preserve every other fact and invitation, align its starting word index, and keep all lengths within two words. No sentences or extended phrase sequences may repeat across offers."
   },
   "manipulation_check": {
-    "blind_classifier": "pending",
-    "classifier_model": null,
+    "blind_classifier": "passed",
+    "classifier_model": "claude-sonnet (Anthropic; different family from the GPT generator)",
     "classifier_prompt": "Label each shuffled text without hypotheses or ROI names. S2/S4: Fact, How, Why; S1: generic or situation-specific; S3: reasonable or excessive cost, or number-only. Record labels and errors before freezing stimuli.",
-    "owner_sample_fraction": 0.0,
-    "owner_review": "pending",
-    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative."
+    "owner_sample_fraction": 0.2,
+    "owner_review": "passed",
+    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative.",
+    "classifier_result": "80/80 blind labels matched the intended condition",
+    "classifier_record": "docs/insilico/manipulation_check/blind_labels_2026-10-16.json",
+    "owner_reviewer": "delegated supervisor review (Claude Opus 5.5) under the owner's explicit 2026-10-16 instruction to decide without asking; owner may re-review",
+    "owner_sample": {
+      "S3": [
+        "offer14",
+        "offer09",
+        "offer04",
+        "offer02"
+      ]
+    },
+    "owner_notes": ""
   },
   "inference": {
     "statistic": "signed minus_cortex paired differences",
@@ -51,7 +63,7 @@
   },
   "family": "S3",
   "stimuli_file": "S3.jsonl",
-  "stimuli_sha256": "90490045ecdbdf805f2855d1a2a09110ff03d5eb5773c2fe1962290c60f81a00",
+  "stimuli_sha256": "b0ae12110043e6adfa4914c46fff5bc20fe8915dca9c403df0ee8d50e007bbac",
   "contrasts": [
     {
       "name": "excessive<reasonable",

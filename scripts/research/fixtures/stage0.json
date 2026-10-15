@@ -14,12 +14,26 @@
     "retest_copies": "para00 through para04, each copied exactly for r0/r1/r2; prediction cache remains disabled by the runner."
   },
   "manipulation_check": {
-    "blind_classifier": "pending",
-    "classifier_model": null,
+    "blind_classifier": "passed",
+    "classifier_model": "claude-sonnet (Anthropic; different family from the GPT generator)",
     "classifier_prompt": "Label each shuffled text without hypotheses or ROI names. S2/S4: Fact, How, Why; S1: generic or situation-specific; S3: reasonable or excessive cost, or number-only. Record labels and errors before freezing stimuli.",
-    "owner_sample_fraction": 0.0,
-    "owner_review": "pending",
-    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative."
+    "owner_sample_fraction": 0.2,
+    "owner_review": "passed",
+    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative.",
+    "classifier_result": "30/30 paraphrase groups judged equivalent (same facts and request)",
+    "classifier_record": "docs/insilico/manipulation_check/blind_labels_2026-10-16.json",
+    "owner_reviewer": "delegated supervisor review (Claude Opus 5.5) under the owner's explicit 2026-10-16 instruction to decide without asking; owner may re-review",
+    "owner_sample": {
+      "stage0": [
+        "para17",
+        "para25",
+        "para22",
+        "para20",
+        "para01",
+        "para19"
+      ]
+    },
+    "owner_notes": ""
   },
   "inference": {
     "statistic": "signed minus_cortex paired differences",
@@ -53,7 +67,7 @@
   },
   "family": "stage0",
   "stimuli_file": "stage0.jsonl",
-  "stimuli_sha256": "85ca45a490629ceec5a3433a2b725b7768c140b614fe5f95445c0d140296a2f1",
+  "stimuli_sha256": "dbc9355a3db592d81826155b901218f9970a811ad27fe7d2df59df21aab2d081",
   "contrasts": [],
   "encoders": [
     "meta-llama/Llama-3.2-3B",

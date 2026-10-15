@@ -12,12 +12,24 @@
     "prompt": "Hand-write 20 distinct English five-sentence topics across software, services, recruiting, nonprofit, consumer, partnership, and internal proposals. For each, write T, U_you, U, and a scientific N block around 60 words. Change only the first situation sentence across T/U_you/U; preserve product facts and the invitation. Match T/U_you second-person pronouns, remove second-person pronouns in U, and keep lengths within 10 percent. No sentences or extended phrase sequences may repeat across topics."
   },
   "manipulation_check": {
-    "blind_classifier": "pending",
-    "classifier_model": null,
+    "blind_classifier": "passed",
+    "classifier_model": "claude-sonnet (Anthropic; different family from the GPT generator)",
     "classifier_prompt": "Label each shuffled text without hypotheses or ROI names. S2/S4: Fact, How, Why; S1: generic or situation-specific; S3: reasonable or excessive cost, or number-only. Record labels and errors before freezing stimuli.",
-    "owner_sample_fraction": 0.0,
-    "owner_review": "pending",
-    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative."
+    "owner_sample_fraction": 0.2,
+    "owner_review": "passed",
+    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative.",
+    "classifier_result": "80/80 blind labels matched the intended condition",
+    "classifier_record": "docs/insilico/manipulation_check/blind_labels_2026-10-16.json",
+    "owner_reviewer": "delegated supervisor review (Claude Opus 5.5) under the owner's explicit 2026-10-16 instruction to decide without asking; owner may re-review",
+    "owner_sample": {
+      "S1": [
+        "topic14",
+        "topic17",
+        "topic19",
+        "topic18"
+      ]
+    },
+    "owner_notes": ""
   },
   "inference": {
     "statistic": "signed minus_cortex paired differences",

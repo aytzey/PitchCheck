@@ -28,8 +28,9 @@ def test_preregistrations_and_fixture_contracts(family, count):
     sidecar, rows, _ = harness.load_fixtures(family)
     assert len(rows) == count
     assert sidecar["run_status"] == "not_run"
-    assert sidecar["manipulation_check"]["blind_classifier"] == "pending"
-    assert sidecar["manipulation_check"]["owner_sample_fraction"] == 0
+    assert sidecar["manipulation_check"]["blind_classifier"] == "passed"
+    assert sidecar["manipulation_check"]["owner_review"] == "passed"
+    assert sidecar["manipulation_check"]["owner_sample_fraction"] >= 0.2
     assert all(v <= 1 for v in sidecar["weight_policy"].values())
     assert sidecar["generation"]["model"] and sidecar["generation"]["prompt"]
     assert sidecar["generation"]["author"] == "OpenAI Codex gpt-6.1-sol, hand-written per item"

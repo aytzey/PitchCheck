@@ -181,10 +181,8 @@ export async function refinePitchOnDesktop(request: {
   >;
   safetyNotes?: string[];
   persuasionProfile?: unknown;
-  baselineScore?: number;
-  bestScore?: number;
-  improvement?: number;
-  selectedIndex?: number;
+  tribeGuidance?: unknown;
+  criticNotes?: string[];
   error?: string;
 }> {
   return invokeDesktop<{
@@ -203,10 +201,8 @@ export async function refinePitchOnDesktop(request: {
     >;
     safetyNotes?: string[];
     persuasionProfile?: unknown;
-    baselineScore?: number;
-    bestScore?: number;
-    improvement?: number;
-    selectedIndex?: number;
+    tribeGuidance?: unknown;
+    criticNotes?: string[];
     error?: string;
   }>("refine_pitch", { request });
 }

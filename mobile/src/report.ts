@@ -19,7 +19,9 @@ export function normalizePitchScoreReport(data: unknown): PitchScoreReport {
     throw new Error("Runtime returned an invalid payload.");
   }
 
-  const raw = data as Record<string, unknown>;
+  // Both the TRIBE service and the Next route wrap the payload as { report }.
+  const outer = data as Record<string, unknown>;
+  const raw = (outer.report && typeof outer.report === "object" ? outer.report : outer) as Record<string, unknown>;
   const score = asScore(raw.persuasion_score);
   const verdict = asString(raw.verdict, "No verdict provided.");
   const narrative = asString(raw.narrative, "No narrative provided.");

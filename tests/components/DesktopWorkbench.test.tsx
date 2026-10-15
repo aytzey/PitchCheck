@@ -55,6 +55,57 @@ const mockReport: PitchScoreReport = {
   scored_at: new Date().toISOString(),
 };
 
+const caveats = Array.from({ length: 7 }, (_, index) => `Scientific caveat number ${index + 1}.`);
+const axisKeys = ["self_value", "reward_affect", "social_sharing", "encoding_attention", "processing_fluency"];
+const span = (segment: number, text: string) => ({ segment, of: 8, position_pct: segment * 12, value: 0.3, percentile: 50, text });
+
+function fullReport(llmScore: number | null, anchored: boolean) {
+  return {
+    ...mockReport,
+    fmri_output: {
+      segments: 8,
+      voxel_count: 20484,
+      global_mean_abs: 0.2,
+      global_peak_abs: 0.6,
+      temporal_trace: [0.2, 0.3, 0.5, 0.4, 0.2, 0.3, 0.45, 0.35],
+      temporal_peaks: [0.4, 0.5, 0.6, 0.5, 0.4, 0.5, 0.55, 0.45],
+      top_voxel_indices: [1, 2, 3, 4, 5, 6],
+      top_voxel_values: [0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+      temporal_trace_basis: "synthetic_word_order",
+    },
+    persuasion_evidence: {
+      research_sources: [
+        { key: "falk_2010_persuasion_change", citation: "Falk et al. 2010", url: "https://doi.org/10.1523/x", modality: "fMRI", evidence_level: "individual_differences_in_sample" },
+        { key: "chan_2024_ad_liking", citation: "Insecure Source 2024", url: "http://example.com/chan" },
+        ...Array.from({ length: 35 }, (_, index) => ({ key: `unused_${index}`, citation: `Unused ${index}`, url: "https://doi.org/10.0/x" })),
+      ],
+    },
+    robustness: {
+      neural_score: 66,
+      evidence_score: 66,
+      llm_score: llmScore,
+      final_score: 70,
+      confidence: 0.7,
+      calibration_basis: "test",
+      neuro_axes: Object.fromEntries(axisKeys.map((key) => [key, { label: key, score: 60, caveat: `${key} caveat`, source_keys: ["falk_2010_persuasion_change"] }])),
+      scientific_caveats: caveats,
+      breakdown_anchor: anchored ? { basis: "persona_read_facets_v1" } : null,
+      research_synthesis: {
+        items: [],
+        temporal_archetype: { key: "late_peak", label: "Slow burn, late peak", implication: "i", lever: "l", citation: "c", source_keys: ["chan_2024_ad_liking"] },
+        localization: { opener: span(1, "Hi"), opener_strength_percentile: 40, closer_strength_percentile: 60, peak: span(3, "peak words"), weakest: span(5, "weak words"), attention_cliff: null },
+      },
+    },
+  };
+}
+
+async function renderReport(report: unknown) {
+  mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ report }) });
+  render(<DesktopWorkbench />);
+  fireEvent.click(screen.getByRole("button", { name: /Score message/ }));
+  await screen.findByText("Variant re-rank");
+}
+
 describe("DesktopWorkbench", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
@@ -136,6 +187,33 @@ describe("DesktopWorkbench", () => {
     expect(screen.getByText("Hey Jordan - tighter rewrite with one clear ask.")).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & re-evaluate" })).toBeDefined();
+  });
+
+  it("labels a neural-only report honestly and exposes every caveat and source", async () => {
+    await renderReport(fullReport(null, false));
+
+    for (const label of ["MPFC", "HPC", "dlPFC", "AI/dACC", "mPFC/PCC"]) {
+      expect(screen.queryByText(label, { exact: true })).toBeNull();
+    }
+    for (const caveat of caveats) expect(screen.getByText(caveat)).toBeDefined();
+    expect(screen.getByText(/20,484 VERTICES/)).toBeDefined();
+    expect(screen.queryByText(/P = /)).toBeNull();
+    expect(screen.getByText(/Positions are decorative/)).toBeDefined();
+    expect(screen.getByText("Falk et al. 2010").closest("a")?.getAttribute("href")).toBe("https://doi.org/10.1523/x");
+    expect(screen.getByText("Insecure Source 2024").closest("a")).toBeNull();
+    expect(screen.getByText("Sources (2)")).toBeDefined();
+    expect(screen.getByText("Neural-only (hand-set mapping)")).toBeDefined();
+    expect(screen.getByText("Early salience (placeholder)")).toBeDefined();
+    expect(screen.queryByText("LLM interpreted")).toBeNull();
+    expect(screen.queryByText(/anchored to persona pain alignment/)).toBeNull();
+  });
+
+  it("keeps LLM facet labels and notes the persona anchor", async () => {
+    await renderReport(fullReport(78, true));
+
+    expect(screen.getByText("LLM interpreted")).toBeDefined();
+    expect(screen.getByText("Urgency")).toBeDefined();
+    expect(screen.getByText(/Matches the recipient · anchored to persona pain alignment/)).toBeDefined();
   });
 
   it("shows desktop refiner clarification questions in the main editor", async () => {

@@ -201,13 +201,9 @@ pub struct RefineResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     persuasion_profile: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    baseline_score: Option<f64>,
+    tribe_guidance: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    best_score: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    improvement: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    selected_index: Option<i64>,
+    critic_notes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -661,7 +657,8 @@ async fn refine_pitch(
                         .client
                         .post(format!("{service_url}/refine"))
                         .json(&payload)
-                        .timeout(Duration::from_secs(140));
+                        // ponytail: >= 2x TRIBE_LLM_TIMEOUT_SECONDS + TRIBE re-scores; stream progress if users stall
+                        .timeout(Duration::from_secs(420));
                     let mut can_call_runtime = true;
                     if status.mode == "pitchserver" || status.mode == "vast" {
                         if let Ok(token) = pitch_server_auth_token(&state) {
@@ -717,19 +714,15 @@ async fn refine_pitch(
                                             "safetyNotes",
                                         ),
                                         persuasion_profile: refine_profile(&body),
-                                        baseline_score: body
-                                            .get("baseline_score")
-                                            .or_else(|| body.get("baselineScore"))
-                                            .and_then(Value::as_f64),
-                                        best_score: body
-                                            .get("best_score")
-                                            .or_else(|| body.get("bestScore"))
-                                            .and_then(Value::as_f64),
-                                        improvement: body.get("improvement").and_then(Value::as_f64),
-                                        selected_index: body
-                                            .get("selected_index")
-                                            .or_else(|| body.get("selectedIndex"))
-                                            .and_then(Value::as_i64),
+                                        tribe_guidance: body
+                                            .get("tribe_guidance")
+                                            .filter(|value| value.is_object())
+                                            .cloned(),
+                                        critic_notes: refine_string_list(
+                                            &body,
+                                            "critic_notes",
+                                            "criticNotes",
+                                        ),
                                     });
                                 }
                             }
@@ -896,10 +889,8 @@ async fn refine_pitch(
                     questions,
                     safety_notes: refine_string_list(&parsed, "safety_notes", "safetyNotes"),
                     persuasion_profile: refine_profile(&parsed),
-                    baseline_score: None,
-                    best_score: None,
-                    improvement: None,
-                    selected_index: None,
+                    tribe_guidance: None,
+                    critic_notes: None,
                 });
             }
         }
@@ -918,10 +909,8 @@ async fn refine_pitch(
             questions: None,
             safety_notes: None,
             persuasion_profile: None,
-            baseline_score: None,
-            best_score: None,
-            improvement: None,
-            selected_index: None,
+            tribe_guidance: None,
+            critic_notes: None,
         })
     })
     .await

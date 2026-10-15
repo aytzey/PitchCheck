@@ -1188,7 +1188,7 @@ class TestDeterministicNeuralReportRisks:
             weak_attention,
         )
 
-        risk_text = "Weak attention capture can bury the value proposition"
+        risk_text = "Early-salience proxy is low; check whether the opener states the value"
         assert risk_text not in strong_result["risks"]
         assert risk_text in weak_result["risks"]
 
@@ -1282,8 +1282,9 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         assert metadata['text_feature_model'] == encoder
         assert metadata['expected_text_feature_model'] == 'meta-llama/Llama-3.2-3B'
         assert metadata['text_feature_compatible'] == (encoder == 'meta-llama/Llama-3.2-3B')
-        assert engine.analyze_predictions(np.ones((4, 3)))[1] == metadata
-        assert engine.summarize_fmri_output(np.ones((4, 3))) == metadata
+        timing = engine._timing_metadata_for_input_mode(engine.TRIBE_TEXT_INPUT_MODE)
+        assert engine.analyze_predictions(np.ones((4, 3)))[1] == {**timing, **metadata}
+        assert engine.summarize_fmri_output(np.ones((4, 3))) == {**timing, **metadata}
     original = 'benimle çilekeş konserine gelmelisin harika bi grup çok eğlencez'
     drafts = ['Çilekeş konserine benimle gelir misin? Yanımda sen ol istiyorum.',
               'Müzik zevkime kefil olamam, ama sana eşlik etme teklifim var. Çilekeş konserine gidelim mi?',
@@ -1339,7 +1340,7 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
     monkeypatch.setattr(llm_layer, '_post_jev_decisions', decisions)
     plan = llm_layer.plan_tribe_refinement(original, 'çilekeşi sevmeyen flörtüm', 'general', measurements[0])
     usable_baseline = case != 'mock'
-    expected_target = 'benimle çilekeş' if case == 'weak_trace' else 'harika bi'
+    expected_target = 'benimle çilekeş' if case == 'weak_trace' else 'bi grup'
     assert plan['creative_brief']['repair']['target']['text'] == (expected_target if usable_baseline else original)
     assert 'attention_cliff' not in json.dumps(plan)
     # Holding facts constant and moving the measured weak span must change the actual repair target.
@@ -1440,3 +1441,94 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         assert proof['evaluations'][1]['empirical_effect']['limited_window_sensitivity'] is True
     if case in {'close', 'swapped_trace', 'unverified_encoder'}:
         assert proof['evaluations'][1]['empirical_effect']['weight'] > 0
+
+
+def _context_fit(pain: float = 60, proof: float = 60) -> dict:
+    scores = {"persona_pain_alignment": pain, "objection_coverage": 60, "proof_credibility": proof, "cta_ease": 60, "channel_fit": 60}
+    return {key: {"score": value, "note": f"{key} note"} for key, value in scores.items()}
+
+
+def _score_with(mock_post: MagicMock, **overrides) -> dict:
+    mock_post.return_value = _mock_openrouter_response(json.dumps(dict(VALID_LLM_RESPONSE, **overrides)))
+    return interpret_persuasion(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES)
+
+
+def _item(result: dict, key: str) -> dict:
+    return next(item for item in result["breakdown"] if item["key"] == key)
+
+
+@patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
+@patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
+@patch("tribe_service.llm_layer.httpx.post")
+class TestPersonaAnchoredBreakdown:
+    def test_recipient_items_follow_persona_read_facets(self, mock_post: MagicMock):
+        aligned = _score_with(mock_post, context_fit=_context_fit(pain=85, proof=90))
+        misaligned = _score_with(mock_post, context_fit=_context_fit(pain=25, proof=20))
+
+        assert _item(aligned, "personalization_fit")["score"] - _item(misaligned, "personalization_fit")["score"] >= 30
+        assert _item(aligned, "credibility")["score"] - _item(misaligned, "credibility")["score"] >= 20
+        for key in ("emotional_resonance", "clarity", "urgency"):
+            assert _item(aligned, key)["score"] == _item(misaligned, key)["score"]
+
+        anchor = misaligned["robustness"]["breakdown_anchor"]
+        assert anchor["weights_status"] == "unvalidated_prior"
+        assert set(anchor["items"]) == {"personalization_fit", "credibility"}
+        assert anchor["items"]["credibility"]["shown"] == _item(misaligned, "credibility")["score"]
+        assert "legacy_shown" in anchor["items"]["credibility"]
+        assert "persona_breakdown_items_anchored_to_context_fit" in misaligned["robustness"]["guardrails_applied"]
+        assert len(misaligned["robustness"]["guardrails_applied"]) <= 8
+
+    def test_missing_facets_keep_neural_baseline(self, mock_post: MagicMock):
+        legacy = _score_with(mock_post)
+        partial = _context_fit()
+        del partial["persona_pain_alignment"]
+        without_pain = _score_with(mock_post, context_fit=partial)
+        empty = _score_with(mock_post, context_fit={})
+
+        assert _item(without_pain, "personalization_fit")["score"] == _item(legacy, "personalization_fit")["score"]
+        assert set(without_pain["robustness"]["breakdown_anchor"]["items"]) == {"credibility"}
+        assert empty["breakdown"] == legacy["breakdown"]
+        assert empty["robustness"]["breakdown_anchor"] is None
+
+    def test_zero_weights_restore_old_breakdown(self, mock_post: MagicMock):
+        legacy = _score_with(mock_post)
+        with patch("tribe_service.llm_layer.PERSONALIZATION_FACET_WEIGHT", 0.0), \
+                patch("tribe_service.llm_layer.CREDIBILITY_FACET_WEIGHT", 0.0):
+            rolled_back = _score_with(mock_post, context_fit=_context_fit(pain=10, proof=10))
+
+        assert rolled_back["breakdown"] == legacy["breakdown"]
+        assert rolled_back["robustness"]["breakdown_anchor"] is None
+
+    def test_headline_score_ignores_breakdown_numbers(self, mock_post: MagicMock):
+        low = _score_with(mock_post, context_fit=_context_fit(), breakdown=[{**i, "score": 0} for i in VALID_LLM_RESPONSE["breakdown"]])
+        high = _score_with(mock_post, context_fit=_context_fit(), breakdown=[{**i, "score": 100} for i in VALID_LLM_RESPONSE["breakdown"]])
+
+        assert low["persuasion_score"] == high["persuasion_score"]
+        assert low["robustness"]["final_score"] == high["robustness"]["final_score"]
+
+
+def test_neural_only_breakdown_explanations_do_not_overclaim():
+    with patch("tribe_service.llm_layer.OPENROUTER_ENABLED", False):
+        result = interpret_persuasion(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES)
+    text = " ".join(item["explanation"] for item in result["breakdown"])
+
+    assert "Not assessed for this recipient" in _item(result, "personalization_fit")["explanation"]
+    assert "placeholder" in _item(result, "urgency")["explanation"]
+    assert "trust proxy" not in text and "Calibrated from" not in text
+    assert result["robustness"]["breakdown_anchor"] is None
+
+
+def test_provenance_warnings_do_not_fire_for_mock_and_sort_after_caps():
+    from tribe_service.llm_layer import _augment_persuasion_evidence
+
+    base = {"segments": 12, "voxel_count": 20484, "expected_text_feature_model": "meta-llama/Llama-3.2-3B"}
+    hermes = _augment_persuasion_evidence(
+        "Merhaba Ayşe, toplantı için çok teşekkürler; gelecek hafta konuşalım mı?", "CTO", "email", {},
+        {**base, "text_feature_model": "NousResearch/Hermes-3-Llama-3.2-3B", "temporal_trace_basis": "synthetic_word_order"},
+    )
+    mock = _augment_persuasion_evidence(SAMPLE_MESSAGE, SAMPLE_PERSONA, "email", {}, {**base, "text_feature_model": "mock"})
+
+    assert "text_feature_incompatible" in hermes["warnings"]
+    assert "non_english_input_outside_tribe_training" in hermes["warnings"]
+    assert hermes["warnings"].index("text_feature_incompatible") < hermes["warnings"].index("synthetic_word_order_trace_not_real_time")
+    assert "text_feature_incompatible" not in mock["warnings"]

@@ -22,11 +22,13 @@ import {
 } from "@/lib/desktop-runtime";
 import {
   normalizePitchScoreReport,
+  normalizeRefineEvidence,
   type ContextFitFacet,
   type ContextFitReport,
   type FmriOutput,
   type PitchScoreReport,
   type Platform,
+  type RefineEvidence,
   type ResearchSynthesis,
   type SegmentLocalization,
   type TopMove,
@@ -64,7 +66,8 @@ type RefinedPitch = {
   model: string;
   applied: string[];
   methodology?: string;
-  improvement?: number;
+  evidence: RefineEvidence | null;
+  criticNotes?: string[];
 };
 
 type RefineQuestion = {
@@ -160,8 +163,8 @@ const BRAIN_REGIONS: Record<
   }
 > = {
   emotional_engagement: {
-    label: "MPFC",
-    role: "Affective value",
+    label: "AFF",
+    role: "Affective salience (whole-brain proxy)",
     points: [
       [100, 40],
       [100, 58],
@@ -169,14 +172,14 @@ const BRAIN_REGIONS: Record<
     color: "ok",
   },
   personal_relevance: {
-    label: "mPFC/PCC",
-    role: "Self-value fit",
+    label: "SELF",
+    role: "Self/value (whole-brain proxy)",
     points: [[100, 175]],
     color: "ok",
   },
   social_proof_potential: {
-    label: "TPJ/dmPFC",
-    role: "Social cognition",
+    label: "SOC",
+    role: "Social cognition (whole-brain proxy)",
     points: [
       [42, 150],
       [158, 150],
@@ -184,8 +187,8 @@ const BRAIN_REGIONS: Record<
     color: "warn",
   },
   memorability: {
-    label: "HPC",
-    role: "Encoding",
+    label: "ENC",
+    role: "Encoding (whole-brain proxy)",
     points: [
       [68, 140],
       [132, 140],
@@ -193,8 +196,8 @@ const BRAIN_REGIONS: Record<
     color: "ok",
   },
   attention_capture: {
-    label: "AI/dACC",
-    role: "Early salience",
+    label: "ATT",
+    role: "Early salience (whole-brain proxy)",
     points: [
       [80, 78],
       [120, 78],
@@ -202,13 +205,13 @@ const BRAIN_REGIONS: Record<
     color: "ok",
   },
   cognitive_friction: {
-    label: "dlPFC",
-    role: "Cognitive load",
+    label: "FRIC",
+    role: "Processing friction (whole-brain proxy)",
     points: [
       [58, 62],
       [142, 62],
     ],
-    color: "err",
+    color: "warn",
     inverted: true,
   },
 };
@@ -628,7 +631,7 @@ export default function DesktopWorkbench() {
       return;
     }
 
-    const refineBrief = extractRefineBrief(report, source);
+    const refineBrief = extractRefineBrief(report);
     setRefining(true);
     setError(null);
     setRefineQuestions(null);
@@ -653,7 +656,8 @@ export default function DesktopWorkbench() {
             model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
             applied: refineBrief,
             methodology: data.methodology,
-            improvement: data.improvement,
+            evidence: normalizeRefineEvidence(data.tribeGuidance),
+            criticNotes: data.criticNotes,
           });
           return;
         }
@@ -700,6 +704,8 @@ export default function DesktopWorkbench() {
           needs_clarification?: boolean;
           questions?: unknown;
           safety_notes?: string[];
+          critic_notes?: string[];
+          tribe_guidance?: unknown;
           error?: string;
           detail?: string;
         };
@@ -713,6 +719,8 @@ export default function DesktopWorkbench() {
             model: data.model || openRouterRefinerModel || DEFAULT_OPENROUTER_REFINER_MODEL,
             applied: refineBrief,
             methodology: data.methodology,
+            evidence: normalizeRefineEvidence(data.tribe_guidance),
+            criticNotes: data.critic_notes,
           });
           return;
         }
@@ -1212,6 +1220,10 @@ function WorkspaceView({
 }
 
 function DiffView({ refinedPitch }: { refinedPitch: RefinedPitch }) {
+  const evidence = refinedPitch.evidence;
+  const rescore =
+    evidence?.mode === "model" ? "TRIBE re-scored" : evidence?.mode === "mock" ? "mock prediction" : "Not re-scored by TRIBE";
+  const originalKept = evidence?.selectedId === "original";
   return (
     <div className="pc-diff-view">
       <div className="pc-diff-pane">
@@ -1223,14 +1235,21 @@ function DiffView({ refinedPitch }: { refinedPitch: RefinedPitch }) {
       </div>
       <div className="pc-diff-pane after">
         <div className="pc-diff-head">
-          <span className="label">After . refined</span>
-          <span className="mono">
-            {typeof refinedPitch.improvement === "number"
-              ? `${refinedPitch.model} . ${refinedPitch.improvement >= 0 ? "+" : ""}${refinedPitch.improvement}`
-              : refinedPitch.model}
-          </span>
+          <span className="label">{originalKept ? "After . original kept" : "After . refined"}</span>
+          <span className="mono">{`${refinedPitch.model} . ${rescore}`}</span>
         </div>
+        {originalKept && <p className="pc-muted">No candidate beat your draft; original kept.</p>}
         <p>{refinedPitch.after}</p>
+        {(refinedPitch.criticNotes ?? []).length > 0 && (
+          <div className="pc-suggestions">
+            {(refinedPitch.criticNotes ?? []).slice(0, 5).map((note, index) => (
+              <div key={`critic-${index}`}>
+                <span className="mono">CRITIC</span>
+                <p>{note}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1685,10 +1704,16 @@ function ResultView({
   const score = Math.round(report.persuasion_score);
   const fmri = report.fmri_output;
   const signals = report.neural_signals;
+  // Neural-only reports carry llm_score null; there the facets are a hand-set neural mapping.
+  const neuralOnly = report.robustness?.llm_score === null;
+  const anchored = Boolean(report.robustness?.breakdown_anchor);
   const breakdown = report.breakdown.map((item) => ({
-    label: item.label,
+    label: neuralOnly && item.key === "urgency" ? "Early salience (placeholder)" : item.label,
     value: Math.round(item.score),
-    note: item.explanation,
+    note:
+      anchored && item.key === "personalization_fit"
+        ? `${item.explanation} · anchored to persona pain alignment (±tolerance)`
+        : item.explanation,
   }));
   const suggestions = extractSuggestions(report);
 
@@ -1729,7 +1754,7 @@ function ResultView({
         </summary>
         <div className="pc-deepdive-body">
           <div>
-            <HeaderLine title="Writing facets" right="LLM interpreted" />
+            <HeaderLine title="Writing facets" right={neuralOnly ? "Neural-only (hand-set mapping)" : "LLM interpreted"} />
             <div className="pc-facet-list">
               {breakdown.map((facet, index) => (
                 <FacetRow key={facet.label} facet={facet} last={index === breakdown.length - 1} />
@@ -1849,30 +1874,30 @@ function SegmentLocalizationPanel({ localization }: { localization: SegmentLocal
     rows.push({
       tag: "PEAK",
       label: `Strongest moment (${localization.peak.position_pct}% in)`,
-      text: localization.peak.text,
-      note: "Preserve this or move it earlier.",
+      text: localization.peak.context_text ?? localization.peak.text,
+      note: "Keep this, or move it earlier if it is also your strongest supported point.",
     });
   }
   if (localization.weakest?.text) {
     rows.push({
       tag: "WEAK",
       label: "Weakest moment",
-      text: localization.weakest.text,
-      note: "Prime rewrite target.",
+      text: localization.weakest.context_text ?? localization.weakest.text,
+      note: "Tighten it if it is also semantically weak.",
     });
   }
   if (localization.attention_cliff?.to?.text) {
     rows.push({
       tag: "DROP",
-      label: `Attention cliff (${localization.attention_cliff.to.position_pct}% in)`,
-      text: localization.attention_cliff.to.text,
-      note: "Engagement falls hardest into this span.",
+      label: `Response drop (${localization.attention_cliff.to.position_pct}% in)`,
+      text: localization.attention_cliff.to.context_text ?? localization.attention_cliff.to.text,
+      note: "Largest predicted-response drop into this span.",
     });
   }
   if (!rows.length) return null;
   return (
     <div>
-      <HeaderLine title="Where TRIBE reacts" right="located on your text" />
+      <HeaderLine title="Where TRIBE reacts" right="approximate regions of your text" />
       <div className="pc-rank-list">
         {rows.map((row) => (
           <div className="pc-rank-row" key={row.tag}>
@@ -1934,18 +1959,12 @@ function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch
       tone: toneFromScore(score),
     },
   ];
-  if (refinedPitch) {
-    rows.unshift({
-      label: "Refined candidate",
-      score,
-      note: "Pending TRIBE re-score after accept",
-      tone: "warn",
-    });
-  }
+  const evidence = refinedPitch?.evidence ?? null;
+  const fmt = (value: number | null) => (value === null ? "n/a" : String(value));
 
   return (
     <div>
-      <HeaderLine title="Variant re-rank" right={refinedPitch ? "candidate pending" : "current"} />
+      <HeaderLine title="Variant re-rank" right="current" />
       <div className="pc-rank-list">
         {rows.map((row, index) => (
           <div className="pc-rank-row" key={row.label}>
@@ -1956,6 +1975,26 @@ function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch
           </div>
         ))}
       </div>
+      {evidence && (
+        <>
+          <HeaderLine title="Refine candidates" right={evidence.mode === "mock" ? "mock prediction" : "TRIBE re-scored"} />
+          <div className="pc-rank-list">
+            {evidence.rows.map((row) => (
+              <div className="pc-rank-row" key={row.id}>
+                <span className="mono">{row.id === evidence.selectedId ? "SEL" : row.id}</span>
+                <strong>{row.id === "original" ? "Your draft" : `Candidate ${row.id}`}</strong>
+                <small>
+                  {`context fit ${fmt(row.semantic)} . TRIBE neural prior ${fmt(row.neural)} . ${row.eligible ? "eligible" : "blocked by critic"}`}
+                </small>
+                <b className="mono">{fmt(row.selection)}</b>
+              </div>
+            ))}
+          </div>
+          <p className="pc-muted" title="Unvalidated; not the persuasion score.">
+            {`Neural prior = hand-tuned average-reader analogue.${evidence.jev ? " Neural prior not used for ranking." : ""}`}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -2106,7 +2145,7 @@ function BrainPanel({
   }
 
   const usesSyntheticTrace = fmri.temporal_trace_basis === "synthetic_word_order";
-  const traceTitle = usesSyntheticTrace ? "Engagement trace" : "Engagement timeline";
+  const traceTitle = usesSyntheticTrace ? "Predicted-response trace" : "Predicted-response timeline";
   const traceUnit = usesSyntheticTrace ? "Mean predicted response / ordered segment" : "Mean predicted response / time segment";
 
   return (
@@ -2115,7 +2154,7 @@ function BrainPanel({
       <div className="pc-brain-head">
         <span className="led ok pulse" />
         <span className="mono">TRIBE . FMRI RESPONSE PREDICTION</span>
-        <strong className="mono">{fmri.voxel_count.toLocaleString()} VOXELS . {fmri.segments} SEGMENTS</strong>
+        <strong className="mono">{fmri.voxel_count.toLocaleString()} VERTICES . {fmri.segments} SEGMENTS</strong>
       </div>
       <div className="pc-brain-hero">
         <BrainRender signals={signals} />
@@ -2136,6 +2175,7 @@ function BrainPanel({
         <span>MODEL {model}</span>
         <span>RUNTIME {runtime}</span>
         <span>{fmri.cortical_mesh || "fsaverage5"} mesh</span>
+        <span>Positions are decorative — these six signals are whole-cortex statistics, not region readouts.</span>
       </div>
     </div>
   );
@@ -2232,7 +2272,7 @@ function ScoreHalo({ score, confidence }: { score: number; confidence?: number }
       <div className="pc-score-line">
         <span className={`mono tnum score-${tone}`}>{score}</span>
         <small className="mono">/100</small>
-        {typeof confidence === "number" && <em className="mono">P = {confidence.toFixed(2)}</em>}
+        {typeof confidence === "number" && <em className="mono">conf {confidence.toFixed(2)} · heuristic</em>}
       </div>
       <div className="pc-score-rail">
         <span style={{ left: `calc(${score}% - 1px)`, background: `var(--${tone})` }} />
@@ -2294,7 +2334,7 @@ function TemporalTrace({ trace, peaks }: { trace: number[]; peaks?: number[] }) 
 function NeuralSignalsGrid({ signals }: { signals: PitchScoreReport["neural_signals"] }) {
   return (
     <div>
-      <HeaderLine title="Neural signals" right={`Derived from ${signals.length} region analogues`} />
+      <HeaderLine title="Neural signals" right={`${signals.length} whole-brain response features`} />
       <div className="pc-signal-grid">
         {signals.map((signal) => (
           <SignalCell key={signal.key} signal={signal} />
@@ -2311,6 +2351,7 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
   const warnings = [...(robustness?.warnings ?? []), ...(evidence?.warnings ?? [])]
     .filter((item, index, all) => all.indexOf(item) === index)
     .slice(0, 3);
+  const [firstCaveat, ...moreCaveats] = robustness?.scientific_caveats ?? [];
 
   return (
     <div>
@@ -2367,16 +2408,68 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
             <b className="mono score-warn">watch</b>
           </div>
         ))}
-        {(robustness?.scientific_caveats ?? []).slice(0, 1).map((caveat) => (
-          <div className="pc-rank-row" key={caveat}>
-            <span className="mono">SCI</span>
-            <strong>Scientific caveat</strong>
-            <small>{caveat}</small>
-            <b className="mono score-warn">note</b>
+        {firstCaveat && caveatRow(firstCaveat)}
+      </div>
+      {moreCaveats.length > 0 && (
+        <details>
+          <summary className="pc-muted">More scientific caveats ({moreCaveats.length})</summary>
+          <div className="pc-rank-list">{moreCaveats.map(caveatRow)}</div>
+        </details>
+      )}
+      <SourcesList report={report} />
+    </div>
+  );
+}
+
+function caveatRow(caveat: string) {
+  return (
+    <div className="pc-rank-row" key={caveat}>
+      <span className="mono">SCI</span>
+      <strong>Scientific caveat</strong>
+      <small>{caveat}</small>
+      <b className="mono score-warn">note</b>
+    </div>
+  );
+}
+
+function openSourceExternally(event: React.MouseEvent<HTMLAnchorElement>) {
+  if (!isDesktopRuntime()) return; // web: the browser honours target="_blank"
+  event.preventDefault();
+  const href = event.currentTarget.href;
+  void import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href));
+}
+
+// Literature behind the axes and synthesis items shown above, resolved in the server's registry.
+function SourcesList({ report }: { report: PitchScoreReport }) {
+  const synthesis = report.robustness?.research_synthesis;
+  const keys = new Set([
+    ...Object.values(report.robustness?.neuro_axes ?? {}).flatMap((axis) => axis.source_keys ?? []),
+    ...(synthesis?.items ?? []).flatMap((item) => item.source_keys ?? []),
+    ...(synthesis?.temporal_archetype?.source_keys ?? []),
+  ]);
+  const sources = (report.persuasion_evidence?.research_sources ?? []).filter((source) => keys.has(source.key));
+  if (!sources.length) return null;
+  return (
+    <details>
+      <summary className="pc-muted">Sources ({sources.length})</summary>
+      <div className="pc-rank-list">
+        {sources.map((source) => (
+          <div className="pc-rank-row" key={source.key}>
+            <span className="mono">SRC</span>
+            <strong>
+              {source.url?.startsWith("https://") ? (
+                <a href={source.url} target="_blank" rel="noopener noreferrer" onClick={openSourceExternally}>
+                  {source.citation || source.key}
+                </a>
+              ) : (
+                source.citation || source.key
+              )}
+            </strong>
+            <small>{[source.modality, source.evidence_level].filter(Boolean).join(" · ")}</small>
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -3268,38 +3361,6 @@ function extractSuggestions(report: PitchScoreReport) {
     .slice(0, 5);
 }
 
-function segmentExcerptFor(source: string, segmentIndex: number, segmentCount: number, maxChars = 120) {
-  const words = source.split(/\s+/).filter(Boolean);
-  if (!words.length || segmentCount <= 0) return "";
-  const start = Math.floor((segmentIndex * words.length) / segmentCount);
-  const stop = Math.max(start + 1, Math.floor(((segmentIndex + 1) * words.length) / segmentCount));
-  const excerpt = words.slice(start, stop).join(" ").trim();
-  return excerpt.length > maxChars ? `${excerpt.slice(0, maxChars - 1).trimEnd()}…` : excerpt;
-}
-
-function extractTemporalBrief(report: PitchScoreReport, source: string) {
-  const trace = report.fmri_output?.temporal_trace;
-  if (!trace || trace.length < 3 || !source.trim()) return [];
-  const indexed = trace.map((value, index) => ({ value, index }));
-  const sorted = [...indexed].sort((left, right) => left.value - right.value);
-  const weakest = sorted[0];
-  const strongest = sorted[sorted.length - 1];
-  const lines: string[] = [];
-  const weakExcerpt = segmentExcerptFor(source, weakest.index, trace.length);
-  if (weakExcerpt) {
-    lines.push(
-      `Weakest engagement segment (${weakest.index + 1}/${trace.length}) is around: "${weakExcerpt}". Rework, tighten, or cut this part first.`,
-    );
-  }
-  const strongExcerpt = segmentExcerptFor(source, strongest.index, trace.length);
-  if (strongExcerpt && strongest.index !== weakest.index) {
-    lines.push(
-      `Strongest engagement segment (${strongest.index + 1}/${trace.length}) is around: "${strongExcerpt}". Preserve this beat; consider moving it earlier.`,
-    );
-  }
-  return lines;
-}
-
 function extractContextFitBrief(report: PitchScoreReport) {
   const fit = report.context_fit;
   if (!fit) return [];
@@ -3330,12 +3391,12 @@ function extractResearchBrief(report: PitchScoreReport) {
   const loc = synthesis.localization;
   if (loc?.weakest?.text) {
     lines.push(
-      `TRIBE-located weakest span (rewrite first): "${loc.weakest.text}".`,
+      `TRIBE-located weakest region (rewrite first): "${loc.weakest.context_text ?? loc.weakest.text}".`,
     );
   }
   if (loc?.attention_cliff?.to?.text) {
     lines.push(
-      `TRIBE-located attention drop into: "${loc.attention_cliff.to.text}". Fix this transition.`,
+      `TRIBE-located largest predicted-response drop into: "${loc.attention_cliff.to.context_text ?? loc.attention_cliff.to.text}". Fix this transition.`,
     );
   }
   if (synthesis.temporal_archetype) {
@@ -3349,13 +3410,12 @@ function extractResearchBrief(report: PitchScoreReport) {
   return lines.slice(0, 4);
 }
 
-function extractRefineBrief(report: PitchScoreReport, source: string) {
+function extractRefineBrief(report: PitchScoreReport) {
   const baseline = `Baseline persuasion score ${Math.round(report.persuasion_score)}/100 - "${report.verdict}". The rewrite must beat this baseline, not paraphrase it.`;
   const topMoves = (report.top_moves ?? []).map(
     (move) => `Top move - ${move.title}: ${move.do}${move.because ? ` (${move.because})` : ""}`,
   );
   const research = extractResearchBrief(report);
-  const temporal = extractTemporalBrief(report, source);
   const contextFit = extractContextFitBrief(report);
   const rewriteGuidance = report.rewrite_suggestions
     .map((item) => {
@@ -3384,7 +3444,6 @@ function extractRefineBrief(report: PitchScoreReport, source: string) {
     baseline,
     ...topMoves,
     ...research,
-    ...temporal,
     ...contextFit,
     ...rewriteGuidance,
     ...weakFacets,
@@ -3400,7 +3459,7 @@ function facetRepairTactic(key: string, label: string) {
   const tactics: Record<string, string> = {
     clarity: "Reduce processing load: make the value proposition instantly scannable and keep one clear next step.",
     credibility: "Improve the semantic trust read without inventing facts: use verifiable details already present or ask for a low-risk validation step.",
-    emotional_resonance: "Translate the offer into the persona's desired outcome so the reward/affect analogue has a stronger target.",
+    emotional_resonance: "Translate the offer into the persona's desired outcome.",
     personalization_fit: "Tie the opener and value claim to the recipient's role, current context, pain, and decision criteria.",
     urgency: "Make the timing reason semantically clear, then connect it to a specific low-friction action.",
   };
@@ -3409,16 +3468,16 @@ function facetRepairTactic(key: string, label: string) {
 
 function neuralRepairTactic(key: string) {
   if (key === "cognitive_friction") {
-    return "Reduce cognitive load: fewer clauses, simpler structure, one ask, and no generic jargon.";
+    return "Reduce processing friction: fewer clauses, one ask, no jargon.";
   }
   if (key === "personal_relevance") {
     return "Increase self-relevance: mention the persona's situation and show why this matters to them now.";
   }
   if (key === "emotional_engagement") {
-    return "Increase reward value: state a tangible win or avoided pain in human terms.";
+    return "Make the payoff concrete: one tangible gain or avoided cost in the reader's terms, only if true.";
   }
   if (key === "social_proof_potential") {
-    return "Add credible social proof only if supported: peer teams, customer category, reference, benchmark, or proof path.";
+    return "Social-cognition proxy is low (a whole-brain pattern, not a check for social proof). Make the human stakes concrete; add peer evidence only if true.";
   }
   if (key === "memorability") {
     return "Add a compact, specific phrase or contrast that is easy to remember.";

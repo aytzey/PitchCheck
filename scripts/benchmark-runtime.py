@@ -45,12 +45,22 @@ def main():
         "version from one screen. Would a short demonstration next Tuesday help you evaluate it?"
     )
     messages = [f"Jordan, {base}", f"Morgan, {base} " * 3, f"Taylor, {base} " * 9]
+    # Timing constants in engine mirror the checkpoint config; fail loudly if upstream drifts.
+    data_cfg = engine.get_model().data
+    tribe_cfg = {"neuro_offset": data_cfg.neuro.offset, "tr": data_cfg.TR,
+                 "text_hz": data_cfg.text_feature.frequency, "window_trs": data_cfg.duration_trs}
+    assert tribe_cfg == {"neuro_offset": engine.TRIBE_HEMODYNAMIC_LAG_SECONDS, "tr": engine.TRIBE_TR_SECONDS,
+                         "text_hz": engine.TRIBE_TEXT_FEATURE_HZ, "window_trs": engine.TRIBE_WINDOW_TRS}, tribe_cfg
     rows = []
     for index in [0, 1, 2, 1]:
         started = time.perf_counter()
         predictions = engine.score_text(messages[index])
         assert predictions.ndim == 2 and predictions.shape[1] == 20484
         assert np.isfinite(predictions).all()
+        if engine.TRIBE_TEXT_INPUT_MODE == "direct":
+            assert engine.direct_text_segment_words(
+                messages[index], predictions.shape[0], engine.DIRECT_TEXT_TIMING_BASIS
+            ) is not None, predictions.shape
         row = {"case": index, "wall_seconds": round(time.perf_counter() - started, 4),
                "metrics": engine.last_score_metrics()}
         row["feature_cache_entries"] = len(engine.get_model().data.text_feature.infra.cache_dict)
@@ -66,7 +76,7 @@ def main():
         print(json.dumps(row), flush=True)
     result = {"torch": torch.__version__, "gpu": torch.cuda.get_device_name(),
               "max_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
-              "rows": rows}
+              "tribe_config": tribe_cfg, "rows": rows}
     (args.output / "metrics.json").write_text(json.dumps(result, indent=2) + "\n")
     engine.unload_model()
 

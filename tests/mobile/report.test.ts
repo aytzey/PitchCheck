@@ -33,6 +33,14 @@ describe("normalizePitchScoreReport", () => {
     expect(result.verdict.length).toBeGreaterThan(0);
   });
 
+  it("unwraps the { report } envelope returned by /score", () => {
+    const result = normalizePitchScoreReport({ report: { persuasion_score: 73, verdict: "Good", platform: "linkedin" } });
+
+    expect(result.persuasion_score).toBe(73);
+    expect(result.verdict).toBe("Good");
+    expect(result.platform).toBe("linkedin");
+  });
+
   it("throws for non-object payload", () => {
     expect(() => normalizePitchScoreReport(null)).toThrow(/invalid payload/i);
   });

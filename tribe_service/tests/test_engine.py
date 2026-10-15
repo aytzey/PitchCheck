@@ -385,3 +385,32 @@ class TestDerivePersuasionSignals:
         assert raw_features == extract_features(preds)
         assert fmri_summary == summarize_fmri_output(preds, text_input_mode="direct")
         assert neural_signals == derive_persuasion_signals(raw_features)
+
+
+def test_direct_text_segment_words_mirrors_tribe_placement():
+    import math
+    from tribe_service.engine import direct_text_segment_words
+
+    def placed(n_words: int) -> list[list[int]]:
+        words = [f"w{k}" for k in range(n_words)]
+        groups = direct_text_segment_words(" ".join(words), math.ceil((n_words - 1) * 0.40 + 0.32), "synthetic_word_order")
+        starts = {sum(len(w) + 1 for w in words[:k]): k for k in range(n_words)}
+        return [[starts[span[0]] for span in group] for group in groups]
+
+    assert [len(group) for group in placed(30)] == [2, 3] * 6
+    groups = placed(251)
+    assert 249 in groups[99] and 250 in groups[100]
+    for n_words in range(1, 400):
+        flat = [k for group in placed(n_words) for k in group]
+        assert flat == list(range(n_words)) and all(placed(n_words))
+
+    assert direct_text_segment_words("w " * 41, 5, "synthetic_word_order") is None  # count mismatch
+    assert direct_text_segment_words("one two three", 1, "real_time_seconds") is None
+    assert direct_text_segment_words("", 1, "synthetic_word_order") is None
+
+
+def test_timing_note_documents_lag_without_shifting():
+    from tribe_service.engine import _timing_metadata_for_input_mode
+
+    note = _timing_metadata_for_input_mode("direct")["temporal_trace_note"]
+    assert "already offsets" in note and "not real elapsed seconds" in note

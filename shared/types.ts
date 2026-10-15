@@ -93,6 +93,7 @@ export interface SegmentLocation {
   value: number;
   percentile: number;
   text: string;
+  context_text?: string;
 }
 
 export interface SegmentLocalization {
@@ -149,6 +150,7 @@ export interface RobustnessReport {
   research_synthesis?: ResearchSynthesis | null;
   confidence_reasons?: string[];
   scientific_caveats?: string[];
+  breakdown_anchor?: { basis: string } | null; // persona-read anchoring of recipient breakdown items
   calibration_basis: string;
 }
 
@@ -395,7 +397,7 @@ function normalizeNumberRecord(value: unknown) {
   return result;
 }
 
-function normalizeStringRecordArray(value: unknown) {
+function normalizeStringRecordArray(value: unknown, maxItems = MAX_LIST_ITEMS) {
   if (!Array.isArray(value)) return undefined;
   const records: Array<Record<string, string>> = [];
   for (const item of value) {
@@ -406,7 +408,7 @@ function normalizeStringRecordArray(value: unknown) {
       if (text) record[key.slice(0, 120)] = text;
     }
     if (Object.keys(record).length) records.push(record);
-    if (records.length >= MAX_LIST_ITEMS) break;
+    if (records.length >= maxItems) break;
   }
   return records.length ? records : undefined;
 }
@@ -572,7 +574,7 @@ function normalizePersuasionEvidence(value: unknown): PersuasionEvidence | null 
   if (Object.keys(inputMetadata).length) evidence.input_metadata = inputMetadata;
   const researchBasis = normalizeStringArray(value.research_basis);
   if (researchBasis.length) evidence.research_basis = researchBasis;
-  evidence.research_sources = normalizeStringRecordArray(value.research_sources);
+  evidence.research_sources = normalizeStringRecordArray(value.research_sources, 64);
   evidence.calibration_quality = isRecord(value.calibration_quality) ? value.calibration_quality : undefined;
   return evidence;
 }
@@ -591,7 +593,7 @@ function normalizeNeuroAxes(value: unknown) {
       analogue: normalizeText(item.analogue, "", MAX_SHORT_TEXT_CHARS),
       evidence: normalizeStringArray(item.evidence),
       caveat: normalizeText(item.caveat, "", MAX_REPORT_TEXT_CHARS),
-      source_keys: normalizeStringArray(item.source_keys),
+      source_keys: normalizeStringArray(item.source_keys, 16, 120),
       unsupported_by_text: typeof item.unsupported_by_text === "boolean" ? item.unsupported_by_text : undefined,
     };
   }
@@ -611,7 +613,7 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
     confidence: normalizeUnit(value.confidence) ?? 0,
     score_delta: parseFiniteNumber(value.score_delta),
     prompt_injection_risk: parseFiniteNumber(value.prompt_injection_risk),
-    guardrails_applied: normalizeStringArray(value.guardrails_applied),
+    guardrails_applied: normalizeStringArray(value.guardrails_applied, 12),
     warnings: normalizeStringArray(value.warnings),
     calibration_basis: normalizeText(value.calibration_basis, "Unavailable.", MAX_REPORT_TEXT_CHARS),
   };
@@ -633,8 +635,11 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
     : null;
   const confidenceReasons = normalizeStringArray(value.confidence_reasons);
   if (confidenceReasons.length) report.confidence_reasons = confidenceReasons;
-  const scientificCaveats = normalizeStringArray(value.scientific_caveats);
+  const scientificCaveats = normalizeStringArray(value.scientific_caveats, 16);
   if (scientificCaveats.length) report.scientific_caveats = scientificCaveats;
+  report.breakdown_anchor = isRecord(value.breakdown_anchor)
+    ? { basis: normalizeOptionalText(value.breakdown_anchor.basis, MAX_SHORT_TEXT_CHARS) }
+    : null;
   return report;
 }
 
@@ -675,5 +680,52 @@ export function normalizePitchScoreReport(obj: unknown): PitchScoreReport | null
     robustness: normalizeRobustnessReport(obj.robustness),
     platform: normalizePlatform(obj.platform),
     scored_at: normalizeTimestamp(obj.scored_at),
+  };
+}
+
+export interface RefineEvaluation {
+  id: string;
+  eligible: boolean;
+  semantic: number | null;
+  neural: number | null;
+  selection: number | null;
+}
+
+export interface RefineEvidence {
+  mode: "model" | "mock" | "unknown";
+  selectedId: string | null;
+  improved: boolean;
+  jev: boolean;
+  rows: RefineEvaluation[];
+}
+
+const REFINE_CANDIDATE_ID = /^(original|c[1-9])$/;
+
+// Trust boundary: tribe_guidance comes straight from the runtime; keep only what the UI renders.
+export function normalizeRefineEvidence(value: unknown): RefineEvidence | null {
+  if (!isRecord(value) || !Array.isArray(value.evaluations)) return null;
+  const candidateId = (raw: unknown) => (typeof raw === "string" && REFINE_CANDIDATE_ID.test(raw) ? raw : null);
+  const rows = value.evaluations
+    .filter(isRecord)
+    .slice(0, 4)
+    .flatMap((row) => {
+      const id = candidateId(row.id);
+      return id
+        ? [{
+            id,
+            eligible: row.eligible === true,
+            semantic: normalizeScore(row.semantic_score),
+            neural: normalizeScore(row.neural_score),
+            selection: normalizeScore(row.selection_score),
+          }]
+        : [];
+    });
+  if (!rows.length) return null;
+  return {
+    mode: value.mode === "model" || value.mode === "mock" ? value.mode : "unknown",
+    selectedId: candidateId(value.selected_id),
+    improved: value.improved === true,
+    jev: isRecord(value.selection_policy),
+    rows,
   };
 }

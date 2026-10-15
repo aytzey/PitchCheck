@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import asyncio
 import contextlib
 import time
@@ -27,7 +28,10 @@ from tribe_service.schemas import (
     RewriteSuggestion,
     TopMove,
 )
+from tribe_service import score_log
 from tribe_service.engine import (
+    _WORD_RE,
+    FEATURE_KEYS,
     score_text,
     analyze_predictions,
     is_model_loaded,
@@ -358,6 +362,7 @@ async def health():
         "max_score_concurrency": TRIBE_MAX_SCORE_CONCURRENCY,
         "score_queue_timeout_seconds": TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS,
         "openrouter_enabled": OPENROUTER_ENABLED,
+        "score_log_enabled": score_log.enabled(),
     }
 
 
@@ -392,6 +397,43 @@ def auth_logout(
 ):
     AUTH_STORE.logout(_token_from_credentials(credentials))
     return {"ok": True}
+
+
+def _score_log_record(request, report, raw_features, fmri_data, neural_signals) -> dict:
+    """Numbers-only whitelist for the opt-in score log; never message, persona or LLM prose."""
+    message = request.message
+    robustness = report.robustness or {}
+    return {
+        "source": "score",
+        "scored_at": report.scored_at,
+        "pitch_id": score_log.pitch_id(message),
+        "persona_id": score_log.pitch_id(request.persona),
+        "platform": request.platform,
+        "word_count": len(_WORD_RE.findall(message)),
+        "sentence_count": len(re.findall(r"[.!?]+(?:\s|$)", message)) or 1,
+        "digit_count": sum(char.isdigit() for char in message),
+        "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
+        "model_id": TRIBE_MODEL_ID,
+        **{key: fmri_data.get(key) for key in ("segments", "voxel_count", "text_feature_model", "text_feature_compatible")},
+        "methodology_version": (report.persuasion_evidence or {}).get("methodology_version"),
+        "synthesis_basis": (robustness.get("research_synthesis") or {}).get("basis"),
+        "git_sha": os.getenv("PITCHCHECK_GIT_SHA") or None,
+        "raw_features": {key: raw_features.get(key) for key in FEATURE_KEYS},
+        "neural_signals": neural_signals,
+        "axes": {key: axis.get("score") for key, axis in (robustness.get("neuro_axes") or {}).items() if isinstance(axis, dict)},
+        "temporal_trace": [round(float(value), 4) for value in fmri_data.get("temporal_trace") or []],
+        "quality_weight": robustness.get("prediction_quality_weight"),
+        "warnings": robustness.get("warnings", []),
+        "guardrails_applied": robustness.get("guardrails_applied", []),
+        "llm_used": robustness.get("raw_llm_score") is not None,
+        "llm_model": robustness.get("llm_model"),
+        **{key: robustness.get(key) for key in (
+            "evidence_score", "neural_score", "raw_llm_score", "llm_score", "context_fit_score",
+            "confidence", "semantic_blend_weight", "final_score",
+        )},
+        "facets": {key: facet.get("score") for key, facet in (report.context_fit or {}).items() if isinstance(facet, dict)},
+        "b1_tribe_informed": True,
+    }
 
 
 @app.post("/score")
@@ -482,6 +524,14 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             scored_at=datetime.now(timezone.utc).isoformat(),
         )
 
+        if score_log.enabled():
+            try:
+                if report.robustness is not None:
+                    report.robustness["score_log_id"] = score_log.pitch_id(request.message)
+                score_log.append(_score_log_record(request, report, raw_features, fmri_data, neural_signals))
+            except Exception as exc:  # the log must never fail /score
+                LOGGER.warning("Score log skipped (%s)", type(exc).__name__)
+
         return {"report": report.model_dump()}
 
     except ScoreQueueTimeoutError:
@@ -538,6 +588,25 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
     return measurements
 
 
+def _log_refine_candidates(message: str, guidance: dict, *, jev: bool) -> None:
+    """One numbers-only row per measured candidate; never the draft text or critic notes."""
+    parent = score_log.pitch_id(message)
+    scored_at = datetime.now(timezone.utc).isoformat()
+    for row in guidance.get("evaluations") or []:
+        score_log.append({
+            "source": "refine_candidate", "scored_at": scored_at, "path": "jev" if jev else "legacy",
+            "parent_pitch_id": parent, "pitch_id": score_log.pitch_id(row.get("message", "")),
+            "id": row.get("id"), "selected": row.get("id") == guidance.get("selected_id"),
+            "selected_id_semantic_only": guidance.get("selected_id_semantic_only"),
+            **{key: row.get(key) for key in (
+                "eligible", "semantic_score", "selection_score", "neural_score", "quality_weight",
+                "neural_signals", "response_features", "text_feature_model", "mode",
+            )},
+            "axes": {key: axis.get("score") for key, axis in (row.get("neuro_axes") or {}).items() if isinstance(axis, dict)},
+            "score_adjustment": (row.get("empirical_effect") or {}).get("score_adjustment"),
+        })
+
+
 @app.post("/refine")
 async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_auth)):
     """Generate drafts, measure each with TRIBE, then select a context-validated measured draft."""
@@ -580,6 +649,11 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
                 [item.model_dump() for item in request.clarification_answers],
                 lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
             )
+            if score_log.enabled():
+                try:
+                    _log_refine_candidates(request.message, result.get("tribe_guidance") or {}, jev=strategy is not None)
+                except Exception as exc:  # the log must never fail /refine
+                    LOGGER.warning("Refine log skipped (%s)", type(exc).__name__)
         return PitchRefineResponse(**result).model_dump()
     except ScoreQueueTimeoutError as exc:
         raise HTTPException(status_code=429, detail="Refine service is busy. Try again shortly.",

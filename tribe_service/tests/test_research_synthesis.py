@@ -44,7 +44,7 @@ class TestAxisFindings:
 
         strength = next(item for item in synthesis["items"] if item["key"] == "self_value_strength")
         assert strength["kind"] == "strength"
-        assert "Scholz" in strength["citation"]
+        assert "Falk" in strength["citation"]
 
     def test_reward_dominance_sets_route_hint(self):
         synthesis = synthesize_research_findings(_axes(reward=72, social=50))
@@ -151,3 +151,38 @@ class TestSegmentLocalization:
         assert combined["localization"] is not None
         assert combined["temporal_archetype"] is not None
         assert any(item["key"] == "low_sustain" for item in combined["items"])
+
+
+DANA = (
+    "Hi Dana, your Q3 post on churn was sharp. Plans start at $1,299/mo; most teams see 23.5% fewer "
+    "tickets in 30 days. Docs: https://acme.io/pricing — worth a 10-minute look next week?"
+)
+
+
+def test_excerpts_follow_tribe_word_placement_without_lag_shift():
+    from tribe_service.research_synthesis import _segment_excerpts
+
+    excerpts = _segment_excerpts(DANA, 15, trace_basis="synthetic_word_order")
+    assert excerpts[0] == "Hi Dana"  # no 5-s lag shift: segment 0 starts at the first word
+    assert excerpts[5] == "1,299/mo"
+    assert excerpts[11] == "acme.io/pricing"
+    assert _segment_excerpts(DANA, 15, trace_basis="synthetic_word_order", context=1)[5] == "start at $1,299/mo; most teams"
+
+
+def test_localization_reports_mapping_and_context(monkeypatch):
+    from tribe_service import research_synthesis
+
+    trace = [0.5 + 0.01 * i for i in range(15)]
+    placed = research_synthesis.localize_pitch_segments(DANA, {"temporal_trace": trace, "temporal_trace_basis": "synthetic_word_order"})
+    assert placed["excerpt_mapping"] == "tribe_word_placement"
+    assert placed["basis"].endswith("_v2")
+    assert placed["peak"]["text"] == "week"
+    assert placed["peak"]["context_text"] == "10-minute look next week"
+
+    fallback = research_synthesis.localize_pitch_segments(DANA, {"temporal_trace": trace[:5]})
+    assert fallback["excerpt_mapping"] == "proportional_fallback"
+    assert fallback["peak"]["text"].endswith("week")  # last word kept, nothing silently clipped
+
+    monkeypatch.setattr(research_synthesis, "LOCALIZATION_CONTEXT_SEGMENTS", 0)
+    narrow = research_synthesis.localize_pitch_segments(DANA, {"temporal_trace": trace, "temporal_trace_basis": "synthetic_word_order"})
+    assert narrow["weakest"]["context_text"] == narrow["weakest"]["text"]

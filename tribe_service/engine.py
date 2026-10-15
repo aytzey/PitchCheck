@@ -6,6 +6,7 @@ import gc
 import importlib.util
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -540,6 +541,14 @@ DIRECT_TEXT_TIMING_BASIS = "synthetic_word_order"
 REAL_TIME_TIMING_BASIS = "real_time_seconds"
 TRIBE_PREDICTION_SUBJECT_BASIS = "average_subject"
 TRIBE_CORTICAL_MESH = "fsaverage5"
+# Synthetic read-aloud schedule for direct text mode (~150 wpm, no pauses): onset k*0.40 s, 0.32 s long.
+WORD_SPACING = 0.40
+WORD_DURATION = 0.32
+# Mirror facebook/tribev2 config.yaml (neuro.frequency=1.0 -> TR, text_feature.frequency=2.0,
+# duration_trs=100); scripts/benchmark-runtime.py asserts them against the loaded checkpoint.
+TRIBE_TR_SECONDS, TRIBE_TEXT_FEATURE_HZ, TRIBE_WINDOW_TRS = 1.0, 2.0, 100
+# Provenance only: TRIBE v2 targets were offset 5 s at training (config neuro.offset=5.0), so row i is
+# already aligned to stimulus second i. NEVER shift segments/excerpts by this lag.
 TRIBE_HEMODYNAMIC_LAG_SECONDS = 5.0
 TRIBE_RESPONSE_KIND = "tribe_predicted_fmri_analogue"
 
@@ -621,15 +630,20 @@ def _timing_metadata_for_input_mode(text_input_mode: str | None = None) -> dict[
             "temporal_trace_basis": DIRECT_TEXT_TIMING_BASIS,
             "temporal_segment_label": "synthetic word-order segment",
             "temporal_trace_note": (
-                "Direct text mode skips TTS/WhisperX. Segment order follows the pitch text; "
-                "segment positions are not real elapsed seconds."
+                "Direct text mode skips TTS/WhisperX. Each segment is 1 s of a synthetic read-aloud timeline "
+                "(a word every 0.40 s, ~150 wpm, no pauses); segment positions are not real elapsed seconds. "
+                "TRIBE already offsets predictions by 5 s for hemodynamic lag, so segment i is centred on the "
+                "words placed in synthetic second i but also blends roughly 3 s before and 2 s after; "
+                "do not shift spans further."
             ),
         }
     return {
         "temporal_trace_basis": REAL_TIME_TIMING_BASIS,
         "temporal_segment_label": "second",
         "temporal_trace_note": (
-            "Audio/TTS timing path with speech-event alignment; segment positions are time-based."
+            "Audio/TTS timing path with speech-event alignment; segment positions are time-based. "
+            "TRIBE already offsets predictions by 5 s for hemodynamic lag, so segment i is centred on "
+            "audio second i but also blends roughly 3 s before and 2 s after; do not shift spans further."
         ),
     }
 
@@ -905,16 +919,14 @@ def build_direct_text_events(text: str) -> pd.DataFrame:
     if not matches:
         raise ValueError("Text contains no words to score")
 
-    word_duration = 0.32
-    word_spacing = 0.40
     rows = []
     for index, match in enumerate(matches):
         rows.append(
             {
                 "type": "Word",
                 "text": match.group(0),
-                "start": index * word_spacing,
-                "duration": word_duration,
+                "start": index * WORD_SPACING,
+                "duration": WORD_DURATION,
                 "timeline": "default",
                 "subject": "default",
                 "language": TRIBE_DIRECT_TEXT_LANGUAGE,
@@ -944,9 +956,32 @@ def build_direct_text_events(text: str) -> pd.DataFrame:
     events = RemoveMissing()(events)
     events = standardize_events(events)
     events.attrs.update(_timing_metadata_for_input_mode("direct"))
-    events.attrs["synthetic_word_duration_seconds"] = word_duration
-    events.attrs["synthetic_word_spacing_seconds"] = word_spacing
+    events.attrs["synthetic_word_duration_seconds"] = WORD_DURATION
+    events.attrs["synthetic_word_spacing_seconds"] = WORD_SPACING
     return events
+
+
+def direct_text_segment_words(
+    message: str, n_segments: int, trace_basis: str | None
+) -> list[list[tuple[int, int]]] | None:
+    """Char spans of the words whose features TRIBE places in each 1-s segment (direct mode).
+
+    Mirrors build_direct_text_events + neuralset placement: word k starts at k*0.40 s, its feature
+    enters 2 Hz bin round(0.8k) and bins pair into TRs, so TR(k) = round(0.8k)//2. Input timing
+    only, not response attribution (non-causal encoder, left-context embeddings, HRF dispersion).
+    Returns None unless the trace really came from this schedule: synthetic basis AND
+    n_segments == ceil(0.40*(N-1) + 0.32).
+    """
+    if trace_basis != DIRECT_TEXT_TIMING_BASIS:
+        return None
+    spans = [match.span() for match in _WORD_RE.finditer(message)]
+    if not spans or n_segments != math.ceil((len(spans) - 1) * WORD_SPACING + WORD_DURATION):
+        return None
+    groups: list[list[tuple[int, int]]] = [[] for _ in range(n_segments)]
+    bins_per_tr = TRIBE_TEXT_FEATURE_HZ * TRIBE_TR_SECONDS
+    for k, span in enumerate(spans):
+        groups[int(round(k * WORD_SPACING * TRIBE_TEXT_FEATURE_HZ) // bins_per_tr)].append(span)
+    return groups
 
 
 def _score_text_once(message: str, *, retry_index: int) -> tuple[np.ndarray, dict[str, Any]]:
@@ -1290,7 +1325,7 @@ def summarize_fmri_output(
         LOGGER.warning("Rust fMRI summary failed; using Python fallback: %s", exc)
         native_summary = None
     if native_summary is not None:
-        return {**native_summary, **_text_feature_metadata()}
+        return {**native_summary, **_timing_metadata_for_input_mode(mode), **_text_feature_metadata()}
     return _summarize_fmri_output_from_matrix(
         predictions,
         text_input_mode=text_input_mode,
@@ -1309,9 +1344,9 @@ PERSUASION_SIGNAL_KEYS = [
 ]
 
 PERSUASION_SIGNAL_LABELS = {
-    "emotional_engagement": "Affective Value Salience",
-    "personal_relevance": "Self-Value Relevance",
-    "social_proof_potential": "Social Cognition / Sharing",
+    "emotional_engagement": "Affective Salience (response intensity)",
+    "personal_relevance": "Self-Value Proxy",
+    "social_proof_potential": "Social Cognition Proxy",
     "memorability": "Encoding Potential",
     "attention_capture": "Early Attention Salience",
     "cognitive_friction": "Cognitive Friction",
@@ -1323,7 +1358,9 @@ def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> 
 
     Uses ratio-normalized inputs (divided by global_mean_abs) like isthisviral,
     making scores robust to overall activation magnitude differences.
-    Band ranges tuned to ratio-normalized values from real TRIBE outputs.
+    Band ranges are hand-set to the observed spread of unrecorded TRIBE outputs
+    (ported from isthisviral), not fitted to outcome or human-rating data.
+    ponytail: hand-set unvalidated prior; retune when paired outcome or human-rating data exists.
     """
     def feature(key: str, default: float) -> float:
         try:
@@ -1345,8 +1382,7 @@ def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> 
     sr = clamp(feature("sustain_ratio", 0.5), 0.0, 1.0)   # already a fraction
     ar = max(0.0, feature("arc_ratio", 0.0))              # range/mean ratio
 
-    # Affective value salience:
-    # High peak intensity + temporal variation = predicted reward/affect response.
+    # Affective salience: whole-brain heuristic; hand-set band; no ROI.
     emotional_engagement = weighted_signal([
         (band_score(peak_r, 5.0, 12.0), 0.35),    # peak/mean ratio
         (band_score(ts_r, 0.05, 0.5), 0.25),      # temporal variability
@@ -1354,18 +1390,15 @@ def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> 
         (band_score(delta_r, 0.1, 1.0), 0.20),     # max shift (emotional moments)
     ])
 
-    # Self-value relevance:
-    # Sustained activation + focused spatial pattern = predicted self/value integration.
+    # Self-value proxy: whole-brain heuristic; hand-set band; no ROI.
     personal_relevance = weighted_signal([
         (band_score(sr, 0.4, 0.75), 0.35),         # sustained above-mean segments
         (band_score(fr, 2.0, 5.0), 0.30),          # top-voxel focus ratio
-        (band_score(late_r, 0.8, 1.3), 0.20),      # late engagement (reflection)
+        (band_score(late_r, 0.8, 1.3), 0.20),      # late-quartile ratio
         (band_score(peak_r, 6.0, 10.0), 0.15),     # peak depth
     ])
 
-    # Social cognition / sharing potential:
-    # Strong peaks + temporal dynamics = predicted social-cognitive engagement.
-    # This does not mean the message has social proof; text evidence handles that.
+    # Social cognition proxy: whole-brain heuristic; hand-set band; no ROI.
     social_proof_potential = weighted_signal([
         (band_score(peak_r, 6.5, 11.0), 0.35),     # sharp peaks
         (band_score(delta_r, 0.15, 0.8), 0.25),    # transition moments
@@ -1373,8 +1406,7 @@ def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> 
         (band_score(ss, 0.25, 0.42), 0.20),         # spatial breadth
     ])
 
-    # Encoding potential:
-    # Engagement arc + sustained + peak = predicted memory/encoding strength.
+    # Encoding potential: whole-brain heuristic; hand-set band; no ROI.
     memorability = weighted_signal([
         (band_score(ar, 0.15, 0.65), 0.30),        # dynamic range of trace
         (band_score(sr, 0.45, 0.75), 0.25),        # sustained activation
@@ -1382,8 +1414,7 @@ def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> 
         (band_score(fr, 2.5, 4.5), 0.20),          # focused encoding
     ])
 
-    # Early attention salience:
-    # Early activation + peak + broad spatial response = attention grab.
+    # Early attention salience: whole-brain heuristic; hand-set band; no ROI.
     attention_capture = weighted_signal([
         (band_score(early_r, 0.85, 1.25), 0.35),   # early engagement (opener)
         (band_score(peak_r, 6.0, 11.0), 0.30),     # peak salience
@@ -1391,8 +1422,8 @@ def _derive_persuasion_signals_from_features(raw_features: dict[str, float]) -> 
         (band_score(delta_r, 0.1, 0.7), 0.15),     # onset surprise
     ])
 
-    # Cognitive Friction (dlPFC load analogue):
-    # INVERSE — high friction = bad. Low sustain + low focus + narrow spread = confusion
+    # Cognitive friction: whole-brain heuristic; hand-set band; no ROI.
+    # INVERSE — high friction = bad.
     cognitive_friction = weighted_signal(
         [
             (100 - band_score(sr, 0.35, 0.7), 0.35),   # low sustain = lost attention
@@ -1446,7 +1477,7 @@ def analyze_predictions(
         native_analysis = None
     if native_analysis is not None:
         raw_features, fmri_summary, neural_signals = native_analysis
-        return raw_features, {**fmri_summary, **_text_feature_metadata()}, neural_signals
+        return raw_features, {**fmri_summary, **_timing_metadata_for_input_mode(mode), **_text_feature_metadata()}, neural_signals
 
     raw_features = _extract_features_from_matrix(matrix)
     fmri_summary = _summarize_fmri_output_from_matrix(

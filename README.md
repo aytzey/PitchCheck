@@ -6,7 +6,7 @@
 
 **Know if your pitch will land before you send it.**
 
-Score sales emails, cold outreach, LinkedIn DMs, and call scripts against a neuroscience model that predicts how the reader's brain will actually respond.
+Score sales emails, cold outreach, LinkedIn DMs, and call scripts against a neuroscience model that predicts an average listener's cortical response analogue to the text; recipient attitudes are handled by the persona-aware LLM layer.
 
 <br>
 
@@ -33,14 +33,14 @@ You paste a message, set a recipient ("Jordan Park, Staff Engineer"), pick a cha
 PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookresearch/tribev2) brain encoding model — the same model used in computational neuroscience research to predict fMRI responses to naturalistic stimuli. It maps your message onto ~20,000 cortical vertices and treats the output as **predicted neural-response analogues**, not measured fMRI from the recipient. It returns:
 
 - **Persuasion score** (0–100) with calibration confidence
-- **Six neural signals** — affective value salience, early attention salience, self-value relevance, social cognition/sharing, encoding potential, cognitive friction
-- **Neuro-persuasive axes** — self/value fit, reward/affect, social cognition, encoding/attention, processing fluency
-- **Segment-by-segment engagement timeline** — where the reader tunes in, where they drop off
+- **Six neural signals** — affective salience, early attention salience, self-value proxy, social cognition proxy, encoding potential, cognitive friction
+- **Neuro-persuasive axes** — self/value, affective salience, social cognition, encoding/attention, processing fluency (whole-brain proxies)
+- **Segment-by-segment predicted-response timeline** — where the predicted response peaks and drops
 - **Verdict and narrative** — an LLM reads the neural output and explains what's working and what isn't, in plain language
-- **Top moves** — the 1-3 highest-leverage changes, ranked by expected impact on whether the reader acts
+- **Top moves** — the 1-3 highest-leverage changes, LLM-ranked by expected impact on whether the reader acts
 - **Rewrite suggestions** — before/after alternatives with reasoning
 
-Every judgment and rewrite is held to a built-in persuasion doctrine — open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs — backed by an evidence annex from published persuasion science: self-relevance and neural message effectiveness (Falk et al. 2010/2016; Scholz, Chan & Falk 2025), route matching (Petty & Cacioppo's Elaboration Likelihood Model), loss aversion and framing (Tversky & Kahneman 1981), similar-other social proof (Goldstein, Cialdini & Griskevicius 2008), reactance and the "but you are free" effect (Carpenter 2013 meta-analysis), processing fluency (Alter & Oppenheimer), precise-number credibility (Janiszewski & Uy 2008), psychological targeting (Matz et al. 2017), and the commitment gradient (Freedman & Fraser 1966). Each top move names the principle it rests on.
+Every judgment and rewrite is held to a built-in persuasion doctrine — open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs — backed by an evidence annex from published persuasion science: self-relevance and neural message effectiveness (Falk et al. 2010/2011/2016; Cooper et al. 2015), route matching (Petty & Cacioppo's Elaboration Likelihood Model), framing (Tversky & Kahneman 1981) and, separately, loss aversion (Kahneman & Tversky 1979), same-setting norms (Goldstein, Cialdini & Griskevicius 2008), reactance and the "but you are free" effect (Carpenter 2013 meta-analysis), processing fluency (Alter & Oppenheimer), precise-number credibility (Janiszewski & Uy 2008), psychological targeting (Matz et al. 2017), and the commitment gradient (Freedman & Fraser 1966). Each top move names the principle it rests on.
 
 The whole loop takes a few seconds. Write, score, tweak, re-score.
 
@@ -50,7 +50,7 @@ The pipeline has three stages. All of this runs locally if you have a GPU; other
 
 ### 1. Text → TRIBE Prediction
 
-Your message gets tokenized into word-level events with synthetic timing (0.32s/word, 0.40s gap). TRIBE v2 takes those events and produces a prediction matrix of shape `(n_segments, 20484)` — each row is a time segment, each column is a cortical vertex on the fsaverage5 mesh.
+Your message gets tokenized into word-level events with synthetic timing: one word starts every 0.40 s and lasts 0.32 s (~150 wpm, no sentence pauses), so TRIBE models hearing the pitch read aloud, not self-paced reading. TRIBE's predictions are already shifted 5 s for hemodynamic lag (PitchCheck never shifts them again). Each 1-s segment presents ~2–3 words, but its predicted response blends several seconds of surrounding text. Numbers, URLs and e-mail addresses are split into several word events. TRIBE v2 takes those events and produces a prediction matrix of shape `(n_segments, 20484)` — each row is a time segment, each column is a cortical vertex on the fsaverage5 mesh.
 
 No audio synthesis, no image generation — the `direct` text input mode skips gTTS/WhisperX entirely and works straight from the text.
 
@@ -60,51 +60,51 @@ Ten raw features get extracted from the prediction matrix:
 
 | Feature | What it captures |
 |---------|-----------------|
-| `global_mean_abs` | Overall predicted-response intensity |
-| `global_peak_abs` | Maximum predicted voxel response |
+| `global_mean_abs` | Mean `\|prediction\|` over all vertices and segments |
+| `global_peak_abs` | Maximum vertex `\|prediction\|` |
 | `temporal_std` | How much predicted response varies across segments |
 | `early_mean` | First-quartile predicted response (opener strength) |
 | `late_mean` | Last-quartile predicted response (close strength) |
 | `max_temporal_delta` | Largest consecutive segment shift |
-| `spatial_spread` | Fraction of voxels above global mean |
-| `focus_ratio` | Top-10% voxel mean vs. global mean |
+| `spatial_spread` | Fraction of vertices above the global mean |
+| `focus_ratio` | Top-10% vertex mean vs. global mean |
 | `sustain_ratio` | Fraction of segments above mean |
 | `arc_ratio` | (max − min) / mean of temporal trace |
 
-These get ratio-normalized against `global_mean_abs` and mapped through calibrated band ranges into six predicted-response signals (0–100):
+These get ratio-normalized against `global_mean_abs` and mapped through hand-set band ranges (literature-motivated, unvalidated) into six predicted-response signals (0–100):
 
-| Signal | Conservative analogue | Key inputs |
+| Signal | Interpretive label (literature anchor; whole-brain proxy) | Key inputs |
 |--------|----------------------|------------|
-| Affective Value Salience | mPFC/value and affective salience | peak intensity, temporal variation, arc, delta |
-| Early Attention Salience | Salience network (AI/dACC) | early predicted response, peak, spatial spread |
-| Self-Value Relevance | mPFC/vmPFC/PCC self/value processing | sustain, focus, late predicted response |
-| Social Cognition / Sharing | TPJ/dmPFC/default-network social cognition | peaks, temporal dynamics, spread |
-| Encoding Potential | Hippocampal/temporal memory encoding | arc, sustain, peak, focus |
-| Cognitive Friction | dlPFC/control-load analogue | inverse of sustain, focus, spread |
+| Affective Salience (response intensity) | Affective/value salience findings; valence-agnostic | peak intensity, temporal variation, arc, delta |
+| Early Attention Salience | Salience findings | early predicted response, peak, spatial spread |
+| Self-Value Proxy | mPFC/vmPFC self/value findings | sustain, focus, late predicted response |
+| Social Cognition Proxy | dmPFC/pSTS/temporal-pole/TPJ social-cognition findings | peaks, temporal dynamics, spread |
+| Encoding Potential | Encoding/memorability findings; not a recall estimate | arc, sustain, peak, focus |
+| Cognitive Friction | Processing-fluency findings (inverse) | inverse of sustain, focus, spread |
 
-Scores are compressed to [8, 92] to avoid false confidence at extremes. Cognitive friction is inverted — a high number means high friction, which is bad. A prediction-quality gate then shrinks the final score toward neutral when the TRIBE output is near-zero, flat, too short, or too low-resolution to support a strong claim.
+Scores are compressed to [8, 92] ([4, 84] for cognitive friction) to avoid false confidence at extremes. Cognitive friction is inverted — a high number means high friction, which is bad. A prediction-quality gate then shrinks the final score toward neutral when the TRIBE output is near-zero, flat, too short, or too low-resolution to support a strong claim.
 
 The final score is calibrated from these signals through five TRIBE-derived neuro-persuasive axes:
 
 | Axis | What it means |
 |------|---------------|
-| Self-value fit | mPFC/vmPFC/PCC self- and value-processing analogue |
-| Reward/affect motivation | Ventral-striatum/OFC/affective valuation analogue |
-| Social cognition/sharing | TPJ/dmPFC/default-network social cognition analogue |
-| Encoding and attention | Memory/attention/salience analogue |
-| Processing fluency | Inverse cognitive-control/friction analogue |
+| Self/value response proxy | Response-shape composite named after mPFC/vmPFC self/value findings; identical for every persona |
+| Affective salience proxy | Intensity/variability composite; not liking, willingness to pay or purchase intent |
+| Social-cognition proxy | Composite named after dmPFC/pSTS/temporal-pole/TPJ findings; not a social-proof detector |
+| Encoding/attention proxy | Salience/encoding heuristic; memorability is not persuasion |
+| Processing-fluency proxy | Inverse whole-brain friction heuristic; a comprehension hint |
 
 ### 3. Neural Output → LLM Interpretation
 
-The raw signals and prediction summary go to an evaluator LLM (Claude Sonnet by default) via [OpenRouter](https://openrouter.ai), along with the recipient persona, channel norms for the selected platform, and a segment map that ties each temporal-trace segment to the approximate sentence of the pitch it covers. Rewrites are produced by a separate refiner model (DeepSeek V4 Pro by default); both are OpenRouter model ids and fully swappable, with first-class handling for reasoning models (`<think>` stripping, `reasoning.effort` hints, JSON-mode fallback).
+The raw signals and prediction summary go to an evaluator LLM (`google/gemini-3.8-flash` by default) via [OpenRouter](https://openrouter.ai), along with the recipient persona, channel norms for the selected platform, and a segment map that ties each temporal-trace segment to the approximate sentence of the pitch it covers. Rewrites are produced by a separate refiner model (`google/gemini-3.8-flash` by default; `z-ai/glm-5.3-flash` as the Jev writer); both are OpenRouter model ids and fully swappable, with first-class handling for reasoning models (`<think>` stripping, `reasoning.effort` hints, JSON-mode fallback).
 
 Before the LLM sees anything, a deterministic **neural × research synthesis** layer does the heavy interpretive lifting from the TRIBE output so the LLM mostly verbalizes and rewrites rather than guesses:
 
-- **Segment localization.** The per-segment temporal trace is mapped back onto the actual words of the pitch to pinpoint — in Python, with no LLM — the opener strength, the strongest moment, the single weakest span, the close/CTA strength, and the "attention cliff" where predicted engagement falls off hardest. The LLM and the report both receive the exact text spans ("the weakest predicted span is '…' — rewrite that first") instead of being asked to find them.
-- **Research findings.** Axis geometry and raw TRIBE features (e.g. `sustain_ratio`) are linked to published findings: weak self/value response → the Falk et al. self-relevance lever; low fluency → Alter & Oppenheimer; reward-vs-social route dominance → Cohen et al. 2024; "engagement holds for only N% of the pitch" → the sustained-attention literature.
-- **Temporal archetype.** The trace shape is classified (strong-open-fade, late peak, buried lede, flat, sustained) per Chan et al. 2024, each with a concrete lever.
+- **Segment localization.** The per-segment temporal trace is mapped back onto the actual words of the pitch to pinpoint — in Python, with no LLM — the opener strength, the strongest moment, the single weakest span, the close/CTA strength, and the largest predicted-response drop. The LLM and the report both receive these approximate text regions as places to inspect instead of being asked to find them.
+- **Research findings.** Axis geometry and raw TRIBE features (e.g. `sustain_ratio`) are linked to published findings they are motivated by, not validated against: weak self/value response → the Falk et al. self-relevance lever; low fluency → Alter & Oppenheimer; reward-vs-social route dominance → Cohen et al. 2024; "the predicted response stays at or above average for only N% of the pitch" → a memorability prior (Chan et al. 2024; Chua et al. 2011).
+- **Temporal archetype.** The trace shape is classified (strong-open-fade, late peak, buried lede, flat, sustained) by a PitchCheck heuristic inspired by Chan et al. 2024 (video ads), each with a concrete lever.
 
-All of it is citation-anchored, appears in the report's deep dive, drives the refine brief (the rewrite targets the located weak span first), and the evaluator is told to localize every judgment to these spans and execute the strongest levers in its top moves. The LLM produces the verdict, narrative, strength/risk analysis, a structured context-fit read (persona pain alignment, objection coverage, proof credibility, CTA ease, channel fit), and rewrite suggestions.
+All of it is citation-anchored and appears in the report's deep dive and the evaluator prompt (only the desktop Rust fallback refine reads it as a brief); the evaluator is told to localize every judgment to these spans and execute the strongest levers in its top moves. The LLM produces the verdict, narrative, strength/risk analysis, a structured context-fit read (persona pain alignment, objection coverage, proof credibility, CTA ease, channel fit), and rewrite suggestions.
 
 PitchCheck no longer uses deterministic keyword/regex persuasion heuristics for scoring. The TRIBE-predicted neural prior anchors the final score, and the semantic side is derived from the rubric-scored context-fit facets (not from a single self-reported LLM number), clamped to the neural calibration band, and blended in. When TRIBE evidence is weak, the quality-shrunk neural prior carries less of the score and the semantic read carries more — so persona and channel fit genuinely move the score while prompt-injection text stays bounded by the band clamp.
 
@@ -112,7 +112,7 @@ Repeated TRIBE predictions are cached in-process, but OpenRouter prompt/output c
 
 The neuroscience layer follows a conservative triangulation rule from consumer-neuroscience and neuroforecasting work: TRIBE output is useful evidence, but it is not treated as recipient-level measured fMRI. Region labels are interpretive anchors, reverse-inference risk is exposed through confidence reasons and scientific caveats, and weak prediction matrices lower both confidence and score extremity.
 
-Research basis for the calibration layer includes Falk et al. on neural responses predicting persuasion-induced behavior change ([2010](https://pmc.ncbi.nlm.nih.gov/articles/PMC3027351/)), neural focus groups predicting population-level media effects ([2012](https://pmc.ncbi.nlm.nih.gov/articles/PMC3725133/)), and MPFC/self-value signals predicting health behavior change and campaign response ([2011](https://doi.org/10.1037/a0022259), [2016](https://doi.org/10.1093/scan/nsv108)); Venkatraman et al. on fMRI predicting market-level advertising response ([2015](https://doi.org/10.1509/jmr.13.0593)); Scholz et al. on value/self/social signals and information sharing ([2017](https://doi.org/10.1177/0956797617695073)); Chan, Scholz et al. on cross-cultural neural prediction of information sharing ([2023](https://doi.org/10.1073/pnas.2313175120)); Chan et al. on temporal neural signals of ad liking ([2024](https://doi.org/10.1177/00222437231194319)); Cohen et al. on reward vs. mentalizing predictors of persuasiveness by narrative type ([2024](https://doi.org/10.1038/s41598-024-62341-3)); Scholz, Chan & Falk et al. on a 16-study message-effectiveness mega-analysis ([2025](https://doi.org/10.1093/pnasnexus/pgaf287)); Cao & Reimann on triangulation and reverse-inference limits ([2020](https://doi.org/10.3389/fpsyg.2020.550204)); and TRIBE v2 as an in-silico fMRI foundation model ([GitHub](https://github.com/facebookresearch/tribev2), [Hugging Face](https://huggingface.co/facebook/tribev2)).
+Research basis for the calibration layer includes Falk et al. on neural responses predicting persuasion-induced behavior change ([2010](https://pmc.ncbi.nlm.nih.gov/articles/PMC3027351/)), neural focus groups predicting population-level media effects ([2012](https://pmc.ncbi.nlm.nih.gov/articles/PMC3725133/)), and MPFC/self-value signals predicting health behavior change and campaign response ([2011](https://doi.org/10.1037/a0022259), [2016](https://doi.org/10.1093/scan/nsv108)); Venkatraman et al. on fMRI predicting market-level advertising response ([2015](https://doi.org/10.1509/jmr.13.0593)); Baek, Scholz et al. on value/self/social signals and information sharing ([2017](https://doi.org/10.1177/0956797617695073)); Chan, Scholz et al. on cross-cultural neural prediction of information sharing ([2023](https://doi.org/10.1073/pnas.2313175120)); Chan et al. on temporal neural signals of ad liking ([2024](https://doi.org/10.1177/00222437231194319)); Cohen et al. on reward vs. mentalizing predictors of persuasiveness by narrative type ([2024](https://doi.org/10.1038/s41598-024-62341-3)); Scholz, Chan & Falk et al. on a 16-study message-effectiveness mega-analysis ([2025](https://doi.org/10.1093/pnasnexus/pgaf287)); Cao & Reimann on triangulation and reverse-inference limits ([2020](https://doi.org/10.3389/fpsyg.2020.550204)); and TRIBE v2 as an in-silico fMRI foundation model ([GitHub](https://github.com/facebookresearch/tribev2), [Hugging Face](https://huggingface.co/facebook/tribev2)). The full source registry, with modality and evidence level per study, is `RESEARCH_SOURCES` in `tribe_service/persuasion_features.py`.
 
 This layer is optional — scoring works without an OpenRouter key, you just won't get the written interpretation.
 
@@ -227,7 +227,7 @@ The Rust layer in Tauri manages the entire GPU lifecycle — detecting `nvidia-s
 }
 ```
 
-Returns persuasion score, neural signals, engagement timeline, verdict, strengths, risks, and rewrite suggestions.
+Returns persuasion score, neural signals, predicted-response timeline, verdict, strengths, risks, and rewrite suggestions.
 
 ### `GET /api/health`
 
@@ -268,9 +268,12 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | `OPENROUTER_API_KEY` | — | Turns on LLM verdicts and rewrites |
 | `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | High-quality model for interpreting neural output |
 | `OPENROUTER_REFINER_MODEL` | `google/gemini-3.8-flash` | Which model writes rewrite drafts for requests without `jevStrategy` |
-| `OPENROUTER_REFINE_CRITIC_PASS` | `1` | Second LLM pass that critiques the rewrite against a persuasion checklist and returns a strictly better final version |
 | `OPENROUTER_REASONING_EFFORT` | — | Optional reasoning-effort hint for reasoning-capable models (DeepSeek V4: `high`/`xhigh`); dropped automatically when a provider rejects it |
 | `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |
+| `PITCHCHECK_PERSONALIZATION_FACET_WEIGHT` | `1.0` | Share of the Personalization Fit breakdown item taken from the persona read (`persona_pain_alignment`); TRIBE never sees the persona. `0` restores the neural proxy |
+| `PITCHCHECK_CREDIBILITY_FACET_WEIGHT` | `0.5` | Share of the Credibility breakdown item taken from `proof_credibility` (hand-set prior); `0` restores the neural mix |
+| `PITCHCHECK_LOCALIZATION_CONTEXT_SEGMENTS` | `1` | Neighbouring 1-s segments shown around each located span (HRF-dispersion prior, 0–3) |
+| `PITCHCHECK_SCORE_LOG_PATH` / `PITCHCHECK_SCORE_LOG_KEY` | unset | Opt-in numbers-only JSONL log of `/score` and `/refine` for later outcome joins. Needs both; the key (≥32 chars) HMACs message/persona ids. Text is never written |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |
@@ -337,9 +340,9 @@ Three GitHub Actions workflows:
 |-------|------|
 | Desktop shell | [Tauri 2](https://tauri.app) (Rust) |
 | Frontend | [Next.js 16](https://nextjs.org), React 19, Tailwind CSS v4 |
-| Scoring backend | [FastAPI](https://fastapi.tiangolo.com), Python 3.12 |
+| Scoring backend | [FastAPI](https://fastapi.tiangolo.com), Python 3.11 |
 | Neural model | [TRIBE v2](https://github.com/facebookresearch/tribev2) (Meta FAIR) |
-| Text features | LLaMA 3.2-3B (via TRIBE) |
+| Text features | `NousResearch/Hermes-3-Llama-3.2-3B` by default (TRIBE checkpoint trained on `meta-llama/Llama-3.2-3B`; reported in `text_feature_compatible`) |
 | LLM interpretation | [OpenRouter](https://openrouter.ai) |
 | Cloud GPU | [Vast.ai](https://vast.ai) |
 | CI/CD | GitHub Actions |
@@ -348,7 +351,7 @@ Three GitHub Actions workflows:
 
 PitchCheck uses Meta's **TRIBE v2** (`facebook/tribev2`) for neural response prediction.
 
-TRIBE v2 is a foundation model for in-silico neuroscience developed by Meta FAIR. It combines LLaMA 3.2-3B, V-JEPA2, and Wav2Vec-BERT to predict fMRI brain responses across ~20,000 cortical vertices on the fsaverage5 mesh. The model was trained on naturalistic fMRI datasets and is described in:
+TRIBE v2 is a foundation model for in-silico neuroscience developed by Meta FAIR. It combines `meta-llama/Llama-3.2-3B` text features (PitchCheck defaults to Hermes-3-Llama-3.2-3B and reports compatibility in `text_feature_compatible`), V-JEPA2, and Wav2Vec-BERT to predict fMRI brain responses across ~20,000 cortical vertices on the fsaverage5 mesh. The model was trained on naturalistic fMRI datasets and is described in:
 
 > Stéphane d'Ascoli, Jérémy Rapin, Yohann Benchetrit, Teon Brookes, Katelyn Begany, Joséphine Raugel, Hubert Banville, Jean-Rémi King. *"A foundation model of vision, audition, and language for in-silico neuroscience."* Meta FAIR, 2026.
 

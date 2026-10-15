@@ -339,7 +339,7 @@ class TestScore:
         assert "Scoring failed (ValueError)" in caplog.text
         assert "confidential customer copy" not in caplog.text
 
-    def test_refine_selects_a_measured_candidate_and_rejects_invented_proof(self, monkeypatch):
+    def test_refine_selects_a_measured_candidate_and_rejects_invented_proof(self, monkeypatch, tmp_path):
         from tribe_service import llm_layer
         measured = []
         original = "Benimle Çilekeş konserine gelmelisin, çok eğleneceğiz."
@@ -392,15 +392,24 @@ class TestScore:
             "clarificationRound": 1,
             "forceRewrite": True,
         }
+        log = tmp_path / "scores.jsonl"
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
         res = client.post("/refine", json=payload)
         assert res.status_code == 200
         data = res.json()
+        rows = log.read_text(encoding="utf-8").splitlines()
+        assert len(rows) == 4 and "Çilekeş" not in log.read_text(encoding="utf-8")
+        assert sum('"selected":true' in row for row in rows) == 1
+        monkeypatch.delenv("PITCHCHECK_SCORE_LOG_PATH")
         assert data["refined_message"] == candidates[1]
         assert data["model"] == "test-refiner"
         assert measured == [original, *candidates]
         assert data["tribe_guidance"]["candidate_count"] == 3
         assert data["tribe_guidance"]["selected_id"] == "c2"
         assert data["tribe_guidance"]["evaluations"][3]["eligible"] is False
+        # Context fit alone ties c1/c2; the measured TRIBE prior is what picked c2.
+        assert data["tribe_guidance"]["selected_id_semantic_only"] == "c1"
         # Same semantic judgment, different real-model evidence: selection must change.
         scores[candidates[0]], scores[candidates[1]] = 90, 20
         res = client.post("/refine", json=payload)
@@ -780,3 +789,36 @@ def test_jev_plans_from_real_baseline_before_one_writer_pass_and_checks_all_draf
     assert response.status_code == 200
     assert response.json()['refined_message'] in drafts[:2]
     assert sum(kind == 'writer' for kind, _ in events) == 1
+
+
+class TestScoreLog:
+    MESSAGE = "Hi Jordan, our platform cut deploy rollbacks 31% for teams like yours. Worth a look Tuesday?"
+    PERSONA = "Jordan Park, Staff Engineer at a fintech, hates flaky deploys"
+
+    def _score(self):
+        res = client.post("/score", json={"message": self.MESSAGE, "persona": self.PERSONA})
+        assert res.status_code == 200
+        return res.json()["report"]
+
+    def test_off_by_default_and_without_a_long_key(self, monkeypatch, tmp_path):
+        log = tmp_path / "scores.jsonl"
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "short")
+        report = self._score()
+        assert not log.exists()
+        assert "score_log_id" not in report["robustness"]
+        assert client.get("/health").json()["score_log_enabled"] is False
+
+    def test_writes_numbers_only_with_keyed_ids(self, monkeypatch, tmp_path):
+        import json
+        log = tmp_path / "scores.jsonl"
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+        report = self._score()
+
+        line = log.read_text(encoding="utf-8")
+        record = json.loads(line)
+        assert "Jordan" not in line and "fintech" not in line  # no message or persona text
+        assert record["pitch_id"] == report["robustness"]["score_log_id"] and len(record["pitch_id"]) == 64
+        assert record["final_score"] == report["robustness"]["final_score"]
+        assert record["word_count"] == 16 and record["b1_tribe_informed"] is True

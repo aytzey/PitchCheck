@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPitchScoreReport, normalizePitchScoreReport, platformValues } from "@/shared/types";
+import { isPitchScoreReport, normalizePitchScoreReport, normalizeRefineEvidence, platformValues } from "@/shared/types";
 import { BREAKDOWN_KEYS, NEURAL_SIGNAL_KEYS, PLATFORMS } from "@/shared/constants";
 
 describe("shared/types", () => {
@@ -92,6 +92,36 @@ describe("shared/types", () => {
     expect(report?.fmri_output).toBeNull();
   });
 
+  it("keeps the full source registry, axis source_keys, caveats and guardrails", () => {
+    const sourceKeys = Array.from({ length: 9 }, (_, index) => `source_${index}`);
+    const report = normalizePitchScoreReport({
+      persuasion_score: 70,
+      persuasion_evidence: {
+        research_sources: Array.from({ length: 37 }, (_, index) => ({
+          key: `source_${index}`,
+          citation: `Author ${index}`,
+          url: `https://doi.org/10.0/${index}`,
+          evidence_level: "individual_differences_in_sample",
+          modality: "fMRI",
+        })),
+      },
+      robustness: {
+        final_score: 70,
+        neuro_axes: { self_value: { label: "Self/value response proxy", score: 60, source_keys: sourceKeys } },
+        scientific_caveats: Array.from({ length: 8 }, (_, index) => `caveat ${index}`),
+        guardrails_applied: Array.from({ length: 10 }, (_, index) => `guardrail_${index}`),
+        breakdown_anchor: { basis: "persona_read_facets_v1", items: {} },
+      },
+    });
+
+    expect(report?.persuasion_evidence?.research_sources).toHaveLength(37);
+    expect(report?.persuasion_evidence?.research_sources?.[36].modality).toBe("fMRI");
+    expect(report?.robustness?.neuro_axes?.self_value.source_keys).toEqual(sourceKeys);
+    expect(report?.robustness?.scientific_caveats).toHaveLength(8);
+    expect(report?.robustness?.guardrails_applied).toHaveLength(10);
+    expect(report?.robustness?.breakdown_anchor).toEqual({ basis: "persona_read_facets_v1" });
+  });
+
   it("BREAKDOWN_KEYS has 5 entries", () => {
     expect(BREAKDOWN_KEYS).toHaveLength(5);
   });
@@ -105,5 +135,27 @@ describe("shared/types", () => {
       expect(PLATFORMS[p]).toBeDefined();
       expect(PLATFORMS[p].label).toBeTruthy();
     }
+  });
+
+  it("normalizeRefineEvidence keeps only known candidate rows and scores", () => {
+    const evidence = normalizeRefineEvidence({
+      mode: "model",
+      selected_id: "c2",
+      improved: true,
+      message: "never rendered",
+      evaluations: [
+        { id: "original", eligible: true, semantic_score: 61.4, neural_score: 55, selection_score: 58.2 },
+        { id: "c2", eligible: true, semantic_score: "70", neural_score: 140, selection_score: 66 },
+        { id: "<script>", eligible: true, semantic_score: 99 },
+        "junk",
+      ],
+    });
+    expect(evidence?.mode).toBe("model");
+    expect(evidence?.selectedId).toBe("c2");
+    expect(evidence?.jev).toBe(false);
+    expect(evidence?.rows.map((row) => row.id)).toEqual(["original", "c2"]);
+    expect(evidence?.rows[1]).toMatchObject({ semantic: 70, neural: 100, selection: 66 });
+    expect(normalizeRefineEvidence({ mode: "model", evaluations: [] })).toBeNull();
+    expect(normalizeRefineEvidence("nope")).toBeNull();
   });
 });

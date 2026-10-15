@@ -141,7 +141,9 @@ class FmriOutput(BaseModel):
     response_kind: str = "tribe_predicted_fmri_analogue"
     prediction_subject_basis: str = "average_subject"
     cortical_mesh: str = "fsaverage5"
-    hemodynamic_lag_seconds: float = 5.0
+    hemodynamic_lag_seconds: float = Field(5.0, description=(
+        "Fixed lag already compensated inside TRIBE v2 (training targets offset 5 s); "
+        "informational, never applied again."))
     temporal_trace_basis: Literal["real_time_seconds", "synthetic_word_order"] = "real_time_seconds"
     temporal_segment_label: str = "second"
     temporal_trace_note: str = ""

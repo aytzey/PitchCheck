@@ -2,7 +2,7 @@ const TRIBE_SERVICE_URL = (
   process.env.TRIBE_SERVICE_URL ?? "http://127.0.0.1:8090"
 ).replace(/\/$/, "");
 const TRIBE_SCORE_TIMEOUT_MS = envInt("TRIBE_SERVICE_SCORE_TIMEOUT_MS", 920_000, 1_000);
-const TRIBE_REFINE_TIMEOUT_MS = envInt("TRIBE_SERVICE_REFINE_TIMEOUT_MS", 180_000, 1_000);
+const TRIBE_REFINE_TIMEOUT_MS = envInt("TRIBE_SERVICE_REFINE_TIMEOUT_MS", 420_000, 1_000);
 const TRIBE_HEALTH_TIMEOUT_MS = envInt("TRIBE_SERVICE_HEALTH_TIMEOUT_MS", 5_000, 500);
 
 function envInt(name: string, fallback: number, minimum: number): number {

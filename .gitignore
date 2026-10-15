@@ -18,3 +18,4 @@ out/*
 !out/.gitkeep
 graphify-out/
 validation_data/
+audit/insilico/

@@ -273,6 +273,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | `PITCHCHECK_PERSONALIZATION_FACET_WEIGHT` | `1.0` | Share of the Personalization Fit breakdown item taken from the persona read (`persona_pain_alignment`); TRIBE never sees the persona. `0` restores the neural proxy |
 | `PITCHCHECK_CREDIBILITY_FACET_WEIGHT` | `0.5` | Share of the Credibility breakdown item taken from `proof_credibility` (hand-set prior); `0` restores the neural mix |
 | `PITCHCHECK_LOCALIZATION_CONTEXT_SEGMENTS` | `1` | Neighbouring 1-s segments shown around each located span (HRF-dispersion prior, 0–3) |
+| `PITCHCHECK_NEURAL_TIE_DELTA` | reference / `1.0` | Legacy refine treats neural differences below the encoder-specific paraphrase noise floor as ties. `0` restores the previous ranking. See [WS08](docs/insilico/README.md) |
 | `PITCHCHECK_SCORE_LOG_PATH` / `PITCHCHECK_SCORE_LOG_KEY` | unset | Opt-in numbers-only JSONL log of `/score` and `/refine` for later outcome joins. Needs both; the key (≥32 chars) HMACs message/persona ids. Text is never written |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |

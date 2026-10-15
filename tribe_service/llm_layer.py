@@ -2032,6 +2032,25 @@ def _select_jev_refinement(acceptable: list[dict], baseline: dict, decision: dic
     return best, policy
 
 
+def _neural_tie_delta(measured: dict) -> tuple[float, str]:
+    override = os.getenv("PITCHCHECK_NEURAL_TIE_DELTA")
+    try:
+        value = float(override)
+        if math.isfinite(value) and value >= 0:
+            return value, "env"
+    except (ValueError, TypeError):
+        pass
+    from tribe_service.engine import roi_reference
+    reference = roi_reference(measured.get("text_feature_model"))
+    try:
+        value = reference["quantities"]["evidence_score"]["noise"]["min_detectable_delta"]
+        if not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+            return float(value), "paraphrase_noise_floor"
+    except (TypeError, KeyError, ValueError):
+        pass
+    return 1.0, "default_prior"
+
+
 def select_tribe_refinement(
     message: str,
     persona: str,
@@ -2071,6 +2090,8 @@ def select_tribe_refinement(
     facts = "\n".join([message, persona, *(str(item.get("answer") or "") for item in clarification_answers or [])])
     known_details = _refine_concrete_details(facts)
     minimum_words, maximum_words = _refine_length_bounds(message)
+    base_neural = measurements[0]["neural_score"]
+    tie, tie_source = _neural_tie_delta(measurements[0])
     for measured in measurements:
         review = by_id[measured["id"]]
         facets = review.get("context_fit")
@@ -2100,9 +2121,12 @@ def select_tribe_refinement(
                        else "Unfilled placeholder."), *issues][:5]
         # Preserve the legacy blend. The opt-in workflow never ranks by the uncalibrated scalar.
         weight = clamp(SEMANTIC_BLEND_WEIGHT + (1 - measured["quality_weight"]) * 0.30, 0, 0.85)
+        neural = measured["neural_score"]
+        if abs(neural - base_neural) < tie:
+            neural = base_neural
         evaluations.append({**measured, "eligible": eligible, "semantic_score": round(semantic, 3),
                             "selection_score": round(semantic if strategy else
-                                                     weight * semantic + (1 - weight) * measured["neural_score"], 3),
+                                                     weight * semantic + (1 - weight) * neural, 3),
                             **({"response_shape": _refine_response_shape(measured)} if strategy else {}),
                             "issues": issues})
     baseline = evaluations[0]
@@ -2128,6 +2152,9 @@ def select_tribe_refinement(
         "selected_id": selected["id"], "improved": selected["id"] != "original",
         "selected_id_semantic_only": semantic_only["id"],
         "baseline_neural_score": baseline["neural_score"], "selected_neural_score": selected["neural_score"],
+        "neural_delta": round(selected["neural_score"] - base_neural, 3),
+        "neural_tie_delta": tie, "neural_tie_delta_source": tie_source,
+        "neural_delta_detectable": abs(selected["neural_score"] - base_neural) >= tie,
         "evaluations": evaluations,
         **({"quality_model": quality_model, "writer_passes": 1, "decision": decision,
             "selection_policy": policy, "writer_call": result.get("writer_call", {})} if strategy else {}),

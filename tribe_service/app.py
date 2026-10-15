@@ -575,30 +575,35 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         )
 
 
+def _measure_prediction(text: str, predictions, persona: str, platform: str) -> dict:
+    """The production evidence anchor, shared with the offline WS08 harness."""
+    raw, fmri, signals = analyze_predictions(predictions, text_input_mode=TRIBE_TEXT_INPUT_MODE)
+    evidence = _augment_persuasion_evidence(text, persona, platform, raw, fmri)
+    return {
+        "message": text,
+        "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
+        "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
+        "quality_weight": calibration_quality_weight(evidence),
+        "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
+        "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
+        "temporal_trace": fmri.get("temporal_trace", []),
+        "temporal_trace_basis": fmri.get("temporal_trace_basis", "unknown"),
+        "text_feature_model": fmri.get("text_feature_model"),
+        "expected_text_feature_model": fmri.get("expected_text_feature_model"),
+        "text_feature_compatible": fmri.get("text_feature_compatible") is True,
+        "response_features": {key: raw[key] for key in (
+            "global_mean_abs", "global_peak_abs", "focus_ratio", "spatial_spread", "sustain_ratio", "arc_ratio",
+        ) if key in raw},
+    }
+
+
 def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str,
                                baseline: dict | None = None) -> list[dict]:
     measurements = [baseline] if baseline is not None else []
     texts = candidates if baseline is not None else [message, *candidates]
     for index, text in enumerate(texts, start=1 if baseline is not None else 0):
-        predictions = score_text(text)
-        raw, fmri, signals = analyze_predictions(predictions, text_input_mode=TRIBE_TEXT_INPUT_MODE)
-        evidence = _augment_persuasion_evidence(text, persona, platform, raw, fmri)
-        measurements.append({
-            "id": "original" if index == 0 else f"c{index}", "message": text,
-            "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
-            "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
-            "quality_weight": calibration_quality_weight(evidence),
-            "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
-            "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
-            "temporal_trace": fmri.get("temporal_trace", []),
-            "temporal_trace_basis": fmri.get("temporal_trace_basis", "unknown"),
-            "text_feature_model": fmri.get("text_feature_model"),
-            "expected_text_feature_model": fmri.get("expected_text_feature_model"),
-            "text_feature_compatible": fmri.get("text_feature_compatible") is True,
-            "response_features": {key: raw[key] for key in (
-                "global_mean_abs", "global_peak_abs", "focus_ratio", "spatial_spread", "sustain_ratio", "arc_ratio",
-            ) if key in raw},
-        })
+        measurements.append({"id": "original" if index == 0 else f"c{index}",
+                             **_measure_prediction(text, score_text(text), persona, platform)})
     return measurements
 
 

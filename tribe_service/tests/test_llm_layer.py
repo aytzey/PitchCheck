@@ -1556,6 +1556,48 @@ class TestPersonaAnchoredBreakdown:
         assert low["robustness"]["final_score"] == high["robustness"]["final_score"]
 
 
+@pytest.mark.parametrize("delta,override,expected,source", [
+    (1.5, None, "original", "paraphrase_noise_floor"),
+    (2.5, None, "c1", "paraphrase_noise_floor"),
+    (2.0, None, "c1", "paraphrase_noise_floor"),
+    (1.5, "0", "c1", "env"),
+    (1.5, "3", "original", "env"),
+    (1.5, "nan", "original", "paraphrase_noise_floor"),
+])
+def test_legacy_refine_prefers_reference_noise_floor(monkeypatch, delta, override, expected, source):
+    from tribe_service import engine, llm_layer
+    from tribe_service.tests.fixtures.ws08_synthetic import reference
+    data = reference()
+    monkeypatch.setattr(engine, "roi_reference", lambda encoder: data if encoder == data["encoder"] else None)
+    monkeypatch.delenv("PITCHCHECK_NEURAL_TIE_DELTA", raising=False)
+    if override is not None:
+        monkeypatch.setenv("PITCHCHECK_NEURAL_TIE_DELTA", override)
+    text = "You can review the shared list with the team before choosing the next step."
+    measurements = [{"id": name, "message": text, "model_id": "facebook/tribev2", "mode": "model",
+                     "neural_score": score, "quality_weight": 1, "text_feature_model": data["encoder"]}
+                    for name, score in (("original", 50), ("c1", 50 + delta))]
+    monkeypatch.setattr(llm_layer, "_post_refine_chat", lambda *a, **kw: json.dumps({"evaluations": [
+        {"id": r["id"], "supported": True, "intent_preserved": True, "recipient_respected": True,
+         "voice_preserved": True, "context_fit": {k: 50 for k in llm_layer.CONTEXT_FIT_KEYS}}
+        for r in measurements]}))
+    result = llm_layer.select_tribe_refinement(text, "A colleague", "email", [], {"model": "test"}, measurements)
+    guidance = result["tribe_guidance"]
+    assert guidance["selected_id"] == expected
+    assert guidance["improved"] == (expected != "original")
+    assert guidance["neural_tie_delta_source"] == source
+    assert guidance["neural_delta"] == (delta if expected == "c1" else 0)
+    assert guidance["neural_delta_detectable"] == (abs(guidance["neural_delta"]) >= guidance["neural_tie_delta"])
+
+
+@pytest.mark.parametrize("bad", [None, {}, {"noise": {"min_detectable_delta": -1}},
+    {"noise": {"min_detectable_delta": True}}, {"noise": {"min_detectable_delta": "bad"}}])
+def test_neural_tie_floor_gracefully_defaults(monkeypatch, bad):
+    from tribe_service import engine, llm_layer
+    monkeypatch.delenv("PITCHCHECK_NEURAL_TIE_DELTA", raising=False)
+    monkeypatch.setattr(engine, "roi_reference", lambda encoder: {"quantities": {"evidence_score": bad}} if bad else None)
+    assert llm_layer._neural_tie_delta({"text_feature_model": "unknown"}) == (1.0, "default_prior")
+
+
 def test_neural_only_breakdown_explanations_do_not_overclaim():
     with patch("tribe_service.llm_layer.OPENROUTER_ENABLED", False):
         result = interpret_persuasion(SAMPLE_MESSAGE, SAMPLE_PERSONA, SAMPLE_PLATFORM, SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES)

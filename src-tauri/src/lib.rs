@@ -16,6 +16,7 @@ use thiserror::Error;
 use tokio::time::sleep;
 
 const DEFAULT_IMAGE_FALLBACK: &str = "ghcr.io/aytzey/pitchcheck-tribe:latest";
+const FALLBACK_DOCTRINE: &str = include_str!("../../tribe_service/persuasion_doctrine.txt");
 const DEFAULT_OPENROUTER_MODEL: &str = "google/gemini-3.8-flash";
 const DEFAULT_OPENROUTER_REFINER_MODEL: &str = "google/gemini-3.8-flash";
 const VAST_BOOTSTRAP_IMAGE: &str = "pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel";
@@ -777,17 +778,11 @@ async fn refine_pitch(
                 "- If the draft has a one-sided metric, preserve it as one-sided; do not add a \"from X to Y\" baseline unless X is explicitly provided.\n",
                 "- Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.\n",
                 "- Preserve the sender intent, platform fit, and the input language exactly.\n\n",
-                "Persuasion doctrine:\n",
-                "- Open inside the reader's problem, never with the sender.\n",
-                "- Specificity is credibility: one concrete number, name, or mechanism beats adjectives.\n",
-                "- Earn the ask: CTA size must match trust built; exactly one low-effort ask.\n",
-                "- Pre-empt the reader's default objection in one clause, without sounding defensive.\n",
-                "- Proof hierarchy: named outcome > demo/pilot path > peer usage > generic claim; never fabricate.\n",
-                "- One message, one idea; short sentences; end on a question answerable in ten seconds.\n\n",
+                "{doctrine}\n\n",
                 "Rewrite process - do this internally before answering:\n",
                 "1. Build the persona's decision model: what they optimize for, their default objection, and the proof threshold they need before acting.\n",
                 "2. Draft THREE candidate rewrites with genuinely different strategies (outcome-led, problem/insight-led, proof-led). Do not output the drafts.\n",
-                "3. Score each candidate against: persona-specific opener; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel fit; fluency; zero invented facts.\n",
+                "3. Score each candidate against: persona-stated specifics instead of category claims; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel fit; fluency; zero invented facts.\n",
                 "4. Take the highest-scoring candidate, fix its single weakest item, and output only that final version.\n\n",
                 "Final self-check before answering:\n",
                 "- No invented facts, names, metrics, dates, or baselines anywhere.\n",
@@ -807,6 +802,7 @@ async fn refine_pitch(
                 "Return only JSON with this shape:\n",
                 "{{\"needs_clarification\":false,\"questions\":[],\"refined_message\":\"rewritten pitch or null\",\"safety_notes\":[\"No unverified claims added\"],\"persuasion_profile\":{{\"target_values\":[],\"likely_objections\":[],\"proof_threshold\":\"unknown\",\"route\":\"central|peripheral|mixed\",\"cta_style\":\"low-friction proof-first\"}}}}"
             ),
+            doctrine = FALLBACK_DOCTRINE.trim(),
             platform = request.platform.trim(),
             persona = request.persona.trim(),
             message = request.message.trim(),
@@ -2861,6 +2857,11 @@ fn value_as_u16(value: &Value) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fallback_uses_shared_doctrine() {
+        assert!(FALLBACK_DOCTRINE.contains("Cut words, not reasons"));
+    }
 
     #[test]
     fn parse_offers_accepts_array_response() {

@@ -302,7 +302,8 @@ def synthesize_research_findings(
             "axis": "self_value",
             "observation": (
                 f"TRIBE self/value proxy is low ({self_value:.0f}/100); computed from the text alone "
-                "for an average reader, identical for every persona."
+                "for an average reader, identical for every persona. This is not a self-relevance measurement; "
+                "independently of it, check whether the opener uses the persona's own specifics."
             ),
             "finding": (
                 "In small health-message fMRI studies, medial-prefrontal responses during exposure predicted which "
@@ -356,7 +357,7 @@ def synthesize_research_findings(
             "finding": "Harder-to-process messages are judged less true, less likable, and riskier.",
             "citation": "Alter & Oppenheimer 2009",
             "source_keys": ["alter_oppenheimer_2009_fluency"],
-            "lever": "Shorten sentences, cut clauses and jargon, and reduce the message to one idea before touching anything else stylistic.",
+            "lever": "Shorten sentences and cut clauses and jargon first; keep every fact and mechanism a detail-seeking reader needs, each in its own short sentence.",
         })
 
     if encoding <= 45:

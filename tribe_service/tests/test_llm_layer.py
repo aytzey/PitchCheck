@@ -154,6 +154,7 @@ class TestValidResponseParsed:
 
         assert 0 <= result["persuasion_score"] <= 100
         assert result["robustness"]["llm_score"] == 78
+        assert result["robustness"]["prompt_doctrine_version"] == "doctrine_v2"
         assert round(result["robustness"]["final_score"]) == result["persuasion_score"]
         # Final score is anchored to the neural prior but pulled toward the
         # band-clamped semantic read, so it sits between the two.
@@ -202,6 +203,7 @@ class TestNeuralOnlyWithoutApiKey:
         )
 
         # All required fields present
+        assert result["robustness"]["prompt_doctrine_version"] == "doctrine_v2"
         assert "persuasion_score" in result
         assert isinstance(result["persuasion_score"], int)
         assert 0 <= result["persuasion_score"] <= 100
@@ -259,6 +261,7 @@ class TestRefinePitchMessage:
             if jev:
                 system = post.call_args.kwargs["json"]["messages"][0]["content"]
                 assert "korunacak ayrıntılar değildir" in system and "gönderenin bakışından" in system
+                assert "kişiselleştirme değildir" in system
             assert post.call_count == 1 and result["candidates"] == candidates
 
     @pytest.mark.parametrize("jev", [False, True])
@@ -460,6 +463,7 @@ class TestRefinePitchMessage:
         )
 
         assert result["needs_clarification"] is True
+        assert result["tribe_guidance"]["prompt_doctrine_version"] == "doctrine_v2"
         assert result["refined_message"] is None
         assert result["questions"][0]["id"] == "proof"
         assert result["safety_notes"] == ["No unverified claims added"]
@@ -604,6 +608,9 @@ class TestRefinePitchMessage:
         assert "LinkedIn DM" in prompt
         assert "Persuasion doctrine" in prompt
         assert "Specificity is credibility" in prompt
+        assert "Cut words, not reasons" in prompt
+        assert "relative to the value" in prompt
+        assert "Evidence base" not in prompt
         assert "Previous analysis templates are deliberately excluded" in prompt
         assert "Make the opener persona-specific" not in prompt
         assert "actual TRIBE model" in prompt
@@ -694,6 +701,7 @@ class TestMalformedJsonNeuralOnlyReport:
 
         assert mock_post.call_count == 2
         assert result["robustness"]["llm_model"] is None
+        assert result["robustness"]["prompt_doctrine_version"] == "doctrine_v2"
 
     @patch("tribe_service.llm_layer.OPENROUTER_ENABLED", True)
     @patch("tribe_service.llm_layer.OPENROUTER_API_KEY", "sk-test-key")
@@ -1425,6 +1433,7 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         ['Bu akşam iki bilet var'], result, measurements,
         clarification_answers=[{'answer': 'Bu akşamki konser.'}] if case == 'supplied_inflected_time' else [])
     proof = selected['tribe_guidance']
+    assert proof['prompt_doctrine_version'] == 'doctrine_v2'
     assert proof['selected_id'] == expected
     assert proof['writer_call']['draft_plans'] == result['writer_call']['draft_plans']
     assert calls.count('writer') == 1
@@ -1532,3 +1541,60 @@ def test_provenance_warnings_do_not_fire_for_mock_and_sort_after_caps():
     assert "non_english_input_outside_tribe_training" in hermes["warnings"]
     assert hermes["warnings"].index("text_feature_incompatible") < hermes["warnings"].index("synthetic_word_order_trace_not_real_time")
     assert "text_feature_incompatible" not in mock["warnings"]
+
+
+class TestDoctrineV2:
+    def test_single_source_and_prompt_budgets(self):
+        from pathlib import Path
+        from tribe_service import llm_layer
+
+        source = Path(llm_layer.__file__).with_name("persuasion_doctrine.txt")
+        assert llm_layer.PERSUASION_DOCTRINE == source.read_text(encoding="utf-8").strip()
+        assert len(llm_layer.PERSUASION_DOCTRINE) <= 2450
+        assert len(llm_layer.PERSUASION_RESEARCH_ANNEX) <= 4350
+        assert "Cut words, not reasons" in llm_layer.PERSUASION_DOCTRINE
+        assert "relative to the value" in llm_layer.PERSUASION_DOCTRINE
+        assert "only when quoting a listed ROI item" in llm_layer.PERSUASION_RESEARCH_ANNEX
+
+    def test_research_analogies_are_tagged_and_retired_claims_absent(self):
+        from tribe_service import llm_layer
+        from tribe_service.persuasion_features import RESEARCH_SOURCES
+        from tribe_service.tests.test_claims_hygiene import _syntheses
+
+        authors = ("Chua", "Cascio", "Hernández-Vergara", "Knutson", "Klucharev", "Vezich",
+                   "Huskey", "Di Plinio", "Yomogida", "Ntoumanis", "Cooper")
+        for author in authors:
+            assert author in llm_layer.SYSTEM_PROMPT
+            assert all("[analogy" in line for line in llm_layer.PERSUASION_RESEARCH_ANNEX.splitlines()
+                       if author in line)
+        banned = ("roughly twice", "better than self-report", "reliably increases", "drives action",
+                  "2-4 verifiable", "can backfire", "Li et al. 2026", "Pegors", "helped modestly")
+        prompt = llm_layer.SYSTEM_PROMPT + llm_layer.PERSUASION_DOCTRINE
+        assert all(phrase not in prompt for phrase in banned)
+        # Registry names remain; only the findings and generated synthesis are claim surfaces.
+        claims = " ".join(source["finding"] for source in RESEARCH_SOURCES)
+        claims += json.dumps(list(_syntheses()), ensure_ascii=False)
+        assert all(phrase not in claims for phrase in banned)
+
+    @pytest.mark.parametrize("message,persona,language", [
+        ("Come to this concert with me.", "A friend who enjoys music", "en"),
+        ("Benimle Çilekeş konserine gelir misin?", "Çilekeş sevmeyen flörtüm", "tr"),
+    ])
+    def test_jev_writer_uses_persona_facts_without_annex(self, monkeypatch, message, persona, language):
+        from tribe_service import llm_layer
+
+        monkeypatch.setattr(llm_layer, "OPENROUTER_API_KEY", "test-key")
+        # Use the same grounded decision fixture as the existing preservation tests.
+        def decisions(state, questions):
+            chosen = {"relationship": "romantic", "objection": "taste", "angle": "company", "tone": "warm",
+                      "repair": "recipient", "move": "shared_moment", "repair_target": "whole"}
+            return {"model": "typesafe/jev-test", "answers": {
+                name: {"choice": chosen[name], "confidence": .9} for name in questions}}
+        monkeypatch.setattr(llm_layer, "_post_jev_decisions", decisions)
+        strategy = llm_layer.plan_tribe_refinement(message, persona, "general", {"id": "original", "message": message})
+        with patch.object(llm_layer, "_post_refine_chat", return_value='{"needs_clarification":true,"questions":[{"question":"What is known?"}]}') as post:
+            result = refine_pitch_message(message, persona, "general", decision_strategy=strategy)
+        system = post.call_args.args[0]
+        assert ("is not personalization" if language == "en" else "kişiselleştirme değildir") in system
+        assert "Evidence base" not in system and "Persuasion doctrine" not in system
+        assert result["tribe_guidance"]["prompt_doctrine_version"] == "doctrine_v2"

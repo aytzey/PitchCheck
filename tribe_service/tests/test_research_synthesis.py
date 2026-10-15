@@ -38,6 +38,10 @@ class TestAxisFindings:
         assert "Falk" in falk["citation"]
         assert falk["kind"] == "gap"
         assert falk["lever"]
+        assert "independently of it, check whether the opener uses the persona's own specifics" in falk["observation"]
+        fluency = next(item for item in synthesis["items"] if item["key"] == "fluency_gap")
+        assert "one idea" not in fluency["lever"]
+        assert "keep every fact" in fluency["lever"]
 
     def test_strong_self_value_is_a_protected_strength(self):
         synthesis = synthesize_research_findings(_axes(self_value=78))

@@ -40,7 +40,11 @@ PitchCheck runs your text through Meta's [TRIBE v2](https://github.com/facebookr
 - **Top moves** — the 1-3 highest-leverage changes, LLM-ranked by expected impact on whether the reader acts
 - **Rewrite suggestions** — before/after alternatives with reasoning
 
-Every judgment and rewrite is held to a built-in persuasion doctrine — open inside the reader's problem, specificity over adjectives, earn the ask, pre-empt the default objection, honest proof hierarchy, one message one idea, status-safe CTAs — backed by an evidence annex from published persuasion science: self-relevance and neural message effectiveness (Falk et al. 2010/2011/2016; Cooper et al. 2015), route matching (Petty & Cacioppo's Elaboration Likelihood Model), framing (Tversky & Kahneman 1981) and, separately, loss aversion (Kahneman & Tversky 1979), same-setting norms (Goldstein, Cialdini & Griskevicius 2008), reactance and the "but you are free" effect (Carpenter 2013 meta-analysis), processing fluency (Alter & Oppenheimer), precise-number credibility (Janiszewski & Uy 2008), psychological targeting (Matz et al. 2017), and the commitment gradient (Freedman & Fraser 1966). Each top move names the principle it rests on.
+The persuasion doctrine starts from the actual relationship, tailors with persona-stated facts, earns the ask relative to its value, uses domain-relevant proof, keeps requests voluntary, and makes the next step easy to picture: **cut words, not reasons**. Business proof rules do not turn personal invitations into sales copy. Python and the Rust desktop fallback share [persuasion_doctrine.txt](tribe_service/persuasion_doctrine.txt), embedded with Rust's `include_str!`.
+
+The evaluator's evidence annex covers route matching, framing, same-setting norms, reactance, fluency, precise-number credibility, psychological targeting, and commitment gradients. Neuroscience entries (Falk 2010/2011, Cooper 2015, Chua 2009/2011, Vezich 2017, Huskey 2017, Klucharev 2008, Yomogida 2017, Cascio 2015, Hernández-Vergara 2025, Di Plinio 2025, Ntoumanis 2024, Knutson 2007) are tagged analogies from small human studies; TRIBE does not measure them. These are unvalidated literature priors for text, not evidence of persuasion for this reader. The annex stays with the evaluator; the non-Jev rewrite writer receives only the doctrine.
+
+WS04 responses carry `prompt_doctrine_version="doctrine_v2"` in score `robustness` and refine `tribe_guidance`, including clarification responses. CI caps the annex at 4350 characters and the doctrine at 2450. WS04 has **no rollback env switch**: revert its implementation commit with `git revert <WS04-commit>`, rebuild the service using `tribe_service/Dockerfile.server` (which copies Python and the doctrine onto the existing GPU base image), and redeploy. Rebuild/release the desktop to roll back its embedded fallback doctrine too. The same rollback policy is recorded in `.env.example`.
 
 The whole loop takes a few seconds. Write, score, tweak, re-score.
 
@@ -260,6 +264,25 @@ npm run build:desktop-web
 npm run desktop:check
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+WS04 prompt monitoring uses 27 handwritten synthetic pitch/persona pairs, including
+eight predeclared neutral cases and English/Turkish personal and business messages.
+It compares `old`, `old-repeat` (A/A noise), and `new` in rotating order on the same
+UTC day and model, with fixed neural inputs and no GPU. Prepare two existing
+worktrees: the pre-WS04 baseline (`f0da33d` for this change) and the WS04 version.
+In the service's Python environment, with `OPENROUTER_API_KEY` already set, run later:
+
+```bash
+python scripts/ab-prompt-doctrine.py --old-worktree /path/to/before --new-worktree /path/to/after --model MODEL_ID --output /tmp/doctrine-ab.jsonl
+python scripts/ab-prompt-doctrine.py --report /tmp/doctrine-ab.jsonl
+```
+
+The script records actual prompt-token usage, detail/length rejection rates,
+critic support judgments, user-text safety matches, and neutral facet shifts
+against A/A spread. Generated text and manual-review fields in JSONL support
+checking persona-specific benefits, next steps, and personal tone. This measures
+model behavior, not persuasion, and never gates release or runs in CI.
+`python scripts/ab-prompt-doctrine.py --selftest` checks the runner offline without API calls.
 
 ## Configuration
 

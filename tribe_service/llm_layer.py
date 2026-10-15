@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from tribe_service import native_core, roi_features
+from tribe_service import native_core, persuasion_features, roi_features, score_log
 from tribe_service.schemas import MAX_MESSAGE_CHARS
 from tribe_service.engine import _WORD_RE
 from tribe_service.research_synthesis import _segment_excerpts, build_tribe_synthesis, localize_pitch_segments
@@ -716,11 +716,12 @@ def _openrouter_payload(
     model: str | None = None,
     temperature: float,
     json_mode: bool,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": _resolve_openrouter_model(model),
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": temperature,
@@ -741,6 +742,7 @@ def _call_openrouter_once(
     *,
     model: str | None = None,
     temperature: float = 0.2,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict[str, Any] | None:
     if not _openrouter_enabled(model):
         return None
@@ -760,6 +762,7 @@ def _call_openrouter_once(
                     model=model,
                     temperature=temperature,
                     json_mode=json_mode,
+                    system_prompt=system_prompt,
                 )
                 response = httpx.post(
                     f"{OPENROUTER_API_BASE_URL}/chat/completions",
@@ -2258,6 +2261,25 @@ def _select_jev_refinement(acceptable: list[dict], baseline: dict, decision: dic
     return best, policy
 
 
+def _neural_tie_delta(measured: dict) -> tuple[float, str]:
+    override = os.getenv("PITCHCHECK_NEURAL_TIE_DELTA")
+    try:
+        value = float(override)
+        if math.isfinite(value) and value >= 0:
+            return value, "env"
+    except (ValueError, TypeError):
+        pass
+    from tribe_service.engine import roi_reference
+    reference = roi_reference(measured.get("text_feature_model"))
+    try:
+        value = reference["quantities"]["evidence_score"]["noise"]["min_detectable_delta"]
+        if not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+            return float(value), "paraphrase_noise_floor"
+    except (TypeError, KeyError, ValueError):
+        pass
+    return 1.0, "default_prior"
+
+
 def select_tribe_refinement(
     message: str,
     persona: str,
@@ -2300,6 +2322,8 @@ def select_tribe_refinement(
     facts = "\n".join([message, persona, *(str(item.get("answer") or "") for item in clarification_answers or [])])
     known_details = _refine_concrete_details(facts)
     minimum_words, maximum_words = _refine_length_bounds(message)
+    base_neural = measurements[0]["neural_score"]
+    tie, tie_source = _neural_tie_delta(measurements[0])
     for measured in measurements:
         review = by_id[measured["id"]]
         facets = review.get("context_fit")
@@ -2332,10 +2356,13 @@ def select_tribe_refinement(
                        else "Unfilled placeholder."), *issues][:5]
         # Preserve the legacy blend. The opt-in workflow never ranks by the uncalibrated scalar.
         weight = clamp(SEMANTIC_BLEND_WEIGHT + (1 - measured["quality_weight"]) * 0.30, 0, 0.85)
+        neural = measured["neural_score"]
+        if abs(neural - base_neural) < tie:
+            neural = base_neural
         evaluations.append({**measured, "eligible": eligible, "semantic_score": round(semantic, 3),
                             **({"personalization_level": level, "semantic_score_without_prior": round(plain, 3)} if not strategy else {}),
                             "selection_score": round(semantic if strategy else
-                                                     weight * semantic + (1 - weight) * measured["neural_score"], 3),
+                                                     weight * semantic + (1 - weight) * neural, 3),
                             **({"response_shape": _refine_response_shape(measured)} if strategy else {}),
                             "issues": issues})
     baseline = evaluations[0]
@@ -2396,6 +2423,9 @@ def select_tribe_refinement(
         "selected_id_semantic_only": semantic_only["id"],
         **({"recipient_stance": stance} if not strategy else {}),
         "baseline_neural_score": baseline["neural_score"], "selected_neural_score": selected["neural_score"],
+        "neural_delta": round(selected["neural_score"] - base_neural, 3),
+        "neural_tie_delta": tie, "neural_tie_delta_source": tie_source,
+        "neural_delta_detectable": abs(selected["neural_score"] - base_neural) >= tie,
         "evaluations": evaluations,
         **({"quality_model": quality_model, "writer_passes": 1, "decision": decision,
             "selection_policy": policy, "writer_call": result.get("writer_call", {})} if strategy else {}),
@@ -2678,7 +2708,7 @@ def _blend_final(evidence, raw_llm, facet, confidence, quality_weight, *,
         without_evidence = priors["evidence_without_roi"]
         without_facet = priors.get("facet_without_boost", facet)
         without = clamp(calculate(without_evidence, without_facet)[0])
-        limit = LITERATURE_PRIOR_BUDGET
+        limit = priors.get("budget", LITERATURE_PRIOR_BUDGET)
         if not math.isfinite(limit) or limit < 0:
             raise ValueError("Literature prior budget must be finite and nonnegative")
         delta = final - without
@@ -2788,6 +2818,11 @@ def _calibrate_result(
         guardrails.insert(guardrails.index("final_score_neural_anchored_semantic_blend"),
                           "persona_breakdown_items_anchored_to_context_fit")
 
+    if score_log.enabled():
+        result["_score_log_blend_inputs"] = {
+            "evidence": evidence_score, "raw_llm": raw_llm_score, "facet": facet_score,
+            "confidence": confidence, "quality_weight": quality_weight, "blend": SEMANTIC_BLEND_WEIGHT,
+        }
     result["persuasion_score"] = int(round(final_score))
     result["persuasion_evidence"] = persuasion_evidence
     result["robustness"] = {
@@ -2824,6 +2859,14 @@ def _calibrate_result(
         "literature_prior_budget": prior_report.get("literature_prior_budget", {"budget": LITERATURE_PRIOR_BUDGET, "delta": 0.0, "budget_scale": 1.0}),
         "score_terms": prior_report.get("score_terms", {}),
         "prior_inputs": priors,
+        "active_flags": {
+            "PITCHCHECK_PERSONA_READ_PRIORS": PERSONA_READ_PRIORS,
+            "PITCHCHECK_ROI_PRIOR_WEIGHT": persuasion_features.ROI_PRIOR_WEIGHT,
+            "PITCHCHECK_ROI_PRIOR_POINTS": ROI_PRIOR_POINTS,
+            "PITCHCHECK_SPECIFICITY_CONTRAST": os.getenv("PITCHCHECK_SPECIFICITY_CONTRAST", "1").lower() not in {"0", "false", "off", "no"},
+            "PITCHCHECK_SPECIFICITY_SCORE_WEIGHT": persuasion_features.SPECIFICITY_SCORE_WEIGHT,
+            "PITCHCHECK_LITERATURE_PRIOR_BUDGET": LITERATURE_PRIOR_BUDGET,
+        },
         "prompt_injection_risk": None,
         "guardrails_applied": guardrails,
         "warnings": persuasion_evidence.get("warnings", []),

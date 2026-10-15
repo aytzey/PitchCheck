@@ -59,6 +59,54 @@ class TestHelpers:
         assert abs(result - 50.0) < 1e-6
 
 
+@pytest.mark.parametrize("fault", [None, "missing", "json", "list", "schema_version", "encoder",
+    "event_version", "text_input_mode", "quantities", "nan", "policy", "check"])
+def test_roi_reference_schema_and_provenance(monkeypatch, tmp_path, fault):
+    import json
+    from tribe_service import engine
+    from tribe_service.tests.fixtures.ws08_synthetic import reference
+    data = reference()
+    encoder = data["encoder"]
+    monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
+    folder = tmp_path / "roi_assets"; folder.mkdir()
+    item = folder / f"roi_reference_{encoder.replace('/', '__')}.json"
+    if fault in {"schema_version", "encoder", "event_version", "text_input_mode", "quantities"}:
+        data[fault] = "mismatch"
+    elif fault == "nan":
+        data["quantities"]["evidence_score"]["noise"]["min_detectable_delta"] = float("nan")
+    elif fault == "policy":
+        data["policy"]["null"] = 1.1
+    elif fault == "check":
+        data["checks"]["target"] = {"status": "reversed", "weight_multiplier": 2}
+    elif fault == "list":
+        data = []
+    if fault != "missing":
+        item.write_text("{broken" if fault == "json" else json.dumps(data))
+    engine.roi_reference.cache_clear()
+    try:
+        assert engine.roi_reference(encoder) == (data if fault is None else None)
+        assert engine.roi_reference(None) is None
+        assert engine.roi_reference("../escape") is None
+    finally:
+        engine.roi_reference.cache_clear()
+
+
+def test_reference_loader_does_not_gate_on_validation_status(monkeypatch, tmp_path):
+    import json
+    from tribe_service import engine
+    from tribe_service.tests.fixtures.ws08_synthetic import reference
+    data = reference()
+    data["checks"] = {"target": {"status": "reversed", "weight_multiplier": 0}}
+    monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
+    folder = tmp_path / "roi_assets"; folder.mkdir()
+    (folder / f"roi_reference_{data['encoder'].replace('/', '__')}.json").write_text(json.dumps(data))
+    engine.roi_reference.cache_clear()
+    try:
+        assert engine.roi_reference(data["encoder"]) == data
+    finally:
+        engine.roi_reference.cache_clear()
+
+
 class TestScoreText:
     @pytest.mark.parametrize("prediction_fails", [False, True])
     def test_feature_cleanup_reloads_recreated_memmap_files(self, monkeypatch, tmp_path, prediction_fails):

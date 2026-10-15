@@ -47,6 +47,8 @@ started=time.monotonic()
 refine=client.post('/refine',json={**payload,'forceRewrite':True,'suggestions':['Keep a simple CTA and preserve the verified facts.']})
 assert refine.status_code==200, f'Refine HTTP {refine.status_code}'
 data=refine.json(); assert data['refined_message'] or data['questions']
+if data.get('tribe_guidance'):
+    assert {'neural_delta', 'neural_tie_delta', 'neural_tie_delta_source', 'neural_delta_detectable'} <= data['tribe_guidance'].keys()
 refine_seconds=round(time.monotonic()-started,3)
 unload=client.post('/runtime/unload').json(); assert unload['ok'] and not unload['model_loaded']
 result={'login':True,'unauthorized_status':401,'oversized_status':413,'invalid_status':422,

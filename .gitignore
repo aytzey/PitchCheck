@@ -17,3 +17,5 @@ src-tauri/gen/
 out/*
 !out/.gitkeep
 graphify-out/
+validation_data/
+audit/insilico/

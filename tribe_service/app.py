@@ -56,8 +56,10 @@ from tribe_service.llm_layer import (
     plan_tribe_refinement,
     OPENROUTER_ENABLED,
     ROI_ENCODER_MISMATCH_FACTOR,
+    SEMANTIC_BLEND_WEIGHT,
+    _semantic_score_from_context_fit,
 )
-from tribe_service.persuasion_features import (calibration_quality_weight, evidence_score_from_analysis,
+from tribe_service.persuasion_features import (calibration_confidence, calibration_quality_weight, evidence_score_from_analysis,
                                                neuro_axes_from_analysis, SPECIFICITY_REFINE_PENALTY)
 from tribe_service.auth import (
     AUTH_STORE,
@@ -437,10 +439,11 @@ def auth_logout(
     return {"ok": True}
 
 
-def _score_log_record(request, report, raw_features, fmri_data, neural_signals) -> dict:
+def _score_log_record(request, report, raw_features, fmri_data, neural_signals, *, blend_inputs=None) -> dict:
     """Numbers-only whitelist for the opt-in score log; never message, persona or LLM prose."""
     message = request.message
     robustness = report.robustness or {}
+    evidence = evidence_score_from_analysis(neural_signals, report.persuasion_evidence)
     return {
         "source": "score",
         "scored_at": report.scored_at,
@@ -475,6 +478,16 @@ def _score_log_record(request, report, raw_features, fmri_data, neural_signals) 
         "unused_persona_fact_count": len((report.context_fit or {}).get("unused_persona_facts") or []),
         "facets": {key: facet.get("score") for key, facet in (report.context_fit or {}).items() if isinstance(facet, dict)},
         "b1_tribe_informed": True,
+        # Rounded response fields cannot guarantee the offline .05-point parity check.
+        "blend_inputs": blend_inputs or {
+            "evidence": evidence,
+            "raw_llm": robustness.get("raw_llm_score"),
+            "facet": _semantic_score_from_context_fit(report.context_fit) if robustness.get("raw_llm_score") is not None else None,
+            "confidence": calibration_confidence(evidence, 50.0, report.persuasion_evidence),
+            "quality_weight": calibration_quality_weight(report.persuasion_evidence),
+            "blend": SEMANTIC_BLEND_WEIGHT,
+        },
+        **score_log.monitoring_fields(robustness, fmri_data, report.context_fit),
     }
 
 
@@ -573,7 +586,8 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             try:
                 if report.robustness is not None:
                     report.robustness["score_log_id"] = score_log.pitch_id(request.message)
-                score_log.append(_score_log_record(request, report, raw_features, fmri_data, neural_signals))
+                score_log.append(_score_log_record(request, report, raw_features, fmri_data, neural_signals,
+                                                   blend_inputs=llm_result.get("_score_log_blend_inputs")))
             except Exception as exc:  # the log must never fail /score
                 LOGGER.warning("Score log skipped (%s)", type(exc).__name__)
 
@@ -620,32 +634,37 @@ def _roi_features(fmri: dict) -> dict:
             if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)}
 
 
+def _measure_prediction(text: str, predictions, persona: str, platform: str) -> dict:
+    """The production evidence anchor, shared with the offline WS08 harness."""
+    raw, fmri, signals = analyze_predictions(predictions, text_input_mode=TRIBE_TEXT_INPUT_MODE)
+    evidence = _augment_persuasion_evidence(text, persona, platform, raw, fmri)
+    return {
+        "message": text,
+        "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
+        "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
+        "roi_prior_score": (evidence.get("roi_prior") or {}).get("score"),
+        "roi_features": _roi_features(fmri),
+        "quality_weight": calibration_quality_weight(evidence),
+        "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
+        "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
+        "temporal_trace": fmri.get("temporal_trace", []),
+        "temporal_trace_basis": fmri.get("temporal_trace_basis", "unknown"),
+        "text_feature_model": fmri.get("text_feature_model"),
+        "expected_text_feature_model": fmri.get("expected_text_feature_model"),
+        "text_feature_compatible": fmri.get("text_feature_compatible") is True,
+        "response_features": {key: raw[key] for key in (
+            "global_mean_abs", "global_peak_abs", "focus_ratio", "spatial_spread", "sustain_ratio", "arc_ratio",
+        ) if key in raw},
+    }
+
+
 def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str,
                                baseline: dict | None = None) -> list[dict]:
     measurements = [baseline] if baseline is not None else []
     texts = candidates if baseline is not None else [message, *candidates]
     for index, text in enumerate(texts, start=1 if baseline is not None else 0):
-        predictions = score_text(text)
-        raw, fmri, signals = analyze_predictions(predictions, text_input_mode=TRIBE_TEXT_INPUT_MODE)
-        evidence = _augment_persuasion_evidence(text, persona, platform, raw, fmri)
-        measurements.append({
-            "id": "original" if index == 0 else f"c{index}", "message": text,
-            "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
-            "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
-            "roi_prior_score": (evidence.get("roi_prior") or {}).get("score"),
-            "roi_features": _roi_features(fmri),
-            "quality_weight": calibration_quality_weight(evidence),
-            "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
-            "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
-            "temporal_trace": fmri.get("temporal_trace", []),
-            "temporal_trace_basis": fmri.get("temporal_trace_basis", "unknown"),
-            "text_feature_model": fmri.get("text_feature_model"),
-            "expected_text_feature_model": fmri.get("expected_text_feature_model"),
-            "text_feature_compatible": fmri.get("text_feature_compatible") is True,
-            "response_features": {key: raw[key] for key in (
-                "global_mean_abs", "global_peak_abs", "focus_ratio", "spatial_spread", "sustain_ratio", "arc_ratio",
-            ) if key in raw},
-        })
+        measurements.append({"id": "original" if index == 0 else f"c{index}",
+                             **_measure_prediction(text, score_text(text), persona, platform)})
     return measurements
 
 
@@ -661,9 +680,12 @@ def _log_refine_candidates(message: str, guidance: dict, *, jev: bool) -> None:
             "selected_id_semantic_only": guidance.get("selected_id_semantic_only"),
             **({"recipient_stance": guidance.get("recipient_stance")} if not jev else {}),
             **({key: row.get(key) for key in ("personalization_level", "semantic_score_without_prior")} if not jev else {}),
+            "selected_id": guidance.get("selected_id"),
             **{key: row.get(key) for key in (
                 "eligible", "semantic_score", "selection_score", "neural_score", "quality_weight",
                 "neural_signals", "response_features", "text_feature_model", "mode",
+                "selection_score_without_roi", "roi_selection_term", "roi_prior_points",
+                "roi_selection_unit",
             )},
             "axes": {key: axis.get("score") for key, axis in (row.get("neuro_axes") or {}).items() if isinstance(axis, dict)},
             "score_adjustment": (row.get("empirical_effect") or {}).get("score_adjustment"),

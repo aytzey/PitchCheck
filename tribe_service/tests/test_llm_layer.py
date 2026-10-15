@@ -106,6 +106,55 @@ def _mock_openrouter_response(content: str, status_code: int = 200) -> httpx.Res
     return resp
 
 
+@pytest.mark.parametrize("llm_used", [False, True])
+@pytest.mark.parametrize("quality", [1., .55])
+def test_blend_final_parity(monkeypatch, llm_used, quality):
+    from tribe_service import llm_layer as llm
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", "unused-in-pure-calibration")
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+    evidence = {"warnings": [] if quality == 1 else ["single_segment_prediction"]}
+    context = {k: {"score": 71.273} for k in llm.CONTEXT_FIT_KEYS}
+    result = llm._calibrate_result({"persuasion_score": 78.376, "context_fit": context},
+                                 neural_signals=SAMPLE_NEURAL_SIGNALS, persuasion_evidence=evidence, llm_used=llm_used)
+    inputs = result["_score_log_blend_inputs"]
+    final, semantic, weight, guards, prior_report = llm._blend_final(**inputs)
+    assert result["robustness"]["final_score"] == round(final, 1)
+    assert abs(final - result["robustness"]["final_score"]) <= .05 + 1e-12
+    assert inputs["raw_llm"] == (78.376 if llm_used else None)
+    assert result["robustness"]["guardrails_applied"] == guards
+    assert prior_report == {}
+
+
+@pytest.mark.parametrize("direction", [-1, 1])
+@pytest.mark.parametrize("raw", [None, 90.])
+def test_literature_prior_budget(monkeypatch, direction, raw):
+    from tribe_service import llm_layer as llm
+    priors = {"evidence_without_roi": 50., "facet_without_boost": 50.,
+              "tailoring_points": direction * 6., "specificity_points": direction * 3.,
+              "terms": {name: {"weight": .15, "provenance": "literature_prior_unvalidated"}
+                        for name in ("roi_prior", "persona_read_prior", "specificity_prior")}}
+    inputs = (50 + direction * 25., raw, 50 + direction * 40., .7, 1.)
+    final, _, _, guards, report = llm._blend_final(*inputs, priors=priors)
+    without = report["final_score_without_literature_priors"]
+    assert abs(final - without) <= 6. + 1e-12
+    assert "literature_prior_budget_clamped" in guards
+    assert set(report["score_terms"]) == set(priors["terms"])
+    assert all(t["provenance"] == "literature_prior_unvalidated" for t in report["score_terms"].values())
+    monkeypatch.setattr(llm, "LITERATURE_PRIOR_BUDGET", 0.)
+    assert llm._blend_final(*inputs, priors=priors)[0] == without
+    # The budget switch has no effect without explicit prior inputs.
+    assert llm._blend_final(66.3, 78, 80, .7, 1., priors=None)[4] == {}
+
+
+def test_openrouter_payload_default_unchanged():
+    from tribe_service.llm_layer import SYSTEM_PROMPT
+    kwargs = dict(model="google/gemini-3.8-flash", temperature=.2, json_mode=True)
+    default = _openrouter_payload("Synthetic prompt", **kwargs)
+    assert default == _openrouter_payload("Synthetic prompt", system_prompt=SYSTEM_PROMPT, **kwargs)
+    assert default["messages"][0]["content"] == SYSTEM_PROMPT
+    assert _openrouter_payload("Synthetic prompt", system_prompt="Blind", **kwargs)["messages"][0]["content"] == "Blind"
+
+
 # ── Tests ──
 
 
@@ -1670,6 +1719,48 @@ class TestPersonaAnchoredBreakdown:
 
         assert low["persuasion_score"] == high["persuasion_score"]
         assert low["robustness"]["final_score"] == high["robustness"]["final_score"]
+
+
+@pytest.mark.parametrize("delta,override,expected,source", [
+    (1.5, None, "original", "paraphrase_noise_floor"),
+    (2.5, None, "c1", "paraphrase_noise_floor"),
+    (2.0, None, "c1", "paraphrase_noise_floor"),
+    (1.5, "0", "c1", "env"),
+    (1.5, "3", "original", "env"),
+    (1.5, "nan", "original", "paraphrase_noise_floor"),
+])
+def test_legacy_refine_prefers_reference_noise_floor(monkeypatch, delta, override, expected, source):
+    from tribe_service import engine, llm_layer
+    from tribe_service.tests.fixtures.ws08_synthetic import reference
+    data = reference()
+    monkeypatch.setattr(engine, "roi_reference", lambda encoder: data if encoder == data["encoder"] else None)
+    monkeypatch.delenv("PITCHCHECK_NEURAL_TIE_DELTA", raising=False)
+    if override is not None:
+        monkeypatch.setenv("PITCHCHECK_NEURAL_TIE_DELTA", override)
+    text = "You can review the shared list with the team before choosing the next step."
+    measurements = [{"id": name, "message": text, "model_id": "facebook/tribev2", "mode": "model",
+                     "neural_score": score, "quality_weight": 1, "text_feature_model": data["encoder"]}
+                    for name, score in (("original", 50), ("c1", 50 + delta))]
+    monkeypatch.setattr(llm_layer, "_post_refine_chat", lambda *a, **kw: json.dumps({"evaluations": [
+        {"id": r["id"], "supported": True, "intent_preserved": True, "recipient_respected": True,
+         "voice_preserved": True, "context_fit": {k: 50 for k in llm_layer.CONTEXT_FIT_KEYS}}
+        for r in measurements]}))
+    result = llm_layer.select_tribe_refinement(text, "A colleague", "email", [], {"model": "test"}, measurements)
+    guidance = result["tribe_guidance"]
+    assert guidance["selected_id"] == expected
+    assert guidance["improved"] == (expected != "original")
+    assert guidance["neural_tie_delta_source"] == source
+    assert guidance["neural_delta"] == (delta if expected == "c1" else 0)
+    assert guidance["neural_delta_detectable"] == (abs(guidance["neural_delta"]) >= guidance["neural_tie_delta"])
+
+
+@pytest.mark.parametrize("bad", [None, {}, {"noise": {"min_detectable_delta": -1}},
+    {"noise": {"min_detectable_delta": True}}, {"noise": {"min_detectable_delta": "bad"}}])
+def test_neural_tie_floor_gracefully_defaults(monkeypatch, bad):
+    from tribe_service import engine, llm_layer
+    monkeypatch.delenv("PITCHCHECK_NEURAL_TIE_DELTA", raising=False)
+    monkeypatch.setattr(engine, "roi_reference", lambda encoder: {"quantities": {"evidence_score": bad}} if bad else None)
+    assert llm_layer._neural_tie_delta({"text_feature_model": "unknown"}) == (1.0, "default_prior")
 
 
 def test_neural_only_breakdown_explanations_do_not_overclaim():

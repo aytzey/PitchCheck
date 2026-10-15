@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-16",
+  "benchmark_class": "A",
+  "minimum_pairs": 16,
+  "target_pairs": 20,
+  "generation": {
+    "author": "OpenAI Codex (GPT-6), fixed templates authored in this implementation",
+    "model": "GPT-6",
+    "temperature": null,
+    "temperature_note": "Not exposed by the coding harness; no external LLM calls.",
+    "prompt": "Write original English synthetic stimuli for the WS08 condition definitions and length limits. Keep facts and invitations matched; do not copy paper text or use customer data."
+  },
+  "manipulation_check": {
+    "blind_classifier": "pending",
+    "classifier_model": null,
+    "classifier_prompt": "Label each shuffled text without hypotheses or ROI names. S2/S4: Fact, How, Why; S1: generic or situation-specific; S3: reasonable or excessive cost, or number-only. Record labels and errors before freezing stimuli.",
+    "owner_sample_fraction": 0.0,
+    "owner_review": "pending",
+    "failure_policy": "Rewrite failed items before freezing; failed families are uninformative."
+  },
+  "inference": {
+    "statistic": "signed minus_cortex paired differences",
+    "primary_test": "one-sided sign-flip; exact n<=16, Monte Carlo B=10000 otherwise",
+    "holm": "within pre-registered holm_group",
+    "reverse_test": "two-sided sign-flip, Holm within the same group",
+    "bootstrap": "paired percentile mean CI95, B=2000, seed=0",
+    "seed": 0,
+    "pass": "expected mean direction, p_holm<.05, abs(median_delta)>ROI mdd, parcel_rank>=.90",
+    "pass_broad": "same except parcel_rank<.90",
+    "reversed": "opposite mean direction and reverse_p_holm<.05",
+    "null": "remaining informative outcomes",
+    "positive_control": "S2 required for downstream informative statuses; never gates product features",
+    "effect_warning": "In-silico dz generalizes across authored stimuli, not human subjects."
+  },
+  "modality": {
+    "language": "English",
+    "input": "direct synthetic read-aloud at 2.5 words/s, no punctuation pauses",
+    "primary": "whole-text signed time mean; bidirectional encoder",
+    "secondary_window": "cost sentence to end, expanded +/-1 segment, minimum 4 segments; descriptive only"
+  },
+  "run_status": "not_run",
+  "weight_policy": {
+    "pass": 1.0,
+    "pass_broad": 0.75,
+    "null": 0.5,
+    "reversed": 0.0,
+    "not_run": 1.0,
+    "uninformative": 1.0,
+    "low_stability": 0.5
+  },
+  "family": "S2",
+  "stimuli_file": "S2.jsonl",
+  "stimuli_sha256": "0abd10d4aa3c94892de458c5abdc1e12da4cc35223c89ac618049b4ac667d621",
+  "contrasts": [
+    {
+      "name": "sunscreen:How>Why",
+      "conditions": [
+        "How",
+        [
+          "Whygain",
+          "Whyloss"
+        ]
+      ],
+      "rois": [
+        "pifg_vezich2017",
+        "ripl_vezich2017"
+      ],
+      "alternative": "greater",
+      "select": {
+        "cohort": "sunscreen"
+      },
+      "holm_group": "sunscreen"
+    },
+    {
+      "name": "sunscreen:How>Fact",
+      "conditions": [
+        "How",
+        "Fact"
+      ],
+      "rois": [
+        "pifg_vezich2017",
+        "ripl_vezich2017"
+      ],
+      "alternative": "greater",
+      "select": {
+        "cohort": "sunscreen"
+      },
+      "holm_group": "sunscreen"
+    },
+    {
+      "name": "b2b:How>Why",
+      "conditions": [
+        "How",
+        [
+          "Whygain",
+          "Whyloss"
+        ]
+      ],
+      "rois": [
+        "pifg_vezich2017",
+        "ripl_vezich2017"
+      ],
+      "alternative": "greater",
+      "select": {
+        "cohort": "b2b"
+      },
+      "holm_group": "b2b"
+    },
+    {
+      "name": "b2b:How>Fact",
+      "conditions": [
+        "How",
+        "Fact"
+      ],
+      "rois": [
+        "pifg_vezich2017",
+        "ripl_vezich2017"
+      ],
+      "alternative": "greater",
+      "select": {
+        "cohort": "b2b"
+      },
+      "holm_group": "b2b"
+    },
+    {
+      "name": "How>How_nobody",
+      "conditions": [
+        "How",
+        "How_nobody"
+      ],
+      "rois": [
+        "pifg_vezich2017",
+        "ripl_vezich2017"
+      ],
+      "alternative": "greater",
+      "primary": false,
+      "holm_group": "body_control",
+      "select": {
+        "cohort": "sunscreen"
+      }
+    }
+  ],
+  "encoders": [
+    "meta-llama/Llama-3.2-3B",
+    "NousResearch/Hermes-3-Llama-3.2-3B"
+  ],
+  "source_keys": [
+    "vezich_2017_framing_action"
+  ],
+  "reports": [
+    "How_nobody vs How in sunscreen cohort; motor-verb/body-word covariates",
+    "B2B cohort separately; four co-primary hypotheses per cohort"
+  ],
+  "anatomical_notes": "rIPL means rostral, not right. K2 literature-location ROIs, bilateral, from corrected Vezich Table 4."
+}

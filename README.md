@@ -336,6 +336,7 @@ The first command uses a paid API (roughly 1100 calls); it has not been run for 
 | `PITCHCHECK_LITERATURE_PRIOR_BUDGET` | `6` | K5 maximum absolute final-score difference from the no-priors shadow; `0` disables final-score prior effects |
 | `PITCHCHECK_CONTEXT_FIT_RUBRIC` | `v2` | WS05 unvalidated literature prior for shared rubric and Python writers; `v1` + service restart restores the old wording. Version recorded in score/refine responses |
 | `PITCHCHECK_LOCALIZATION_CONTEXT_SEGMENTS` | `1` | Neighbouring 1-s segments shown around each located span (HRF-dispersion prior, 0–3) |
+| `PITCHCHECK_NEURAL_TIE_DELTA` | reference / `1.0` | Legacy refine treats neural differences below the encoder-specific paraphrase noise floor as ties. `0` restores the previous ranking. See [WS08](docs/insilico/README.md) |
 | `PITCHCHECK_SCORE_LOG_PATH` / `PITCHCHECK_SCORE_LOG_KEY` | unset | Opt-in numbers-only JSONL log of `/score` and `/refine` for later outcome joins. Needs both; the key (≥32 chars) HMACs message/persona ids. Text is never written |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
@@ -437,3 +438,12 @@ TRIBE v2 is a foundation model for in-silico neuroscience developed by Meta FAIR
 PitchCheck source code is [MIT](LICENSE).
 
 TRIBE v2 model weights (`facebook/tribev2`) are [CC-BY-NC-4.0](https://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only. See [TRIBE v2 Model — License and Attribution](#tribe-v2-model--license-and-attribution) above.
+
+## WS10 monitoring
+
+The offline [WS10 harness](docs/ws10-monitoring.md) compares shadow formulas,
+tests incremental predictive association and reports tuning/rollback advice.
+It never changes a product score or gates a feature. The
+[validation protocol](docs/validation-protocol.md) must be committed before real
+outcome collection or inspection. Outcome files and consented corpora stay
+outside Git; `validation_data/` is ignored.

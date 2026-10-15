@@ -6,6 +6,8 @@ __pycache__
 .env
 .secrets/
 data/
+validation_data/
+audit/insilico/
 .venv
 out
 src-tauri/target

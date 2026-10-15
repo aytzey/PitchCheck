@@ -173,9 +173,22 @@ def test_reviewer_state_never_sees_roi(monkeypatch):
     llm._jev_refinement_reviews(row["message"], "Manager", "general", [row], {"creative_brief": {}, "choices": {}, "instructions": []}, [])
 
 
+@pytest.fixture(autouse=True)
+def clear_reference_cache():
+    engine.roi_reference.cache_clear()
+    yield
+    engine.roi_reference.cache_clear()
+
+
 def reference(**kwargs):
-    return {"schema_version": 1, "encoder": ENCODER, "event_version": engine.DIRECT_TEXT_EVENT_VERSION,
-            "text_input_mode": engine.TRIBE_TEXT_INPUT_MODE, "atlas_sha256": roi.load_roi_assets()[4], **kwargs}
+    from tribe_service.tests.fixtures.ws08_synthetic import reference as stage0_reference
+    data = stage0_reference(ENCODER)
+    data["atlas_sha256"] = roi.load_roi_assets()[4]
+    for key, row in kwargs.pop("quantities", {}).items():
+        quantity = copy.deepcopy(data["quantities"]["evidence_score"])
+        quantity["noise"].update(row["noise"])
+        data["quantities"][key] = quantity
+    return {**data, **kwargs}
 
 
 def test_committed_floors_and_reference_precedence(monkeypatch, tmp_path):
@@ -184,15 +197,20 @@ def test_committed_floors_and_reference_precedence(monkeypatch, tmp_path):
         assert floors["floor_source"] == "default_prior" and floors[KEY] > 0 and floors[GUARD] > 0
         assert "retest_not_preserved" in floors["provenance"]
     assert roi.roi_noise_floors("unknown") == {}
-    monkeypatch.setattr(roi, "ROI_ASSET_DIR", tmp_path)
-    path = tmp_path / f"roi_reference_{ENCODER.replace('/', '__')}.json"
+    monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
+    folder = tmp_path / "roi_assets"
+    folder.mkdir()
+    monkeypatch.setattr(roi, "ROI_ASSET_DIR", folder)
+    path = folder / f"roi_reference_{ENCODER.replace('/', '__')}.json"
     data = reference(quantities={f"roi:{k}": {"noise": {"min_detectable_delta": 0.3}} for k in (KEY, GUARD)})
     path.write_text(json.dumps(data))
+    engine.roi_reference.cache_clear()
     assert roi.roi_noise_floors(ENCODER)[KEY] == 0.3
     assert roi.roi_noise_floors(ENCODER)["floor_source"] == "paraphrase_noise_floor"
     assert roi.roi_noise_floors(ENCODER, default_only=True) == {}
     for key in ("encoder", "atlas_sha256", "event_version", "text_input_mode"):
         path.write_text(json.dumps({**data, key: "mismatch"}))
+        engine.roi_reference.cache_clear()
         assert roi.roi_noise_floors(ENCODER) == {}
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import gc
+import functools
 import importlib.util
 import json
 import logging
@@ -552,6 +553,53 @@ TRIBE_TR_SECONDS, TRIBE_TEXT_FEATURE_HZ, TRIBE_WINDOW_TRS = 1.0, 2.0, 100
 # already aligned to stimulus second i. NEVER shift segments/excerpts by this lag.
 TRIBE_HEMODYNAMIC_LAG_SECONDS = 5.0
 TRIBE_RESPONSE_KIND = "tribe_predicted_fmri_analogue"
+
+
+@functools.lru_cache(maxsize=4)
+def roi_reference(encoder: str | None) -> dict | None:
+    """Load encoder-specific WS08 scale data; missing or incompatible data is optional."""
+    if not isinstance(encoder, str) or not encoder or "\\" in encoder or ".." in encoder:
+        return None
+    item = Path(__file__).with_name("roi_assets") / f"roi_reference_{encoder.replace('/', '__')}.json"
+    try:
+        data = json.loads(item.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not (
+        type(data.get("schema_version")) is int and data["schema_version"] == 1 and data.get("kind") == "roi_reference"
+        and data.get("encoder") == encoder and data.get("event_version") == DIRECT_TEXT_EVENT_VERSION
+        and data.get("text_input_mode") == TRIBE_TEXT_INPUT_MODE
+        and isinstance(data.get("quantities"), dict) and isinstance(data.get("checks"), dict)
+        and isinstance(data.get("policy"), dict) and isinstance(data.get("label"), str)
+        and bool(data["label"]) and "evidence_score" in data["quantities"]
+        and all(k in data for k in ("atlas_sha256", "harness_git_sha", "tribev2_commit", "hf_snapshot"))
+    ):
+        return None
+    def finite_number(value, minimum=0):
+        try:
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and np.isfinite(float(value)) and value >= minimum
+        except (ValueError, OverflowError):
+            return False
+    statuses = {"pass", "pass_broad", "null", "reversed", "not_run", "uninformative", "low_stability"}
+    if not statuses <= data["policy"].keys() or any(not finite_number(v) or v > 1 for v in data["policy"].values()):
+        return None
+    for quantity in data["quantities"].values():
+        if not isinstance(quantity, dict) or not isinstance(quantity.get("noise"), dict):
+            return None
+        noise = quantity["noise"]
+        if not all(finite_number(noise.get(k)) for k in ("sigma_within", "min_detectable_delta")):
+            return None
+        if not finite_number(noise.get("icc1"), -1) or noise["icc1"] > 1:
+            return None
+        if not finite_number(quantity.get("resid_sd")) or not isinstance(quantity.get("length_model"), dict):
+            return None
+        if not all(finite_number(quantity["length_model"].get(k), -np.inf) for k in ("a", "b_log_words")):
+            return None
+    if any(not isinstance(check, dict) or check.get("status") not in statuses - {"low_stability"}
+           or not finite_number(check.get("weight_multiplier")) or check["weight_multiplier"] > 1
+           for check in data["checks"].values()):
+        return None
+    return data
 
 
 def _round_seconds(value: float) -> float:

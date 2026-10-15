@@ -83,19 +83,8 @@ def roi_summary(matrix):
 
 
 def _reference(encoder):
-    from tribe_service import engine  # The engine imports this overlay.
-    reader = getattr(engine, "roi_reference", None)  # WS08 supplies the reader.
-    data = reader(encoder) if reader else None
-    if reader is None:
-        try:
-            slug = (encoder or "").replace("/", "__")
-            data = json.loads((ROI_ASSET_DIR / f"roi_reference_{slug}.json").read_text())
-            if not (isinstance(data, dict) and data.get("schema_version") == 1 and data.get("encoder") == encoder
-                    and data.get("event_version") == engine.DIRECT_TEXT_EVENT_VERSION
-                    and data.get("text_input_mode") == engine.TRIBE_TEXT_INPUT_MODE):
-                return {}
-        except (OSError, ValueError, TypeError):
-            return {}
+    from tribe_service.engine import roi_reference  # Delayed: engine imports this overlay.
+    data = roi_reference(encoder)
     assets = load_roi_assets()
     return data if isinstance(data, dict) and assets and str(data.get("atlas_sha256", ""))[:16] == assets[4] else {}
 

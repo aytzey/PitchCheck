@@ -9,6 +9,8 @@ export const platformValues = [
 ] as const;
 
 export type Platform = (typeof platformValues)[number];
+export const RECIPIENT_STANCES = ["receptive", "neutral", "skeptical"] as const;
+export const PERSONALIZATION_LEVELS = ["generic", "category", "recipient_specific"] as const;
 
 // Request to score a pitch
 export interface PitchScoreRequest {
@@ -84,6 +86,7 @@ export interface ResearchSynthesisItem {
   citation: string;
   source_keys?: string[];
   lever: string;
+  evidence_basis?: "persona_llm_read";
 }
 
 export interface SegmentLocation {
@@ -152,6 +155,17 @@ export interface RobustnessReport {
   confidence_reasons?: string[];
   scientific_caveats?: string[];
   breakdown_anchor?: { basis: string } | null; // persona-read anchoring of recipient breakdown items
+  persona_read_prior?: {
+    enabled: boolean;
+    final_score_without_prior: number | null;
+    version?: string;
+    basis?: string;
+    recipient_stance?: (typeof RECIPIENT_STANCES)[number] | null;
+    personalization_level?: (typeof PERSONALIZATION_LEVELS)[number] | null;
+    skeptic_facet_boost?: number | null;
+    tailoring_points?: number | null;
+    source_keys?: string[];
+  } | null;
   calibration_basis: string;
 }
 
@@ -178,6 +192,9 @@ export interface ContextFitReport {
   channel_fit: ContextFitFacet;
   decision_driver: string;
   top_unaddressed_objection: string;
+  recipient_stance?: (typeof RECIPIENT_STANCES)[number] | null;
+  personalization_level?: (typeof PERSONALIZATION_LEVELS)[number] | null;
+  unused_persona_facts?: string[];
 }
 
 // Full score report
@@ -503,6 +520,10 @@ function normalizeFacet(value: unknown): ContextFitFacet | null {
   };
 }
 
+function pick<T extends string>(value: unknown, allowed: readonly T[]): T | null {
+  return typeof value === "string" && allowed.includes(value as T) ? value as T : null;
+}
+
 function normalizeContextFit(value: unknown): ContextFitReport | null {
   if (!isRecord(value)) return null;
   const personaPainAlignment = normalizeFacet(value.persona_pain_alignment);
@@ -521,6 +542,9 @@ function normalizeContextFit(value: unknown): ContextFitReport | null {
     channel_fit: channelFit,
     decision_driver: normalizeOptionalText(value.decision_driver, MAX_REPORT_TEXT_CHARS),
     top_unaddressed_objection: normalizeOptionalText(value.top_unaddressed_objection, MAX_REPORT_TEXT_CHARS),
+    recipient_stance: pick(value.recipient_stance, RECIPIENT_STANCES),
+    personalization_level: pick(value.personalization_level, PERSONALIZATION_LEVELS),
+    unused_persona_facts: normalizeStringArray(value.unused_persona_facts, 3, 160),
   };
 }
 
@@ -641,6 +665,20 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
   if (scientificCaveats.length) report.scientific_caveats = scientificCaveats;
   report.breakdown_anchor = isRecord(value.breakdown_anchor)
     ? { basis: normalizeOptionalText(value.breakdown_anchor.basis, MAX_SHORT_TEXT_CHARS) }
+    : null;
+  const prior = value.persona_read_prior;
+  report.persona_read_prior = isRecord(prior)
+    ? {
+        enabled: prior.enabled === true,
+        final_score_without_prior: parseFiniteNumber(prior.final_score_without_prior),
+        version: normalizeOptionalText(prior.version, MAX_SHORT_TEXT_CHARS),
+        basis: normalizeOptionalText(prior.basis, MAX_SHORT_TEXT_CHARS),
+        recipient_stance: pick(prior.recipient_stance, RECIPIENT_STANCES),
+        personalization_level: pick(prior.personalization_level, PERSONALIZATION_LEVELS),
+        skeptic_facet_boost: parseFiniteNumber(prior.skeptic_facet_boost),
+        tailoring_points: parseFiniteNumber(prior.tailoring_points),
+        source_keys: normalizeStringArray(prior.source_keys, 16, 120),
+      }
     : null;
   return report;
 }

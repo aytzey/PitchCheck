@@ -1,6 +1,8 @@
 """Tests for the deterministic TRIBE × research synthesis layer."""
 from __future__ import annotations
 
+import pytest
+
 from tribe_service.research_synthesis import (
     build_tribe_synthesis,
     localize_pitch_segments,
@@ -20,6 +22,29 @@ def _axes(self_value=50, reward=50, social=50, encoding=50, fluency=50):
 
 def _fmri(trace):
     return {"temporal_trace": trace}
+
+
+@pytest.mark.parametrize("stance,proof,fires", [("skeptical", 45, True), ("skeptical", 30, True),
+    ("skeptical", 46, False), ("neutral", 30, False), (None, 30, False),
+    ("skeptical", None, False), ("skeptical", "bad", False), ("skeptical", float("nan"), False)])
+def test_persona_gap_is_tagged_and_follows_four_tribe_gaps(stance, proof, fires):
+    from tribe_service.llm_layer import PERSONA_PRIOR_SOURCE_KEYS
+    from tribe_service.persuasion_features import RESEARCH_SOURCES
+    synthesis = build_tribe_synthesis("A test pitch", _axes(self_value=30, encoding=30, fluency=30),
+        raw_features={"sustain_ratio": .2}, context_fit={"recipient_stance": stance, "proof_credibility": {"score": proof}})
+    items = synthesis["items"]
+    persona = [item for item in items if item["key"] == "skeptical_reader_weak_proof"]
+    assert bool(persona) is fires
+    assert synthesis["basis"].endswith("_v2")
+    known = {source["key"] for source in RESEARCH_SOURCES}
+    assert set(PERSONA_PRIOR_SOURCE_KEYS) <= known
+    for item in items:
+        assert set(item["source_keys"]) <= known
+    if fires:
+        assert len(items) == 5 and items[4] == persona[0]
+        assert persona[0]["evidence_basis"] == "persona_llm_read"
+        assert "axis" not in persona[0]
+    assert not any(item["key"] == "skeptical_reader_weak_proof" for item in synthesize_research_findings(_axes())["items"])
 
 
 class TestAxisFindings:

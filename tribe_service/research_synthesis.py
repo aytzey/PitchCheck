@@ -256,10 +256,33 @@ def _raw_feature(raw_features: dict[str, Any] | None, key: str) -> float | None:
     return value if math.isfinite(value) else None
 
 
+SKEPTIC_WEAK_PROOF_MAX = 45.0  # ponytail: unvalidated literature-prior trigger; retune from WS10 stance-stratified data.
+
+
+def _persona_read_gaps(context_fit: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(context_fit, dict) or context_fit.get("recipient_stance") != "skeptical":
+        return []
+    proof = _raw_feature(context_fit.get("proof_credibility"), "score")
+    if proof is None or proof > SKEPTIC_WEAK_PROOF_MAX:
+        return []
+    return [{
+        "key": "skeptical_reader_weak_proof", "kind": "gap", "evidence_basis": "persona_llm_read",
+        "observation": f"Your persona description reads as skeptical of the premise, and the support offered is rated weak ({proof:.0f}/100).",
+        "finding": ("Readers invested against a message weigh argument quality over cues (ELM). In one fMRI study of anti-drug "
+                    "video ads (n=28), self-rated sensation value was the weakest predictor of rated effectiveness, and viewers' "
+                    "own ratings tracked effectiveness less well among at-risk, counter-attitudinal viewers."),
+        "citation": "Petty & Cacioppo 1986 (ELM); Huskey et al. 2017 (video PSAs, by analogy)",
+        "source_keys": ["petty_cacioppo_1986_elm", "huskey_2017_persuasion_network"],
+        "lever": ("If the draft leans on intensity (hype, superlatives, stacked urgency), swap it for one concrete claim "
+                  "with checkable support and pre-empt the main counter-argument."),
+    }]
+
+
 def synthesize_research_findings(
     neuro_axes: dict[str, dict[str, Any]],
     fmri_summary: dict[str, Any] | None = None,
     raw_features: dict[str, Any] | None = None,
+    context_fit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Map this pitch's TRIBE axis geometry, raw features, and trace shape onto
     published findings.
@@ -419,7 +442,7 @@ def synthesize_research_findings(
 
     # Severity order: biggest gaps first, then patterns/strengths.
     gaps.sort(key=lambda item: _safe_score(neuro_axes, str(item.get("axis", "")), 50.0))
-    items = [*gaps, *strengths][:5]
+    items = [*gaps, *_persona_read_gaps(context_fit), *strengths][:5]
 
     return {
         "items": items,
@@ -434,13 +457,13 @@ def build_tribe_synthesis(
     neuro_axes: dict[str, dict[str, Any]],
     fmri_summary: dict[str, Any] | None = None,
     raw_features: dict[str, Any] | None = None,
+    context_fit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Full deterministic TRIBE read: research findings + segment localization.
 
-    This is the single entry point the LLM layer and report share, so the
-    same TRIBE-grounded analysis appears in the prompt, the report, and the
-    refine brief.
+    TRIBE-grounded items stay identical in the prompt, report and fallback refine
+    brief. Post-LLM only, persona-read items are tagged with evidence_basis.
     """
-    synthesis = synthesize_research_findings(neuro_axes, fmri_summary, raw_features)
+    synthesis = synthesize_research_findings(neuro_axes, fmri_summary, raw_features, context_fit)
     synthesis["localization"] = localize_pitch_segments(message, fmri_summary)
     return synthesis

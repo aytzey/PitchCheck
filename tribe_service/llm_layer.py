@@ -77,6 +77,30 @@ OPENROUTER_SELF_CONSISTENCY_SAMPLES = _env_int("OPENROUTER_SELF_CONSISTENCY_SAMP
 # weak neural evidence makes the semantic read the best signal available.
 # 0 reproduces the old neural-only behavior.
 SEMANTIC_BLEND_WEIGHT = min(1.0, _env_float("PITCHCHECK_SEMANTIC_BLEND_WEIGHT", 0.55, 0.0))
+# Literature priors: ELM; Huskey 2017 by analogy; Chua 2009/2011.
+# ponytail: unvalidated priors; retune from WS10 stance-stratified outcome monitoring.
+PERSONA_READ_PRIORS = os.getenv("PITCHCHECK_PERSONA_READ_PRIORS", "1").strip().lower() not in {"0", "false", "off", "no"}
+SKEPTIC_FACET_BOOST = _env_float("PITCHCHECK_SKEPTIC_FACET_BOOST", 0.4, 0.0)
+TAILORING_PRIOR_POINTS = _env_float("PITCHCHECK_TAILORING_PRIOR_POINTS", 3.0, 0.0)
+LITERATURE_PRIOR_BUDGET = _env_float("PITCHCHECK_LITERATURE_PRIOR_BUDGET", 6.0, 0.0)
+RECIPIENT_STANCES = frozenset({"receptive", "neutral", "skeptical"})
+PERSONALIZATION_LEVELS = frozenset({"generic", "category", "recipient_specific"})
+PERSONA_PRIOR_SOURCE_KEYS = ["petty_cacioppo_1986_elm", "huskey_2017_persuasion_network",
+                           "chua_2009_tailoring", "chua_2011_tailored_self_related"]
+STANCE_RULE = (
+    "recipient_stance: infer ONLY from attitudes or behaviour the persona text states; never from job title, seniority, "
+    "industry, demographics or TRIBE signals. skeptical = the persona states disagreement with, or defensiveness about, the "
+    "pitch's core premise, or states being satisfied with or committed to the alternative the pitch asks them to replace. "
+    "Merely using a competitor or disliking cold outreach is neutral. receptive = states interest, an active search, or a "
+    "need the ask directly serves. neutral = otherwise. unknown = the persona gives no attitude information.")
+PERSONALIZATION_RULE = (
+    "personalization_level: generic = could be sent to anyone unchanged; category = written for the reader's role, industry "
+    "or segment, but nothing only this reader would recognise; recipient_specific = uses at least one fact the persona "
+    "states about this particular reader (goal, obstacle, constraint, history).")
+SKEPTIC_LINE = (
+    "If recipient_stance is skeptical, read proof_credibility and objection_coverage strictly: hype, superlatives and "
+    "stacked urgency are not support. Prefer a top move that swaps intensity for one concrete, checkable claim and "
+    "pre-empts the main counter-argument (argument quality over cues, ELM).")
 # TRIBE never receives the persona (app.py scores request.message only), so the two
 # recipient-specific breakdown items are anchored to the LLM persona-read facets.
 # Both weights = 0 restores the old neural-anchored breakdown.
@@ -131,9 +155,8 @@ CONTEXT_FIT_NOTES = {
     "persona_pain_alignment": _v2(
         "Does it hit a goal, pain or preference this recipient has now (personal messages: their actual interests, "
         "never invented business pain) and make explicit what saying yes gives them, in goals they already hold? "
-        "Tailoring: generic (true of anyone) < category-level (a vague rendering of their situation such as 'a lot of', "
-        "'busy weeks', or a segment paraphrase such as 'teams like yours') < recipient-specific (a fact the persona or "
-        "answers state). Do not credit you-density, their name or flattery. Credit a feelings-first or a facts-first "
+        f"{PERSONALIZATION_RULE} Do not credit category-level paraphrases ('a lot of', 'busy weeks', 'teams like yours'), "
+        "you-density, their name or flattery as recipient-specific tailoring. Credit a feelings-first or a facts-first "
         "appeal only when it matches an orientation the persona states; if none is stated, penalize neither.",
         "does the message hit a pain/goal this persona actually has right now?"),
     # Yomogida's norm-shift evidence is weak; this only conditions a reasons check.
@@ -495,6 +518,12 @@ Quality bar for strengths, risks, rewrites, and top moves:
 
 {_context_fit_rubric_block()}
 
+Persona read (inside context_fit; enum values are the exact English tokens listed, never translated):
+- {STANCE_RULE}
+- {PERSONALIZATION_RULE}
+- unused_persona_facts: up to 3 facts copied character-for-character from the persona text, in the persona's original language (this overrides the same-language rule above), that the pitch does not use. Prefer role or work facts a sender could plausibly know; skip private or sensitive details (health, family, religion, politics). Return [] if none. A top move may use a fact only if it fits the offer; never invent facts.
+{SKEPTIC_LINE if PERSONA_READ_PRIORS else ""}
+
 Return JSON with this exact shape:
 {{
   "persuasion_score": <0-100 integer calibrated primarily to the neural prior>,
@@ -511,7 +540,10 @@ Return JSON with this exact shape:
     "cta_ease": {{"score": <0-100>, "note": "<{_v2('one plain-language sentence applying the context-fit rubric to this pitch', CONTEXT_FIT_NOTES['cta_ease'])}>"}},
     "channel_fit": {{"score": <0-100>, "note": "<{_v2('one plain-language sentence applying the context-fit rubric to this pitch', CONTEXT_FIT_NOTES['channel_fit'])}>"}},
     "decision_driver": "<the single factor most likely to decide this persona's response>",
-    "top_unaddressed_objection": "<the most dangerous objection the pitch leaves open, or empty string>"
+    "top_unaddressed_objection": "<the most dangerous objection the pitch leaves open, or empty string>",
+    "recipient_stance": "receptive|neutral|skeptical|unknown",
+    "personalization_level": "generic|category|recipient_specific",
+    "unused_persona_facts": ["<0-3 facts copied verbatim from the persona that the pitch does not use>"]
   }},
   "breakdown": [
     {{"key": "emotional_resonance", "label": "Emotional Resonance", "score": <0-100>, "explanation": "<plain language: does the reader feel a win or relief, and where>"}},
@@ -1171,6 +1203,40 @@ def _clean_string_list(value: Any, default: list[str], *, limit: int = 3) -> lis
     return (cleaned or default)[:limit]
 
 
+def _enum_token(value: Any, allowed: frozenset[str]) -> str | None:
+    token = value.strip().casefold() if isinstance(value, str) else ""
+    return token if token in allowed else None
+
+
+_QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
+
+
+def _flat(text: str) -> str:
+    return " ".join(text.translate(_QUOTES).split()).strip(" \"'«»")
+
+
+def _verified_persona_facts(value: Any, persona: str, message: str) -> list[str]:
+    """Trust boundary: keep only verbatim persona facts not already in the pitch."""
+    if not isinstance(value, list):
+        return []
+    source, used = _flat(persona).casefold(), _flat(message).casefold()
+    kept: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        fact = _flat(item) if isinstance(item, str) else ""
+        key = fact.casefold()
+        # ponytail: verbatim-only; consider fuzzy matching only if monitoring finds too many empty rows.
+        if len(fact) > 160 or len(fact.split()) < 3 or key in seen or key not in source or key in used:
+            continue
+        seen.add(key)
+        kept.append(fact)
+    return kept[:3]
+
+
+def _tailoring_prior_points(level: Any) -> float:
+    return TAILORING_PRIOR_POINTS if PERSONA_READ_PRIORS and level == "recipient_specific" else 0.0
+
+
 def _normalise_breakdown(
     value: Any,
     baseline: list[dict[str, Any]],
@@ -1207,7 +1273,7 @@ def _normalise_breakdown(
     return normalised
 
 
-def _normalise_context_fit(value: Any) -> dict[str, Any] | None:
+def _normalise_context_fit(value: Any, *, persona: str = "", message: str = "") -> dict[str, Any] | None:
     """Validate the LLM's semantic context-fit block defensively.
 
     These sub-scores are diagnostic context-fit evidence, not the headline
@@ -1229,6 +1295,10 @@ def _normalise_context_fit(value: Any) -> dict[str, Any] | None:
     normalised["top_unaddressed_objection"] = _clean_llm_string(
         value.get("top_unaddressed_objection"), max_len=300
     )
+    normalised["recipient_stance"] = _enum_token(value.get("recipient_stance"), RECIPIENT_STANCES)
+    # Chua contrasts recipient-tailored with general messages; generic/category is a product convention, not an ROI read.
+    normalised["personalization_level"] = _enum_token(value.get("personalization_level"), PERSONALIZATION_LEVELS)
+    normalised["unused_persona_facts"] = _verified_persona_facts(value.get("unused_persona_facts"), persona, message)
     return normalised
 
 
@@ -1282,13 +1352,17 @@ def _persona_anchored_breakdown(
     return items, anchors
 
 
-def _semantic_score_from_context_fit(context_fit: dict[str, Any] | None) -> float | None:
+def _semantic_score_from_context_fit(context_fit: dict[str, Any] | None, *, priors: bool | None = None) -> float | None:
     """Derive the semantic persuasion score from validated context-fit facets."""
     if not isinstance(context_fit, dict):
         return None
     total = 0.0
     total_weight = 0.0
+    on = PERSONA_READ_PRIORS if priors is None else priors
+    boost = SKEPTIC_FACET_BOOST if on and context_fit.get("recipient_stance") == "skeptical" else 0.0
     for key, weight in CONTEXT_FIT_WEIGHTS.items():
+        if key in ("proof_credibility", "objection_coverage"):
+            weight *= 1.0 + boost
         facet = context_fit.get(key)
         if not isinstance(facet, dict):
             continue
@@ -1443,7 +1517,7 @@ The recipient's stated preference overrides hype in the original. If they dislik
 
 Rewrite objective:
 - Help this particular recipient consider the sender's real invitation or proposal, rather than gaming a score.
-{_v2("- When the persona states a specific, true fact about the recipient, prefer it over a category-level paraphrase ('teams like yours', 'a lot of'); one or two such references are enough; never invent one.")}
+- For business proposals, let at least one candidate use a concrete fact the persona states about this recipient (goal, obstacle, constraint, history) where it serves the proposal; never invent one and never as a templated opener.{_v2(" Prefer it over a category-level paraphrase ('teams like yours', 'a lot of'); one or two such references are enough.")}
 {_v2("- For skeptical readers, or readers committed to a current alternative, prefer one concrete claim plus its supplied support over intensifiers and hype.")}
 - Respect stated dislikes and objections. Do not imply they like something the persona says they dislike.
 - Preserve the sender's natural voice, informality, relationship and real goal. Personal invitations are not sales pitches: no customer/proof/demo framing unless the input actually calls for it.
@@ -1713,13 +1787,16 @@ Assess original, c1, c2 and c3 independently. Do not rewrite them. {_v2("Measure
 - recipient_respected: {_v2(f"false when: {RECIPIENT_RESPECT_FAIL} True when: {RECIPIENT_RESPECT_PASS}", "no claim that they like a disliked band, no guilt or pressure. A direct question permits a no; an explicit refusal disclaimer or alternative activity is NOT required for a high score.")}
 - voice_preserved: same language and believable register/relationship; an informal flirty message must not become a marketing email. Bracketed placeholders are not ready-to-send messages. Repetitive disclaimers, generic promises of a special night and wordy concessions lower channel_fit.
 - context_fit: {facet_instruction}
+- personalization_level (per candidate): {PERSONALIZATION_RULE}
+- recipient_stance (once, top level, from the persona text only): {STANCE_RULE}
 - issues: short concrete problems in the input language, especially any unsupported claim. A high neural score must not change a failing safety judgment.
 
 Return only valid JSON with this exact shape:
 {{
+  "recipient_stance": "receptive|neutral|skeptical|unknown",
   "evaluations": [
     {{"id": "original", "supported": true, "intent_preserved": true, "recipient_respected": true, "voice_preserved": true,
-      "context_fit": {{"persona_pain_alignment": 50, "objection_coverage": 50, "proof_credibility": 50, "cta_ease": 50, "channel_fit": 50}}, "issues": []}}
+      "context_fit": {{"persona_pain_alignment": 50, "objection_coverage": 50, "proof_credibility": 50, "cta_ease": 50, "channel_fit": 50}}, "personalization_level": "generic|category|recipient_specific", "issues": []}}
   ]
 }}"""
 
@@ -2110,6 +2187,7 @@ def select_tribe_refinement(
     selected_model = result["model"]
     strategy = result.get("decision_strategy")
     quality_model = decision = None
+    stance = None
     try:
         if strategy:
             reviews, quality_model, decision = _jev_refinement_reviews(
@@ -2123,6 +2201,7 @@ def select_tribe_refinement(
             )
             parsed = _parse_json_content(content)
             reviews = parsed.get("evaluations") if isinstance(parsed, dict) else None
+            stance = _enum_token(parsed.get("recipient_stance"), RECIPIENT_STANCES) if isinstance(parsed, dict) else None
     except Exception as exc:
         LOGGER.warning("Refine candidate validation failed (%s)", type(exc).__name__)
         raise RuntimeError("Refinement candidate validation failed.") from exc
@@ -2145,7 +2224,10 @@ def select_tribe_refinement(
             for key in CONTEXT_FIT_KEYS
         ):
             raise RuntimeError("Refinement candidate scores were invalid.")
-        semantic = _semantic_score_from_context_fit({key: {"score": facets[key]} for key in CONTEXT_FIT_KEYS})
+        level = _enum_token(review.get("personalization_level"), PERSONALIZATION_LEVELS) if not strategy else None
+        scored = {**{key: {"score": facets[key]} for key in CONTEXT_FIT_KEYS}, "recipient_stance": stance}
+        plain = _semantic_score_from_context_fit(scored, priors=False)
+        semantic = clamp(_semantic_score_from_context_fit(scored) + _tailoring_prior_points(level))
         eligible = all(review.get(key) is True for key in ("supported", "intent_preserved", "recipient_respected", "voice_preserved"))
         new_details = sorted(_refine_concrete_details(measured["message"]) - known_details)
         issues = _clean_string_list(review.get("issues"), [], limit=5)
@@ -2166,6 +2248,7 @@ def select_tribe_refinement(
         # Preserve the legacy blend. The opt-in workflow never ranks by the uncalibrated scalar.
         weight = clamp(SEMANTIC_BLEND_WEIGHT + (1 - measured["quality_weight"]) * 0.30, 0, 0.85)
         evaluations.append({**measured, "eligible": eligible, "semantic_score": round(semantic, 3),
+                            **({"personalization_level": level, "semantic_score_without_prior": round(plain, 3)} if not strategy else {}),
                             "selection_score": round(semantic if strategy else
                                                      weight * semantic + (1 - weight) * measured["neural_score"], 3),
                             **({"response_shape": _refine_response_shape(measured)} if strategy else {}),
@@ -2194,6 +2277,7 @@ def select_tribe_refinement(
         "model_id": selected["model_id"], "mode": selected["mode"], "candidate_count": len(measurements) - 1,
         "selected_id": selected["id"], "improved": selected["id"] != "original",
         "selected_id_semantic_only": semantic_only["id"],
+        **({"recipient_stance": stance} if not strategy else {}),
         "baseline_neural_score": baseline["neural_score"], "selected_neural_score": selected["neural_score"],
         "evaluations": evaluations,
         **({"quality_model": quality_model, "writer_passes": 1, "decision": decision,
@@ -2373,8 +2457,10 @@ def _normalise_llm_result(
     baseline: dict[str, Any],
     *,
     breakdown_allowed_delta: float = 10.0,
+    persona: str = "",
+    message: str = "",
 ) -> dict[str, Any]:
-    context_fit = _normalise_context_fit(llm_result.get("context_fit"))
+    context_fit = _normalise_context_fit(llm_result.get("context_fit"), persona=persona, message=message)
     baseline_breakdown = baseline.get("breakdown", [])
     anchored, anchors = _persona_anchored_breakdown(baseline_breakdown, llm_result.get("context_fit"), context_fit)
     breakdown = _normalise_breakdown(llm_result.get("breakdown"), anchored, allowed_delta=breakdown_allowed_delta)
@@ -2432,10 +2518,16 @@ def _calibrate_result(
     quality_adjusted_neuro_axis_score = quality_adjusted_score(neural_score, persuasion_evidence)
     confidence = calibration_confidence(evidence_score, 50.0, persuasion_evidence)
     raw_llm_score = _to_score(result.get("persuasion_score"), evidence_score) if llm_used else None
-    facet_score = _semantic_score_from_context_fit(result.get("context_fit")) if llm_used else None
+    context_fit = result.get("context_fit") if llm_used else None
+    cf = context_fit or {}
+    facet_score = _semantic_score_from_context_fit(context_fit)
+    tailoring_points = _tailoring_prior_points(cf.get("personalization_level"))
+    boost = SKEPTIC_FACET_BOOST if PERSONA_READ_PRIORS and cf.get("recipient_stance") == "skeptical" else 0.0
     guardrails: list[str] = []
     semantic_weight = 0.0
     llm_score = raw_llm_score
+    final_without_prior = evidence_score
+    budget_scale = 1.0
     if quality_weight < 0.99:
         guardrails.append("score_shrunk_for_prediction_quality")
 
@@ -2450,6 +2542,7 @@ def _calibrate_result(
             guardrails.append("semantic_score_derived_from_context_fit_facets")
         else:
             semantic_estimate = raw_llm_score
+        semantic_estimate = clamp(semantic_estimate + tailoring_points)
         allowed_delta = _allowed_llm_delta(confidence)
         delta = semantic_estimate - evidence_score
         if abs(delta) > allowed_delta:
@@ -2471,6 +2564,18 @@ def _calibrate_result(
             0.85,
         )
         final_score = evidence_score + (llm_score - evidence_score) * semantic_weight
+        plain_facet = _semantic_score_from_context_fit(context_fit, priors=False)
+        plain = plain_facet * 0.65 + raw_llm_score * 0.35 if plain_facet is not None else raw_llm_score
+        plain_llm = evidence_score + clamp(plain - evidence_score, -allowed_delta, allowed_delta)
+        final_without_prior = clamp(evidence_score + (plain_llm - evidence_score) * semantic_weight)
+        # ponytail: WS06 is the only final-score prior in Faz 1a; WS10 10B will centralize this in _blend_final.
+        prior_delta = final_score - final_without_prior
+        if abs(prior_delta) > LITERATURE_PRIOR_BUDGET:
+            budget_scale = LITERATURE_PRIOR_BUDGET / abs(prior_delta)
+            final_score = final_without_prior + prior_delta * budget_scale
+            guardrails.append("literature_prior_budget_clamped")
+        if abs(final_score - final_without_prior) >= 0.05:
+            guardrails.append("persona_read_literature_prior_applied")
         guardrails.append("final_score_neural_anchored_semantic_blend")
 
     final_score = clamp(final_score)
@@ -2498,11 +2603,25 @@ def _calibrate_result(
         "confidence": round(confidence, 2),
         "score_delta": round((llm_score - evidence_score), 1) if llm_score is not None else None,
         "semantic_blend_weight": round(semantic_weight, 2),
+        "persona_read_prior": None if not llm_used else {
+            "version": "persona_read_prior_v1", "enabled": PERSONA_READ_PRIORS,
+            "basis": "literature_prior_unvalidated",
+            "recipient_stance": cf.get("recipient_stance"), "personalization_level": cf.get("personalization_level"),
+            "skeptic_facet_boost": boost, "tailoring_points": tailoring_points,
+            "final_score_without_prior": round(final_without_prior, 1),
+            "source_keys": PERSONA_PRIOR_SOURCE_KEYS,
+        },
+        "final_score_without_literature_priors": round(final_without_prior, 1),
+        "literature_prior_budget": {"budget": LITERATURE_PRIOR_BUDGET, "delta": round(final_score - final_without_prior, 3),
+                                    "budget_scale": budget_scale},
+        "score_terms": {"persona_read_prior": {"value": round(final_score - final_without_prior, 3),
+                        "weight": semantic_weight, "provenance": "literature_prior_unvalidated"}},
         "prompt_injection_risk": None,
         "guardrails_applied": guardrails,
         "warnings": persuasion_evidence.get("warnings", []),
         "neuro_axes": neuro_axes,
-        "research_synthesis": build_tribe_synthesis(message, neuro_axes, fmri_summary, raw_features),
+        "research_synthesis": build_tribe_synthesis(message, neuro_axes, fmri_summary, raw_features,
+                                                   context_fit=context_fit if PERSONA_READ_PRIORS else None),
         "confidence_reasons": confidence_reasons(neural_score, 50.0, persuasion_evidence, neuro_axes),
         "scientific_caveats": scientific_caveats(),
         "breakdown_anchor": (
@@ -2563,6 +2682,7 @@ def interpret_persuasion(
                 llm_result,
                 baseline_report,
                 breakdown_allowed_delta=_allowed_breakdown_delta(confidence),
+                persona=persona, message=message,
             )
             return _calibrate_result(
                 normalised,

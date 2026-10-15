@@ -2,6 +2,14 @@ import { describe, it, expect } from "vitest";
 import { isPitchScoreReport, normalizePitchScoreReport, normalizeRefineEvidence, platformValues } from "@/shared/types";
 import { BREAKDOWN_KEYS, NEURAL_SIGNAL_KEYS, PLATFORMS } from "@/shared/constants";
 
+const contextFit = {
+  persona_pain_alignment: { score: 70, note: "Pain" },
+  objection_coverage: { score: 60, note: "Objections" },
+  proof_credibility: { score: 40, note: "Proof" },
+  cta_ease: { score: 80, note: "CTA" },
+  channel_fit: { score: 75, note: "Channel" },
+};
+
 describe("shared/types", () => {
   it("platformValues has 6 entries", () => {
     expect(platformValues).toHaveLength(6);
@@ -122,6 +130,75 @@ describe("shared/types", () => {
     expect(report?.robustness?.scientific_caveats).toHaveLength(8);
     expect(report?.robustness?.guardrails_applied).toHaveLength(10);
     expect(report?.robustness?.breakdown_anchor).toEqual({ basis: "persona_read_facets_v1" });
+  });
+
+  it.each([
+    ["receptive", "generic"],
+    ["neutral", "category"],
+    ["skeptical", "recipient_specific"],
+  ])("round-trips canonical persona labels %s / %s", (stance, level) => {
+    const report = normalizePitchScoreReport({
+      persuasion_score: 70,
+      context_fit: { ...contextFit, recipient_stance: stance, personalization_level: level, unused_persona_facts: ["Owns the migration rollout"] },
+    });
+
+    expect(report?.context_fit).toMatchObject({ recipient_stance: stance, personalization_level: level, unused_persona_facts: ["Owns the migration rollout"] });
+    expect(normalizePitchScoreReport(report)?.context_fit).toEqual(report?.context_fit);
+  });
+
+  it.each(["Skeptical", "duygusal", "unknown", 123, null, undefined])("keeps invalid persona labels %s unknown", (value) => {
+    const report = normalizePitchScoreReport({
+      persuasion_score: 70,
+      context_fit: { ...contextFit, recipient_stance: value, personalization_level: value },
+    });
+
+    expect(report?.context_fit?.recipient_stance).toBeNull();
+    expect(report?.context_fit?.personalization_level).toBeNull();
+  });
+
+  it("bounds persona facts and still requires every context-fit facet", () => {
+    const report = normalizePitchScoreReport({
+      persuasion_score: 70,
+      context_fit: { ...contextFit, unused_persona_facts: [" x ", "a".repeat(300), "Third fact", "Fourth fact"] },
+    });
+
+    expect(report?.context_fit?.unused_persona_facts).toEqual(["x", "a".repeat(160), "Third fact"]);
+    expect(normalizePitchScoreReport({ persuasion_score: 70, context_fit: { ...contextFit, channel_fit: null, recipient_stance: "skeptical" } })?.context_fit).toBeNull();
+  });
+
+  it("normalizes the persona prior and preserves its provenance", () => {
+    const report = normalizePitchScoreReport({
+      persuasion_score: 70,
+      robustness: {
+        final_score: 70,
+        persona_read_prior: {
+          version: "persona_read_prior_v1",
+          enabled: true,
+          basis: "literature_prior_unvalidated",
+          recipient_stance: "skeptical",
+          personalization_level: "recipient_specific",
+          skeptic_facet_boost: "0.4",
+          tailoring_points: "3",
+          final_score_without_prior: "68.5",
+          source_keys: ["petty_cacioppo_1986_elm", "chua_2009_tailoring"],
+        },
+      },
+    });
+
+    expect(report?.robustness?.persona_read_prior).toEqual({
+      version: "persona_read_prior_v1",
+      enabled: true,
+      basis: "literature_prior_unvalidated",
+      recipient_stance: "skeptical",
+      personalization_level: "recipient_specific",
+      skeptic_facet_boost: 0.4,
+      tailoring_points: 3,
+      final_score_without_prior: 68.5,
+      source_keys: ["petty_cacioppo_1986_elm", "chua_2009_tailoring"],
+    });
+    const invalid = normalizePitchScoreReport({ persuasion_score: 70, robustness: { persona_read_prior: { enabled: "true", final_score_without_prior: "NaN" } } });
+    expect(invalid?.robustness?.persona_read_prior).toMatchObject({ enabled: false, final_score_without_prior: null });
+    expect(normalizePitchScoreReport({ persuasion_score: 70, robustness: {} })?.robustness?.persona_read_prior).toBeNull();
   });
 
   it("BREAKDOWN_KEYS has 5 entries", () => {

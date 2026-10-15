@@ -56,6 +56,7 @@ class TestScore:
         assert isinstance(report["robustness"], dict)
         assert report["robustness"]["prompt_doctrine_version"] == "doctrine_v2"
         assert report["robustness"]["context_fit_rubric_version"] == "v2"
+        assert report["robustness"]["persona_read_prior"] is None
         assert 0 <= report["robustness"]["confidence"] <= 1
         assert 0 < report["robustness"]["prediction_quality_weight"] <= 1
         assert isinstance(report["robustness"]["neuro_axes"], dict)
@@ -828,3 +829,39 @@ class TestScoreLog:
         assert record["pitch_id"] == report["robustness"]["score_log_id"] and len(record["pitch_id"]) == 64
         assert record["final_score"] == report["robustness"]["final_score"]
         assert record["word_count"] == 16 and record["b1_tribe_informed"] is True
+
+    def test_persona_prior_shadow_and_labels_logged_without_facts(self, monkeypatch, tmp_path):
+        import json
+        from tribe_service import llm_layer
+        log = tmp_path / "scores.jsonl"
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+        monkeypatch.setattr(llm_layer, "_call_openrouter", lambda *a, **k: {"persuasion_score": 65,
+            "context_fit": {**{key: {"score": 60} for key in llm_layer.CONTEXT_FIT_KEYS},
+                "recipient_stance": "skeptical", "personalization_level": "recipient_specific",
+                "unused_persona_facts": ["hates flaky deploys"]}})
+        report = self._score()
+        line = log.read_text()
+        record = json.loads(line)
+        assert record["recipient_stance"] == "skeptical"
+        assert record["personalization_level"] == "recipient_specific"
+        assert record["unused_persona_fact_count"] == 1
+        assert record["persona_read_prior"] == report["robustness"]["persona_read_prior"]
+        assert record["score_terms"] == report["robustness"]["score_terms"]
+        assert "hates flaky deploys" not in line and "Jordan" not in line
+
+    def test_refine_prior_shadow_logged_without_prose(self, monkeypatch, tmp_path):
+        import json
+        log = tmp_path / "scores.jsonl"
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+        service_app._log_refine_candidates(self.MESSAGE, {"recipient_stance": "skeptical", "selected_id": "c1",
+            "evaluations": [{"id": "c1", "message": self.MESSAGE, "semantic_score": 63.,
+                             "semantic_score_without_prior": 60., "personalization_level": "recipient_specific",
+                             "issues": ["private critic prose"]}]}, jev=False)
+        line = log.read_text()
+        record = json.loads(line)
+        assert record["recipient_stance"] == "skeptical"
+        assert record["personalization_level"] == "recipient_specific"
+        assert record["semantic_score_without_prior"] == 60.
+        assert "private critic prose" not in line and "Jordan" not in line

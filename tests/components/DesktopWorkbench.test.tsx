@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DesktopWorkbench from "@/components/DesktopWorkbench";
 import type { PitchScoreReport } from "@/shared/types";
@@ -58,6 +58,13 @@ const mockReport: PitchScoreReport = {
 const caveats = Array.from({ length: 7 }, (_, index) => `Scientific caveat number ${index + 1}.`);
 const axisKeys = ["self_value", "reward_affect", "social_sharing", "encoding_attention", "processing_fluency"];
 const span = (segment: number, text: string) => ({ segment, of: 8, position_pct: segment * 12, value: 0.3, percentile: 50, text });
+const contextFit = {
+  persona_pain_alignment: { score: 70, note: "Pain" },
+  objection_coverage: { score: 60, note: "Objections" },
+  proof_credibility: { score: 40, note: "Proof" },
+  cta_ease: { score: 80, note: "CTA" },
+  channel_fit: { score: 75, note: "Channel" },
+};
 
 function fullReport(llmScore: number | null, anchored: boolean) {
   return {
@@ -215,6 +222,81 @@ describe("DesktopWorkbench", () => {
     expect(screen.getByText("LLM interpreted")).toBeDefined();
     expect(screen.getByText("Urgency")).toBeDefined();
     expect(screen.getByText(/Matches the recipient · anchored to persona pain alignment/)).toBeDefined();
+  });
+
+  it("shows persona context and synthesis with distinct provenance and plain-text facts", async () => {
+    const report = fullReport(78, true);
+    await renderReport({
+      ...report,
+      context_fit: { ...contextFit, recipient_stance: "skeptical", personalization_level: "category", unused_persona_facts: ["Owns <script>migration</script> rollout", "Has a two-person team"] },
+      robustness: {
+        ...report.robustness,
+        research_synthesis: {
+          ...report.robustness.research_synthesis,
+          items: [{ key: "skeptical_reader_weak_proof", kind: "gap", evidence_basis: "persona_llm_read", observation: "A skeptical recipient needs stronger proof.", lever: "Use one checkable claim.", finding: "Argument quality matters.", citation: "ELM" }],
+        },
+      },
+    });
+
+    const personaRow = screen.getByText(/skeptical of the premise · personalization: category-level/).closest("div")!;
+    expect(within(personaRow).getByText("PRS")).toBeDefined();
+    expect(within(personaRow).getByText("From your persona text (LLM read, not TRIBE).")).toBeDefined();
+    const unusedRow = screen.getByText("Unused details from your persona:").closest("div")!;
+    expect(within(unusedRow).getByText("USE")).toBeDefined();
+    expect(unusedRow.textContent).toContain('"Owns <script>migration</script> rollout" · "Has a two-person team"');
+    expect(unusedRow.querySelector("script")).toBeNull();
+    expect(within(unusedRow).getByText("Use only if true and relevant to the offer.")).toBeDefined();
+    const synthesisRow = screen.getByText("A skeptical recipient needs stronger proof.").closest("div")!;
+    expect(within(synthesisRow).getByText("PRS")).toBeDefined();
+    expect(within(synthesisRow).getByText(/from the persona read, not TRIBE/)).toBeDefined();
+    expect(within(synthesisRow).queryByText("FIX")).toBeNull();
+  });
+
+  it("does not turn an unknown stance into neutral", async () => {
+    await renderReport({ ...mockReport, context_fit: { ...contextFit, recipient_stance: null, personalization_level: "generic", unused_persona_facts: [] } });
+
+    expect(screen.getByText(/generic \(could go to anyone\)/)).toBeDefined();
+    expect(screen.queryByText(/neutral/i)).toBeNull();
+    expect(screen.queryByText("Persona read:")).toBeNull();
+    expect(screen.queryByText("Unused details from your persona:")).toBeNull();
+  });
+
+  it.each([
+    [true, 68, "+2"],
+    [true, 69.5, "+0.5"],
+    [true, 70.5, "-0.5"],
+    [true, 69.6, null],
+    [false, 68, null],
+    [true, null, null],
+  ])("shows only a material enabled persona-prior delta (%s, %s)", async (enabled, withoutPrior, expected) => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report, robustness: { ...report.robustness, persona_read_prior: { enabled, final_score_without_prior: withoutPrior } } });
+
+    const label = screen.queryByText("Persona-read prior");
+    if (expected === null) {
+      expect(label).toBeNull();
+    } else {
+      expect(label).toBeDefined();
+      const row = label!.closest("div")!;
+      expect(within(row).getByText(expected)).toBeDefined();
+      expect(within(row).getByText("Literature-based adjustment, not yet validated on outcomes")).toBeDefined();
+    }
+  });
+
+  it("keeps the baseline first and two bounded persona brief lines immediately after it", async () => {
+    const facts = ["Owns migration ", "Runs rollout ", "Checks results "].map((fact) => fact.padEnd(160, "x"));
+    await renderReport({ ...mockReport, context_fit: { ...contextFit, recipient_stance: "skeptical", personalization_level: "recipient_specific", unused_persona_facts: facts } });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ refined_message: "A clearer rewrite with one checkable claim.", needs_clarification: false, questions: [] }) });
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
+    await screen.findByText("After . refined");
+    const suggestions = JSON.parse(mockFetch.mock.calls[1][1].body as string).suggestions as string[];
+
+    expect(suggestions[0]).toContain("Baseline persuasion score 76/100");
+    expect(suggestions[1]).toBe("Recipient reads as skeptical of the premise: replace hype with one concrete, checkable claim and pre-empt the main counter-argument.");
+    expect(suggestions[2]).toContain("Unused persona details (use only if true and relevant to the offer; invent nothing else):");
+    expect(suggestions[2]).toContain(facts[0]);
+    expect(suggestions[2]).toHaveLength(500);
+    expect(suggestions).toHaveLength(12);
   });
 
   it("shows desktop refiner clarification questions in the main editor", async () => {

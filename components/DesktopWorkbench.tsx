@@ -1819,6 +1819,16 @@ function TopMovesPanel({ moves }: { moves: TopMove[] }) {
 }
 
 function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
+  const stance = fit.recipient_stance && {
+    receptive: "receptive to the premise",
+    neutral: "neutral about the premise",
+    skeptical: "skeptical of the premise",
+  }[fit.recipient_stance];
+  const personalization = fit.personalization_level && {
+    generic: "generic (could go to anyone)",
+    category: "category-level (role/segment)",
+    recipient_specific: "recipient-specific",
+  }[fit.personalization_level];
   const facets = [
     { label: "Persona pain alignment", facet: fit.persona_pain_alignment },
     { label: "Objection coverage", facet: fit.objection_coverage },
@@ -1842,8 +1852,28 @@ function ContextFitPanel({ fit }: { fit: ContextFitReport }) {
           />
         ))}
       </div>
-      {(fit.decision_driver || fit.top_unaddressed_objection) && (
+      {(fit.decision_driver || fit.top_unaddressed_objection || stance || personalization || Boolean(fit.unused_persona_facts?.length)) && (
         <div className="pc-suggestions">
+          {(stance || personalization) && (
+            <div>
+              <span className="mono">PRS</span>
+              <p>
+                <strong>{stance ? "Persona read: " : "Personalization: "}</strong>
+                {stance}{stance && personalization ? " · personalization: " : ""}{personalization}
+                <small>From your persona text (LLM read, not TRIBE).</small>
+              </p>
+            </div>
+          )}
+          {Boolean(fit.unused_persona_facts?.length) && (
+            <div>
+              <span className="mono">USE</span>
+              <p>
+                <strong>Unused details from your persona: </strong>
+                {fit.unused_persona_facts?.map((fact) => `"${fact}"`).join(" · ")}
+                <small>Use only if true and relevant to the offer.</small>
+              </p>
+            </div>
+          )}
           {fit.decision_driver && (
             <div>
               <span className="mono">DD</span>
@@ -1933,18 +1963,22 @@ function ResearchSynthesisPanel({ synthesis }: { synthesis: ResearchSynthesis })
             </p>
           </div>
         )}
-        {items.map((item) => (
-          <div key={item.key}>
-            <span className="mono">{item.kind === "gap" ? "FIX" : item.kind === "strength" ? "KEEP" : "USE"}</span>
-            <p>
-              <strong>{item.observation} </strong>
-              {item.lever}
-              <small>
-                {item.finding} — {item.citation}
-              </small>
-            </p>
-          </div>
-        ))}
+        {items.map((item) => {
+          const badge = item.kind === "gap" ? "FIX" : item.kind === "strength" ? "KEEP" : "USE";
+          return (
+            <div key={item.key}>
+              <span className="mono">{item.evidence_basis === "persona_llm_read" ? "PRS" : badge}</span>
+              <p>
+                <strong>{item.observation} </strong>
+                {item.lever}
+                <small>
+                  {item.finding} — {item.citation}
+                  {item.evidence_basis === "persona_llm_read" && " · from the persona read, not TRIBE"}
+                </small>
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2352,6 +2386,10 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
     .filter((item, index, all) => all.indexOf(item) === index)
     .slice(0, 3);
   const [firstCaveat, ...moreCaveats] = robustness?.scientific_caveats ?? [];
+  const personaPrior = robustness?.persona_read_prior;
+  const personaDelta = robustness && personaPrior?.enabled && typeof personaPrior.final_score_without_prior === "number"
+    ? robustness.final_score - personaPrior.final_score_without_prior
+    : null;
 
   return (
     <div>
@@ -2390,6 +2428,14 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
                 <b className={`mono score-${toneFromScore(robustness.context_fit_score)}`}>
                   {Math.round(robustness.context_fit_score)}
                 </b>
+              </div>
+            )}
+            {personaDelta !== null && Math.abs(personaDelta) >= 0.5 && (
+              <div className="pc-rank-row">
+                <span className="mono">PRS</span>
+                <strong>Persona-read prior</strong>
+                <small>Literature-based adjustment, not yet validated on outcomes</small>
+                <b className="mono score-warn">{personaDelta > 0 ? "+" : ""}{Number(personaDelta.toFixed(1))}</b>
               </div>
             )}
             <div className="pc-rank-row">
@@ -3410,6 +3456,20 @@ function extractResearchBrief(report: PitchScoreReport) {
   return lines.slice(0, 4);
 }
 
+function extractPersonaReadBrief(report: PitchScoreReport) {
+  const fit = report.context_fit;
+  if (!fit) return [];
+  const lines: string[] = [];
+  if (fit.recipient_stance === "skeptical") {
+    lines.push("Recipient reads as skeptical of the premise: replace hype with one concrete, checkable claim and pre-empt the main counter-argument.");
+  }
+  if (fit.unused_persona_facts?.length) {
+    lines.push(`Unused persona details (use only if true and relevant to the offer; invent nothing else): ${fit.unused_persona_facts.map((fact) => `"${fact}"`).join("; ")}`);
+  }
+  // Only the Rust fallback writer consumes these lines; server refine ignores suggestions.
+  return lines.map((line) => line.slice(0, 500));
+}
+
 function extractRefineBrief(report: PitchScoreReport) {
   const baseline = `Baseline persuasion score ${Math.round(report.persuasion_score)}/100 - "${report.verdict}". The rewrite must beat this baseline, not paraphrase it.`;
   const topMoves = (report.top_moves ?? []).map(
@@ -3442,6 +3502,7 @@ function extractRefineBrief(report: PitchScoreReport) {
 
   return [
     baseline,
+    ...extractPersonaReadBrief(report),
     ...topMoves,
     ...research,
     ...contextFit,

@@ -430,7 +430,11 @@ def _score_log_record(request, report, raw_features, fmri_data, neural_signals) 
         **{key: robustness.get(key) for key in (
             "evidence_score", "neural_score", "raw_llm_score", "llm_score", "context_fit_score",
             "confidence", "semantic_blend_weight", "final_score",
+            "persona_read_prior", "final_score_without_literature_priors", "score_terms", "literature_prior_budget",
         )},
+        "recipient_stance": (report.context_fit or {}).get("recipient_stance"),
+        "personalization_level": (report.context_fit or {}).get("personalization_level"),
+        "unused_persona_fact_count": len((report.context_fit or {}).get("unused_persona_facts") or []),
         "facets": {key: facet.get("score") for key, facet in (report.context_fit or {}).items() if isinstance(facet, dict)},
         "b1_tribe_informed": True,
     }
@@ -598,6 +602,8 @@ def _log_refine_candidates(message: str, guidance: dict, *, jev: bool) -> None:
             "parent_pitch_id": parent, "pitch_id": score_log.pitch_id(row.get("message", "")),
             "id": row.get("id"), "selected": row.get("id") == guidance.get("selected_id"),
             "selected_id_semantic_only": guidance.get("selected_id_semantic_only"),
+            **({"recipient_stance": guidance.get("recipient_stance")} if not jev else {}),
+            **({key: row.get(key) for key in ("personalization_level", "semantic_score_without_prior")} if not jev else {}),
             **{key: row.get(key) for key in (
                 "eligible", "semantic_score", "selection_score", "neural_score", "quality_weight",
                 "neural_signals", "response_features", "text_feature_model", "mode",

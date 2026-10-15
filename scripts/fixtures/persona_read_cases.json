@@ -1,0 +1,113 @@
+{
+  "purpose": "Synthetic EN/TR persona-label stability controls; no persuasion outcomes or real people.",
+  "title_pairs": [
+    ["en-search-a", "en-search-b"],
+    ["en-committed-a", "en-committed-b"],
+    ["en-competitor-a", "en-competitor-b"],
+    ["tr-search-a", "tr-search-b"],
+    ["tr-committed-a", "tr-committed-b"],
+    ["tr-competitor-a", "tr-competitor-b"]
+  ],
+  "cases": [
+    {
+      "id": "en-search-a", "language": "en", "platform": "email", "title": "Chief technology officer",
+      "facts": "Actively looking for a simpler deployment workflow. The team releases every Thursday. The next pilot must work with the existing repository.",
+      "message": "Could I show you a simpler deployment workflow in a ten-minute walkthrough?"
+    },
+    {
+      "id": "en-search-b", "language": "en", "platform": "email", "title": "Junior project coordinator",
+      "facts": "Actively looking for a simpler deployment workflow. The team releases every Thursday. The next pilot must work with the existing repository.",
+      "message": "Could I show you a simpler deployment workflow in a ten-minute walkthrough?"
+    },
+    {
+      "id": "en-committed-a", "language": "en", "platform": "linkedin", "title": "Procurement director",
+      "facts": "Satisfied with the current reporting tool and committed to keeping it. The team sends a weekly operations digest. Any trial needs a named internal owner.",
+      "message": "Would you consider replacing your reporting tool with ours?"
+    },
+    {
+      "id": "en-committed-b", "language": "en", "platform": "linkedin", "title": "Customer support associate",
+      "facts": "Satisfied with the current reporting tool and committed to keeping it. The team sends a weekly operations digest. Any trial needs a named internal owner.",
+      "message": "Would you consider replacing your reporting tool with ours?"
+    },
+    {
+      "id": "en-competitor-a", "language": "en", "platform": "email", "title": "Finance executive",
+      "facts": "Uses another invoicing platform. The team closes invoices every Friday. New tools must export standard CSV files.",
+      "message": "Could I send a sample of our invoice export for you to review?"
+    },
+    {
+      "id": "en-competitor-b", "language": "en", "platform": "email", "title": "Administrative assistant",
+      "facts": "Uses another invoicing platform. The team closes invoices every Friday. New tools must export standard CSV files.",
+      "message": "Could I send a sample of our invoice export for you to review?"
+    },
+    {
+      "id": "tr-search-a", "language": "tr", "platform": "email", "title": "Teknoloji direktörü",
+      "facts": "Daha kolay bir dağıtım süreci arıyor. Ekip her perşembe yeni sürüm çıkarıyor. Pilot mevcut kod deposuyla çalışmalı.",
+      "message": "Daha kolay dağıtım sürecimizi on dakikalık bir görüşmede gösterebilir miyim?"
+    },
+    {
+      "id": "tr-search-b", "language": "tr", "platform": "email", "title": "Proje asistanı",
+      "facts": "Daha kolay bir dağıtım süreci arıyor. Ekip her perşembe yeni sürüm çıkarıyor. Pilot mevcut kod deposuyla çalışmalı.",
+      "message": "Daha kolay dağıtım sürecimizi on dakikalık bir görüşmede gösterebilir miyim?"
+    },
+    {
+      "id": "tr-committed-a", "language": "tr", "platform": "linkedin", "title": "Satın alma müdürü",
+      "facts": "Mevcut raporlama aracından memnun ve onu kullanmaya devam etmekte kararlı. Ekip haftalık operasyon özeti gönderiyor. Her denemenin bir iç sorumlusu olmalı.",
+      "message": "Raporlama aracınızı bizimkiyle değiştirmeyi düşünür müsünüz?"
+    },
+    {
+      "id": "tr-committed-b", "language": "tr", "platform": "linkedin", "title": "Müşteri destek temsilcisi",
+      "facts": "Mevcut raporlama aracından memnun ve onu kullanmaya devam etmekte kararlı. Ekip haftalık operasyon özeti gönderiyor. Her denemenin bir iç sorumlusu olmalı.",
+      "message": "Raporlama aracınızı bizimkiyle değiştirmeyi düşünür müsünüz?"
+    },
+    {
+      "id": "tr-competitor-a", "language": "tr", "platform": "email", "title": "Finans direktörü",
+      "facts": "Başka bir fatura platformu kullanıyor. Ekip faturaları her cuma kapatıyor. Yeni araçlar standart CSV dosyaları dışa aktarabilmeli.",
+      "message": "İncelemeniz için fatura dışa aktarımımızdan bir örnek gönderebilir miyim?"
+    },
+    {
+      "id": "tr-competitor-b", "language": "tr", "platform": "email", "title": "Yönetici asistanı",
+      "facts": "Başka bir fatura platformu kullanıyor. Ekip faturaları her cuma kapatıyor. Yeni araçlar standart CSV dosyaları dışa aktarabilmeli.",
+      "message": "İncelemeniz için fatura dışa aktarımımızdan bir örnek gönderebilir miyim?"
+    },
+    {
+      "id": "en-outreach", "language": "en", "platform": "email", "title": "Operations manager",
+      "facts": "Dislikes unsolicited sales messages. The team schedules maintenance on Mondays. Supplier proposals need a written summary.",
+      "message": "Could I send a written summary of our maintenance planning service?"
+    },
+    {
+      "id": "en-objection", "language": "en", "platform": "email", "title": "Research coordinator",
+      "facts": "Disagrees that automation improves research quality. The team reviews protocols together. Any proposal must explain how review control is preserved.",
+      "message": "Our automation improves research quality. Would you like a demonstration?"
+    },
+    {
+      "id": "en-specific", "language": "en", "platform": "email", "title": "Training lead",
+      "facts": "Wants to shorten new-hire training. The pilot must finish before the November intake. The team uses printed checklists.",
+      "message": "The pilot must finish before the November intake. Could we review a shorter training checklist together?"
+    },
+    {
+      "id": "en-unknown", "language": "en", "platform": "general", "title": "Account manager",
+      "facts": "The team meets every Tuesday. The office uses a shared document folder. Reports are prepared in plain text.",
+      "message": "Could I send a short overview of our service?"
+    },
+    {
+      "id": "tr-outreach", "language": "tr", "platform": "email", "title": "Operasyon yöneticisi",
+      "facts": "İstenmeyen satış mesajlarından hoşlanmıyor. Ekip bakım işlerini pazartesi planlıyor. Tedarikçi teklifleri yazılı özet içermeli.",
+      "message": "Bakım planlama hizmetimiz için yazılı bir özet gönderebilir miyim?"
+    },
+    {
+      "id": "tr-objection", "language": "tr", "platform": "email", "title": "Araştırma koordinatörü",
+      "facts": "Otomasyonun araştırma kalitesini artırdığı görüşüne karşı. Ekip protokolleri birlikte inceliyor. Her öneri inceleme kontrolünün nasıl korunacağını açıklamalı.",
+      "message": "Otomasyonumuz araştırma kalitesini artırır. Bir gösterim ister misiniz?"
+    },
+    {
+      "id": "tr-specific", "language": "tr", "platform": "email", "title": "Eğitim sorumlusu",
+      "facts": "Yeni çalışanların eğitimini kısaltmak istiyor. Pilot kasım ayındaki işe alımdan önce bitmeli. Ekip basılı kontrol listeleri kullanıyor.",
+      "message": "Pilot kasım ayındaki işe alımdan önce bitmeli. Daha kısa bir eğitim listesini birlikte inceleyebilir miyiz?"
+    },
+    {
+      "id": "tr-unknown", "language": "tr", "platform": "general", "title": "Müşteri yöneticisi",
+      "facts": "Ekip her salı toplantı yapıyor. Ofiste ortak bir belge klasörü kullanılıyor. Raporlar düz metin olarak hazırlanıyor.",
+      "message": "Hizmetimiz hakkında kısa bir özet gönderebilir miyim?"
+    }
+  ]
+}

@@ -1283,8 +1283,8 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
         assert metadata['expected_text_feature_model'] == 'meta-llama/Llama-3.2-3B'
         assert metadata['text_feature_compatible'] == (encoder == 'meta-llama/Llama-3.2-3B')
         timing = engine._timing_metadata_for_input_mode(engine.TRIBE_TEXT_INPUT_MODE)
-        assert engine.analyze_predictions(np.ones((4, 3)))[1] == {**timing, **metadata}
-        assert engine.summarize_fmri_output(np.ones((4, 3))) == {**timing, **metadata}
+        assert engine.analyze_predictions(np.ones((4, 3)))[1] == {**timing, **metadata, 'roi_summary': None}
+        assert engine.summarize_fmri_output(np.ones((4, 3))) == {**timing, **metadata, 'roi_summary': None}
     original = 'benimle çilekeş konserine gelmelisin harika bi grup çok eğlencez'
     drafts = ['Çilekeş konserine benimle gelir misin? Yanımda sen ol istiyorum.',
               'Müzik zevkime kefil olamam, ama sana eşlik etme teklifim var. Çilekeş konserine gidelim mi?',
@@ -1325,6 +1325,7 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
     calls = []
     def decisions(state, questions):
         assert 'neural_score' not in json.dumps(state)
+        assert 'roi_' not in json.dumps(state)
         assert 'personal_relevance' not in json.dumps(state)
         answers = {}
         chosen = {'relationship': 'romantic', 'objection': 'taste', 'angle': 'company',
@@ -1532,3 +1533,71 @@ def test_provenance_warnings_do_not_fire_for_mock_and_sort_after_caps():
     assert "non_english_input_outside_tribe_training" in hermes["warnings"]
     assert hermes["warnings"].index("text_feature_incompatible") < hermes["warnings"].index("synthetic_word_order_trace_not_real_time")
     assert "text_feature_incompatible" not in mock["warnings"]
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_roi_evaluator_block_is_applied_only_and_refine_payloads_are_clean(enabled):
+    from tribe_service import llm_layer as llm, persuasion_features as pf
+    summary = {'rois': {key: {'z': 0.6} for key in pf.ROI_PRIOR}}
+    prior = pf.roi_prior_from_summary(summary, True)
+    prior['applied'] = enabled
+    evidence = {'roi_prior': prior}
+    fmri = {'roi_summary': summary, 'text_feature_compatible': True}
+    prompt = _build_user_prompt(SAMPLE_MESSAGE, SAMPLE_PERSONA, 'email', SAMPLE_NEURAL_SIGNALS, fmri, evidence)
+    assert ('## Cortical ROI Response Analogues' in prompt) == enabled
+    assert ('"roi_prior_weight"' in prompt) == enabled
+    if enabled:
+        assert 'only when quoting a listed synthesis item' in prompt
+        assert 'never infer emotion, trust or intent' in prompt
+    measured = {'id': 'original', 'roi_prior_score': 99, 'roi_summary': summary}
+    assert 'roi_' not in json.dumps(llm._jev_response_measurement(measured))
+    assert 'roi_' not in json.dumps(llm._compact_refine_measurement(measured))
+
+
+@pytest.mark.parametrize('raw_llm,facet,quality,sign', [(None, None, 1.0, 1), (100, 100, 1, 1), (0, 0, 0.35, -1)])
+def test_k5_total_prior_budget_and_zero_rollback(monkeypatch, raw_llm, facet, quality, sign):
+    from tribe_service import llm_layer as llm
+    terms = {k: {'weight': 0.15, 'provenance': 'literature_prior_unvalidated'}
+             for k in ('roi_prior', 'persona_read_prior', 'specificity_prior')}
+    priors = {'evidence_without_roi': 50, 'facet_without_boost': 50 if facet is not None else None,
+              'tailoring_points': sign * 10, 'specificity_points': sign * 3, 'terms': terms}
+    result = llm._blend_final(50 + sign * 7.5, raw_llm, facet, 0.7, quality, priors=priors)
+    assert abs(result['final_score'] - result['final_score_without_literature_priors']) <= 6.0
+    assert result['literature_prior_budget']['budget_scale'] < 1
+    assert 'literature_prior_budget_clamped' in result['guardrails']
+    assert set(result['score_terms']) == set(terms)
+    monkeypatch.setattr(llm, 'LITERATURE_PRIOR_BUDGET', 0)
+    result = llm._blend_final(57.5, raw_llm, facet, 0.7, quality, priors=priors)
+    assert result['final_score'] == result['final_score_without_literature_priors']
+    assert all(row['value'] == 0 for row in result['score_terms'].values())
+
+
+def test_roi_counterfactual_and_existing_numeric_pin(monkeypatch):
+    from tribe_service import llm_layer as llm, persuasion_features as pf
+    monkeypatch.setattr(llm, '_call_openrouter', lambda *args, **kwargs: VALID_LLM_RESPONSE.copy())
+    base = interpret_persuasion(SAMPLE_MESSAGE, SAMPLE_PERSONA, 'email', SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES)
+    assert base['robustness']['neural_score'] == 66.3
+    assert base['persuasion_score'] == 73
+    fmri = {**SAMPLE_SYNTHETIC_FMRI_SUMMARY, 'roi_summary': {'rois': {key: {'z': 100 * value[0]} for key, value in pf.ROI_PRIOR.items()}},
+            'text_feature_compatible': True}
+    result = interpret_persuasion(SAMPLE_MESSAGE, SAMPLE_PERSONA, 'email', SAMPLE_NEURAL_SIGNALS, SAMPLE_RAW_FEATURES, fmri)
+    r = result['robustness']
+    assert r['roi_prior']['applied'] and r['roi_prior_points'] > 0
+    assert 'cortical ROI literature prior (unvalidated) blended at w=0.15' in r['calibration_basis']
+    assert abs(r['final_score'] - r['final_score_without_literature_priors']) <= 6
+
+
+def test_k5_budget_precedes_final_range_clamp():
+    from tribe_service import llm_layer as llm
+    result = llm._blend_final(98, None, None, 0.7, 1, priors={'evidence_without_roi': 50, 'specificity_points': 3})
+    assert result['final_score'] == 56
+    assert result['literature_prior_budget']['budget_scale'] == pytest.approx(6 / 51)
+
+
+def test_roi_weight_zero_restores_the_evaluator_prompt(monkeypatch):
+    from tribe_service import persuasion_features as pf
+    monkeypatch.setattr(pf, 'ROI_PRIOR_WEIGHT', 0)
+    evidence = {'warnings': []}
+    fmri = {'roi_summary': {'rois': {'vmpfc_frontopolar': {'z': -99}}}}
+    before = _build_user_prompt(SAMPLE_MESSAGE, SAMPLE_PERSONA, 'email', SAMPLE_NEURAL_SIGNALS, {}, evidence)
+    assert _build_user_prompt(SAMPLE_MESSAGE, SAMPLE_PERSONA, 'email', SAMPLE_NEURAL_SIGNALS, fmri, evidence) == before

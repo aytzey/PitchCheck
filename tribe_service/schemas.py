@@ -127,6 +127,7 @@ class TopMove(BaseModel):
 
 class FmriOutput(BaseModel):
     """TRIBE response geometry with feature-encoder provenance."""
+    roi_summary: dict[str, Any] | None = None
     text_feature_model: str | None = None
     expected_text_feature_model: str | None = None
     text_feature_compatible: bool = False
@@ -149,7 +150,7 @@ class FmriOutput(BaseModel):
     temporal_trace_note: str = ""
 
 class PitchScoreReport(BaseModel):
-    persuasion_score: float = Field(..., ge=0, le=100)
+    persuasion_score: int = Field(..., ge=0, le=100)
     verdict: str
     narrative: str
     breakdown: list[BreakdownSection]

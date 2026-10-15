@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isPitchScoreReport, normalizePitchScoreReport, normalizeRefineEvidence, platformValues } from "@/shared/types";
 import { BREAKDOWN_KEYS, NEURAL_SIGNAL_KEYS, PLATFORMS } from "@/shared/constants";
+import { roiSummary, roiPrior } from "../fixtures/roi";
 
 describe("shared/types", () => {
   it("platformValues has 6 entries", () => {
@@ -158,4 +159,25 @@ describe("shared/types", () => {
     expect(normalizeRefineEvidence({ mode: "model", evaluations: [] })).toBeNull();
     expect(normalizeRefineEvidence("nope")).toBeNull();
   });
+});
+
+it("preserves signed ROI fields and provenance while filtering malformed statistics", () => {
+  const payload = {
+    persuasion_score: 60,
+    fmri_output: { segments: 6, voxel_count: 20484, global_mean_abs: 0.2, global_peak_abs: 0.5,
+      roi_summary: { ...roiSummary, rois: { ...roiSummary.rois, invalid: { z: "no", n_vertices: 10 } } } },
+    robustness: { neural_score: 60, roi_prior: roiPrior, roi_prior_points: -1.2 },
+  };
+  const normalized = normalizePitchScoreReport(payload)!;
+  expect(normalized.fmri_output?.roi_summary).toEqual(roiSummary);
+  expect(normalized.robustness?.roi_prior).toEqual(roiPrior);
+  expect(normalized.robustness?.roi_prior_points).toBe(-1.2);
+  const malformed = normalizePitchScoreReport({ ...payload,
+    fmri_output: { ...payload.fmri_output, roi_summary: { ...roiSummary, cortex_sd_signed: Infinity } },
+    robustness: { neural_score: 60, roi_prior: { ...roiPrior, raw: NaN }, roi_prior_points: "bad" },
+  })!;
+  expect(malformed.fmri_output?.roi_summary).toBeNull();
+  expect(malformed.robustness?.roi_prior).toBeNull();
+  expect(malformed.robustness?.roi_prior_points).toBeUndefined();
+  expect(normalizePitchScoreReport({ persuasion_score: 60 })?.fmri_output).toBeNull();
 });

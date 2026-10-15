@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from tribe_service import native_core
+from tribe_service import native_core, roi_features
 
 
 def _env_int(name: str, default: int, minimum: int) -> int:
@@ -823,6 +823,10 @@ def load_runtime_models() -> None:
         model.data.text_feature.model
 
 
+def _summary_overlay(matrix: np.ndarray) -> dict[str, Any]:
+    return {**_text_feature_metadata(), "roi_summary": roi_features.roi_summary(matrix)}
+
+
 def _text_feature_metadata() -> dict[str, Any]:
     actual = _loaded_runtime_config.get("text_model")
     expected = TRIBE_CHECKPOINT_TEXT_MODEL if TRIBE_MODEL_ID == "facebook/tribev2" else None
@@ -1297,7 +1301,7 @@ def _summarize_fmri_output_from_matrix(
     return {
         "segments": n_segments,
         "voxel_count": n_voxels,
-        **_text_feature_metadata(),
+        **_summary_overlay(predictions),
         "global_mean_abs": float(abs_preds.mean()),
         "global_peak_abs": float(abs_preds.max()),
         "temporal_trace": [round(v, 4) for v in temporal_trace],
@@ -1325,7 +1329,7 @@ def summarize_fmri_output(
         LOGGER.warning("Rust fMRI summary failed; using Python fallback: %s", exc)
         native_summary = None
     if native_summary is not None:
-        return {**native_summary, **_timing_metadata_for_input_mode(mode), **_text_feature_metadata()}
+        return {**native_summary, **_timing_metadata_for_input_mode(mode), **_summary_overlay(predictions)}
     return _summarize_fmri_output_from_matrix(
         predictions,
         text_input_mode=text_input_mode,
@@ -1477,7 +1481,7 @@ def analyze_predictions(
         native_analysis = None
     if native_analysis is not None:
         raw_features, fmri_summary, neural_signals = native_analysis
-        return raw_features, {**fmri_summary, **_timing_metadata_for_input_mode(mode), **_text_feature_metadata()}, neural_signals
+        return raw_features, {**fmri_summary, **_timing_metadata_for_input_mode(mode), **_summary_overlay(matrix)}, neural_signals
 
     raw_features = _extract_features_from_matrix(matrix)
     fmri_summary = _summarize_fmri_output_from_matrix(

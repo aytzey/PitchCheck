@@ -573,6 +573,7 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
             "id": "original" if index == 0 else f"c{index}", "message": text,
             "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
             "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
+            "roi_prior_score": (evidence.get("roi_prior") or {}).get("score"),
             "quality_weight": calibration_quality_weight(evidence),
             "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
             "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],

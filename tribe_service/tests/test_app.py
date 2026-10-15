@@ -61,6 +61,7 @@ class TestScore:
         assert isinstance(report["robustness"]["scientific_caveats"], list)
         assert report["fmri_output"]["prediction_subject_basis"] == "average_subject"
         assert report["fmri_output"]["cortical_mesh"] == "fsaverage5"
+        assert report["fmri_output"]["roi_summary"] is None
         assert "calibration_quality" in report["persuasion_evidence"]
         assert report["platform"] == "general"
         assert isinstance(report["top_moves"], list)
@@ -822,3 +823,31 @@ class TestScoreLog:
         assert record["pitch_id"] == report["robustness"]["score_log_id"] and len(record["pitch_id"]) == 64
         assert record["final_score"] == report["robustness"]["final_score"]
         assert record["word_count"] == 16 and record["b1_tribe_informed"] is True
+
+
+@pytest.mark.parametrize('weight,compatible,expected', [(0.15, True, 0.15), (0.15, False, 0.075), (0, True, None)])
+def test_full_width_roi_http_score(monkeypatch, weight, compatible, expected):
+    import numpy as np
+    from tribe_service import engine, persuasion_features, llm_layer
+    monkeypatch.setattr(service_app, 'score_text', lambda message: np.random.default_rng(5).normal(size=(6, 20484)).astype(np.float32))
+    monkeypatch.setattr(persuasion_features, 'ROI_PRIOR_WEIGHT', weight)
+    monkeypatch.setattr(persuasion_features, 'ROI_ENCODER_MISMATCH_FACTOR', 0.5)
+    monkeypatch.setattr(engine, '_loaded_runtime_config', {'text_model': engine.TRIBE_CHECKPOINT_TEXT_MODEL if compatible else 'NousResearch/Hermes-3-Llama-3.2-3B'})
+    monkeypatch.setattr(llm_layer, '_call_openrouter', lambda *args, **kwargs: None)
+    response = client.post('/score', json={'message': 'Our deployment workflow helps engineering teams inspect and restore failed releases.', 'persona': 'An engineering manager'})
+    assert response.status_code == 200
+    report = response.json()['report']
+    assert isinstance(report['fmri_output']['roi_summary'], dict)
+    assert set(report['fmri_output']['roi_summary']) >= {'rois', 'locations'}
+    assert isinstance(report['persuasion_score'], int)
+    assert report['persuasion_evidence']['methodology_version'] == 'neural_only_v2.3'
+    if expected is None:
+        assert 'roi_prior' not in report['persuasion_evidence']
+        assert report['robustness']['roi_prior'] is None
+    else:
+        prior = report['robustness']['roi_prior']
+        assert prior['applied'] and prior['weight'] == expected
+        assert prior['provenance'].endswith(';encoder_mismatch') == (not compatible)
+        r = report['robustness']
+        assert abs(r['final_score'] - r['final_score_without_literature_priors']) <= 6.05
+        assert r['score_terms']['roi_prior']['provenance'] == prior['provenance']

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import AutoUpdatePrompt from "@/components/AutoUpdatePrompt";
+import roiCentroids from "@/shared/roi-centroids.json";
 import {
   changePitchServerCredentials,
   connectDesktopRuntime,
@@ -29,6 +30,7 @@ import {
   type PitchScoreReport,
   type Platform,
   type RefineEvidence,
+  type RoiSummary,
   type ResearchSynthesis,
   type SegmentLocalization,
   type TopMove,
@@ -1975,6 +1977,7 @@ function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch
           </div>
         ))}
       </div>
+      <AboutTheseSignals />
       {evidence && (
         <>
           <HeaderLine title="Refine candidates" right={evidence.mode === "mock" ? "mock prediction" : "TRIBE re-scored"} />
@@ -2157,7 +2160,7 @@ function BrainPanel({
         <strong className="mono">{fmri.voxel_count.toLocaleString()} VERTICES . {fmri.segments} SEGMENTS</strong>
       </div>
       <div className="pc-brain-hero">
-        <BrainRender signals={signals} />
+        <BrainRender signals={signals} roi={fmri.roi_summary} />
         <div className="pc-score-stack">
           <ScoreHalo score={score} confidence={confidence} />
           <div className="pc-verdict">
@@ -2175,24 +2178,39 @@ function BrainPanel({
         <span>MODEL {model}</span>
         <span>RUNTIME {runtime}</span>
         <span>{fmri.cortical_mesh || "fsaverage5"} mesh</span>
-        <span>Positions are decorative — these six signals are whole-cortex statistics, not region readouts.</span>
+        <span>{fmri.roi_summary
+          ? "signed ROI analogues (average reader) · parcel-union centres on a schematic; signed relative to labelled cortex"
+          : "Positions are decorative — these six signals are whole-cortex statistics, not region readouts."}</span>
       </div>
     </div>
   );
 }
 
-function BrainRender({ signals }: { signals: PitchScoreReport["neural_signals"] }) {
+const ROI_LABELS: Record<string, string> = {
+  vmpfc_frontopolar: "Medial prefrontal (frontopolar)", mofc: "Medial orbitofrontal",
+  dmpfc: "Dorsomedial prefrontal", insula: "Insula", r_ifg_ai: "Right inferior frontal / anterior insula",
+  pcc_precuneus: "Posterior cingulate / precuneus", r_tpj: "Right temporoparietal junction",
+  lateral_temporal: "Lateral temporal", l_ifg: "Left inferior frontal",
+};
+
+function BrainRender({ signals, roi }: { signals: PitchScoreReport["neural_signals"]; roi?: RoiSummary | null }) {
   const dots = useMemo(() => {
+    if (roi) return Object.entries(roi.rois).flatMap(([key, row]) => {
+      const centres = (roiCentroids as Record<string, number[][]>)[key] ?? [];
+      return centres.map(([x, y]) => ({ x: 100 + x * 1.4, y: 122 - y * 1.4,
+        region: { label: `Predicted average-reader response: ${ROI_LABELS[key] ?? key} (signed z=${row.z.toFixed(2)})`, color: row.z >= 0 ? "ok" : "err" },
+        score: Math.abs(Math.tanh(row.z)) * 100 }));
+    });
     return Object.entries(BRAIN_REGIONS).flatMap(([key, region]) => {
       const signal = signals.find((item) => item.key === key);
       if (!signal) return [];
       return region.points.map(([x, y]) => ({ x, y, region, score: signal.score }));
     });
-  }, [signals]);
+  }, [signals, roi]);
 
   return (
     <div className="pc-brain-render">
-      <svg viewBox="0 0 200 240" width="180" height="216">
+      <svg viewBox="0 0 200 240" width="180" height="216" role="img" aria-label={roi ? "Signed ROI analogues for the average reader" : "Decorative whole-cortex signal schematic"}>
         <defs>
           <radialGradient id="pc-bg-ok" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="oklch(0.72 0.18 155)" stopOpacity="0.95" />
@@ -2227,6 +2245,7 @@ function BrainRender({ signals }: { signals: PitchScoreReport["neural_signals"] 
             const intensity = Math.max(0.25, dot.score / 100);
             return (
               <g key={`${dot.x}-${dot.y}-${index}`}>
+                <title>{dot.region.label}</title>
                 <circle cx={dot.x} cy={dot.y} r={18 + dot.score * 0.18} fill={`url(#${gradientId})`} opacity={intensity}>
                   <animate attributeName="opacity" values={`${intensity};${intensity * 0.6};${intensity}`} dur={`${2.4 + (index % 3) * 0.4}s`} repeatCount="indefinite" />
                 </circle>
@@ -2235,7 +2254,7 @@ function BrainRender({ signals }: { signals: PitchScoreReport["neural_signals"] 
             );
           })}
         </g>
-        {Object.entries(BRAIN_REGIONS).map(([key, region]) => {
+        {!roi && Object.entries(BRAIN_REGIONS).map(([key, region]) => {
           if (!signals.some((signal) => signal.key === key)) return null;
           const [x, y] = region.points[0];
           const outward = x < 100 ? -1 : x > 100 ? 1 : 0;
@@ -2344,6 +2363,16 @@ function NeuralSignalsGrid({ signals }: { signals: PitchScoreReport["neural_sign
   );
 }
 
+function AboutTheseSignals() {
+  return (
+    <details>
+      <summary className="pc-muted">About these signals</summary>
+      <p className="pc-muted">Predictions describe an average reader and do not see the persona. There is no resting baseline.
+        A cortical location is not a mental state. Weights are unvalidated literature priors, without outcome validation.</p>
+    </details>
+  );
+}
+
 function RobustnessPanel({ report }: { report: PitchScoreReport }) {
   const robustness = report.robustness;
   const evidence = report.persuasion_evidence;
@@ -2374,6 +2403,18 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
               <small>Low-quality TRIBE output shrinks the final score toward neutral</small>
               <b className="mono score-warn">{Math.round((robustness.prediction_quality_weight ?? 1) * 100)}%</b>
             </div>
+            {robustness.roi_prior && typeof robustness.roi_prior_points === "number" && report.fmri_output?.roi_summary && (
+              <div className="pc-rank-row" title="Unvalidated; signed average-reader cortical analogue (Schaefer-400)">
+                <span className="mono">ROI</span>
+                <strong>ROI prior (literature prior)</strong>
+                <small>
+                  {Object.entries(report.fmri_output.roi_summary.rois).filter(([, row]) => row.external_fidelity || row.in_silico_check).map(([key, row]) =>
+                    `${ROI_LABELS[key] ?? key}: predicted average-reader response${row.external_fidelity ? ` · external fidelity: ${row.external_fidelity.status}` : ""}${row.in_silico_check ? ` · in silico: ${row.in_silico_check}` : ""}`
+                  ).join("; ") || "Unvalidated average-reader cortical analogue"}
+                </small>
+                <b className="mono">{robustness.roi_prior_points >= 0 ? "+" : ""}{robustness.roi_prior_points.toFixed(1)} pts</b>
+              </div>
+            )}
             {neuroAxes.slice(0, 5).map(([key, axis]) => (
               <div className="pc-rank-row" key={key}>
                 <span className="mono">{key.slice(0, 3).toUpperCase()}</span>
@@ -2417,6 +2458,7 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
         </details>
       )}
       <SourcesList report={report} />
+      <AboutTheseSignals />
     </div>
   );
 }
@@ -3405,7 +3447,7 @@ function extractResearchBrief(report: PitchScoreReport) {
     );
   }
   for (const item of (synthesis.items ?? []).filter((entry) => entry.kind !== "strength").slice(0, 2)) {
-    lines.push(`Research lever (${item.citation}) - ${item.observation} ${item.lever}`);
+    lines.push(`Research lever (${item.citation}) - ${item.axis === "cortical_roi" ? "" : `${item.observation} `}${item.lever}`);
   }
   return lines.slice(0, 4);
 }

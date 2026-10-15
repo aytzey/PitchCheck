@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DesktopWorkbench from "@/components/DesktopWorkbench";
 import type { PitchScoreReport } from "@/shared/types";
+import { roiSummary, roiPrior } from "../fixtures/roi";
 
 const mockFetch = vi.fn();
 const tauriMocks = vi.hoisted(() => ({
@@ -298,5 +299,46 @@ describe("DesktopWorkbench", () => {
 
     expect(await screen.findByText("After . refined")).toBeDefined();
     expect(refineCalls).toBe(2);
+  });
+});
+
+describe("WS07 desktop ROI fields", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+    mockFetch.mockReset();
+    tauriMocks.invoke.mockReset();
+    delete window.__TAURI_INTERNALS__;
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it("hides the ROI row for old servers and shares the signal explanation", async () => {
+    await renderReport(fullReport(78, true));
+    expect(screen.queryByText("ROI prior (literature prior)")).toBeNull();
+    expect(screen.getAllByText("About these signals")).toHaveLength(2);
+    expect(screen.queryByRole("img", { name: "Signed ROI analogues for the average reader" })).toBeNull();
+  });
+
+  it("fills the ROI row, uses atlas centroids and sends only levers to refine", async () => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report,
+      fmri_output: { ...report.fmri_output, roi_summary: roiSummary },
+      robustness: { ...report.robustness, roi_prior: roiPrior, roi_prior_points: -1.2,
+        research_synthesis: { items: [{ key: "roi_vmpfc_low", kind: "gap", axis: "cortical_roi",
+          observation: "Predicted medial prefrontal response z=-0.5", finding: "Finding", citation: "Vezich et al. 2017",
+          lever: "Say why the outcome matters to this reader." }] } },
+    });
+    expect(screen.getByText("ROI prior (literature prior)")).toBeDefined();
+    expect(screen.getByText("-1.2 pts")).toBeDefined();
+    expect(screen.getByText(/external fidelity: weak · in silico: null/)).toBeDefined();
+    expect(screen.getByRole("img", { name: "Signed ROI analogues for the average reader" })).toBeDefined();
+    expect(screen.queryByText(/Positions are decorative/)).toBeNull();
+    expect(screen.getByText(/signed ROI analogues \(average reader\)/)).toBeDefined();
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ refined_message: "A concrete rewrite with a clear ask.", model: "test" }) });
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
+    await screen.findByText("After . refined");
+    const suggestions = JSON.parse(mockFetch.mock.calls[1][1].body as string).suggestions.join(" ");
+    expect(suggestions).toContain("Say why the outcome matters");
+    expect(suggestions).not.toContain("z=-0.5");
+    expect(suggestions).not.toContain("medial prefrontal");
   });
 });

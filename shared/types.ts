@@ -128,6 +128,8 @@ export interface ResearchSynthesis {
 
 // Robustness/calibration metadata for the final persuasion score
 export interface RobustnessReport {
+  roi_prior?: RoiPrior | null;
+  roi_prior_points?: number;
   neural_prior_score?: number;
   neural_score: number;
   quality_adjusted_neural_score?: number;
@@ -201,6 +203,7 @@ export interface PitchScoreReport {
 
 // fMRI output from TRIBE neural model
 export interface FmriOutput {
+  roi_summary?: RoiSummary | null;
   segments: number;
   voxel_count: number;
   global_mean_abs: number;
@@ -216,6 +219,41 @@ export interface FmriOutput {
   temporal_trace_basis?: "real_time_seconds" | "synthetic_word_order";
   temporal_segment_label?: string;
   temporal_trace_note?: string;
+}
+
+export interface RoiStats {
+  mean_signed: number;
+  minus_cortex: number;
+  z: number;
+  n_vertices: number;
+  in_silico_check?: string;
+  external_fidelity?: { status: string; r_over_ceiling?: number; factor?: number; source?: string };
+}
+
+export interface RoiSummary {
+  atlas: string;
+  basis: string;
+  roi_set_version: string;
+  location_set_version: string;
+  asset_sha256: string;
+  subject_basis: string;
+  caveat: string;
+  cortex_mean_signed: number;
+  cortex_sd_signed: number;
+  rois: Record<string, RoiStats>;
+  locations: Record<string, RoiStats>;
+}
+
+export interface RoiPrior {
+  score: number;
+  raw: number;
+  weight: number;
+  applied: boolean;
+  version: string;
+  provenance: string;
+  terms: Record<string, number>;
+  multipliers: Record<string, number>;
+  unit_calibration_provenance?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -523,6 +561,68 @@ function normalizeContextFit(value: unknown): ContextFitReport | null {
   };
 }
 
+function normalizeRoiStats(value: unknown): Record<string, RoiStats> {
+  if (!isRecord(value)) return {};
+  const entries: Array<[string, RoiStats]> = [];
+  for (const [key, row] of Object.entries(value).slice(0, 64)) {
+    if (!/^[a-z][a-z0-9_]{0,79}$/.test(key) || !isRecord(row)) continue;
+    const mean = parseFiniteNumber(row.mean_signed);
+    const minus = parseFiniteNumber(row.minus_cortex);
+    const z = parseFiniteNumber(row.z);
+    const n = normalizeInteger(row.n_vertices);
+    if (mean === null || minus === null || z === null || n === null || n <= 0 || n > 20484) continue;
+    const item: RoiStats = { mean_signed: mean, minus_cortex: minus, z, n_vertices: n };
+    if (["pass", "pass_broad", "null", "reversed", "not_run", "uninformative"].includes(String(row.in_silico_check))) {
+      item.in_silico_check = String(row.in_silico_check);
+    }
+    if (isRecord(row.external_fidelity)) {
+      const f = row.external_fidelity;
+      const factor = parseFiniteNumber(f.factor);
+      item.external_fidelity = {
+        status: ["ok", "weak", "unmeasurable", "not_benchmarked"].includes(String(f.status)) ? String(f.status) : "not_benchmarked",
+        r_over_ceiling: parseFiniteNumber(f.r_over_ceiling) ?? undefined,
+        factor: factor === null ? undefined : clamp(factor, 0, 1),
+        source: normalizeOptionalText(f.source, MAX_SHORT_TEXT_CHARS) || undefined,
+      };
+    }
+    entries.push([key, item]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function normalizeRoiSummary(value: unknown): RoiSummary | null {
+  if (!isRecord(value)) return null;
+  const mean = parseFiniteNumber(value.cortex_mean_signed);
+  const sd = parseFiniteNumber(value.cortex_sd_signed);
+  const rois = normalizeRoiStats(value.rois);
+  if (mean === null || sd === null || sd <= 0 || !Object.keys(rois).length) return null;
+  return {
+    atlas: normalizeOptionalText(value.atlas, MAX_SHORT_TEXT_CHARS),
+    basis: normalizeOptionalText(value.basis, MAX_SHORT_TEXT_CHARS),
+    roi_set_version: normalizeOptionalText(value.roi_set_version, MAX_SHORT_TEXT_CHARS),
+    location_set_version: normalizeOptionalText(value.location_set_version, MAX_SHORT_TEXT_CHARS),
+    asset_sha256: normalizeOptionalText(value.asset_sha256, MAX_SHORT_TEXT_CHARS),
+    subject_basis: normalizeOptionalText(value.subject_basis, MAX_SHORT_TEXT_CHARS),
+    caveat: normalizeOptionalText(value.caveat, MAX_REPORT_TEXT_CHARS),
+    cortex_mean_signed: mean, cortex_sd_signed: sd, rois, locations: normalizeRoiStats(value.locations),
+  };
+}
+
+function normalizeRoiPrior(value: unknown): RoiPrior | null {
+  if (!isRecord(value)) return null;
+  const score = normalizeScore(value.score);
+  const raw = parseFiniteNumber(value.raw);
+  const weight = parseFiniteNumber(value.weight);
+  if (score === null || raw === null || weight === null || weight < 0 || weight > 0.5 || typeof value.applied !== "boolean") return null;
+  return {
+    score, raw, weight, applied: value.applied && weight > 0,
+    version: normalizeOptionalText(value.version, MAX_SHORT_TEXT_CHARS),
+    provenance: normalizeOptionalText(value.provenance, MAX_SHORT_TEXT_CHARS),
+    terms: normalizeNumberRecord(value.terms), multipliers: normalizeNumberRecord(value.multipliers),
+    unit_calibration_provenance: normalizeOptionalText(value.unit_calibration_provenance, MAX_SHORT_TEXT_CHARS) || undefined,
+  };
+}
+
 function normalizeFmriOutput(value: unknown): FmriOutput | null {
   if (!isRecord(value)) return null;
   const segments = normalizeInteger(value.segments);
@@ -550,6 +650,7 @@ function normalizeFmriOutput(value: unknown): FmriOutput | null {
     temporal_trace_basis: temporalTraceBasis,
     temporal_segment_label: normalizeOptionalText(value.temporal_segment_label, MAX_SHORT_TEXT_CHARS) || undefined,
     temporal_trace_note: normalizeOptionalText(value.temporal_trace_note, MAX_REPORT_TEXT_CHARS) || undefined,
+    roi_summary: normalizeRoiSummary(value.roi_summary),
   };
 }
 
@@ -640,6 +741,8 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
   report.breakdown_anchor = isRecord(value.breakdown_anchor)
     ? { basis: normalizeOptionalText(value.breakdown_anchor.basis, MAX_SHORT_TEXT_CHARS) }
     : null;
+  report.roi_prior = normalizeRoiPrior(value.roi_prior);
+  report.roi_prior_points = parseFiniteNumber(value.roi_prior_points) ?? undefined;
   return report;
 }
 

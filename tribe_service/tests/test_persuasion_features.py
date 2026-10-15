@@ -1,3 +1,6 @@
+import pytest
+
+from tribe_service import persuasion_features as pf
 from tribe_service.persuasion_features import (
     analyze_persuasion_text,
     calibration_confidence,
@@ -9,6 +12,57 @@ from tribe_service.persuasion_features import (
     quality_adjusted_score,
     neural_score_from_signals,
 )
+
+
+def _roi(z=0.0):
+    return {"rois": {k: {"z": z} for k in pf.ROI_PRIOR}}
+
+
+def test_roi_gating_encoder_weights_and_neutral_anchor(monkeypatch):
+    monkeypatch.setattr(pf, "ROI_PRIOR_WEIGHT", 0.15)
+    monkeypatch.setattr(pf, "ROI_ENCODER_MISMATCH_FACTOR", 0.5)
+    assert pf.roi_prior_from_summary(None) is None
+    assert pf.roi_prior_from_summary({"rois": {"insula": {"z": float("nan")}}}) is None
+    compatible = pf.roi_prior_from_summary(_roi(), True)
+    mismatch = pf.roi_prior_from_summary(_roi(), False)
+    assert compatible["weight"] == 0.15 and compatible["applied"]
+    assert mismatch["applied"] and mismatch["weight"] == 0.075 and mismatch["provenance"].endswith(";encoder_mismatch")
+    assert compatible["unit_calibration_provenance"] == "provisional_unit_defaults:ws07;gpu_not_run"
+    signals = {"personal_relevance": 70}
+    assert evidence_score_from_analysis(signals, {"roi_prior": compatible}) == evidence_score_from_analysis(signals)
+    monkeypatch.setattr(pf, "ROI_ENCODER_MISMATCH_FACTOR", 0.0)
+    disabled = pf.roi_prior_from_summary(_roi(3), False)
+    assert not disabled["applied"]
+    assert evidence_score_from_analysis(signals, {"roi_prior": disabled}) == evidence_score_from_analysis(signals)
+    monkeypatch.setattr(pf, "ROI_PRIOR_WEIGHT", 0)
+    assert pf.roi_prior_from_summary(_roi(3), True) is None
+
+
+def test_roi_directions_bound_and_source_keys():
+    from tribe_service.persuasion_features import RESEARCH_SOURCES
+    baseline = pf.roi_prior_from_summary(_roi())
+    assert baseline["score"] == 50
+    for key, direction in (("vmpfc_frontopolar", 1), ("r_ifg_ai", -1)):
+        summary = _roi()
+        summary["rois"][key]["z"] = 100
+        prior = pf.roi_prior_from_summary(summary, True)
+        assert (prior["score"] - 50) * direction > 0
+        assert abs(evidence_score_from_analysis({}, {"roi_prior": prior}) - evidence_score_from_analysis({})) <= 50 * prior["weight"]
+    known = {s["key"] for s in RESEARCH_SOURCES}
+    assert all(source in known for _, _, _, sources in pf.ROI_PRIOR.values() for source in sources)
+
+
+def test_roi_multiplier_fixed_denominator():
+    baseline = pf.roi_prior_from_summary(_roi(1))
+    half = pf.roi_prior_from_summary(_roi(1), multipliers={k: 0.5 for k in pf.ROI_PRIOR})
+    assert half["raw"] == pytest.approx(baseline["raw"] / 2, abs=1e-4)
+    removed = pf.roi_prior_from_summary(_roi(1), multipliers={"vmpfc_frontopolar": 0})
+    assert removed["terms"]["vmpfc_frontopolar"] == 0
+    for key in pf.ROI_PRIOR:
+        if key != "vmpfc_frontopolar":
+            assert removed["terms"][key] == baseline["terms"][key]
+    denominator = sum(v[1] for v in pf.ROI_PRIOR.values())
+    assert removed["raw"] == pytest.approx(baseline["raw"] - baseline["terms"]["vmpfc_frontopolar"] / denominator, abs=1e-4)
 
 
 def test_text_heuristic_audit_is_disabled():

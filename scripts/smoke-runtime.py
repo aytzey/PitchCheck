@@ -35,6 +35,8 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
 assert response.status_code==200, f'Score HTTP {response.status_code}'
 report=response.json()['report']; assert 0<=report['persuasion_score']<=100
 assert report['fmri_output']['voxel_count']==20484
+assert isinstance(report['fmri_output'].get('roi_summary'), dict), 'ROI atlas missing in image'
+assert all(isinstance(report['fmri_output']['roi_summary'].get(k), dict) for k in ('rois', 'locations'))
 assert report['robustness']['llm_model'], 'Provider fell back to neural-only report'
 assert observed_busy, 'Busy unload protection was not exercised'
 score_seconds=round(time.monotonic()-started,3)

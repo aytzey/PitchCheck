@@ -1,0 +1,4180 @@
+{
+  "cbig_sha": "634f676630929a71297852d01dd92a287103e861",
+  "coordinate_method": "nilearn fsaverage5 midthickness + MNI152\u2192305; APPROXIMATION of TRIBE's non-public NLin2009cAsym hybrid meshes",
+  "csv_sha256": "b9ee67cc5465ea9d3d4667470ab516299524bb6c17cdbfb07978962625f3ddbc",
+  "downloads": {
+    "LICENSE.md": {
+      "sha256": "0e38f0e8b304f13de2ce2911320faaa08ced178e031d3bbebc3e4769762e5f50",
+      "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/634f676630929a71297852d01dd92a287103e861/LICENSE.md"
+    },
+    "stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/lh.Schaefer2018_400Parcels_17Networks_order.annot": {
+      "sha256": "d3802ca644558a15bf516fcb4cb1b0137ecabaa0b02a6d109706ead3a78242d0",
+      "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/634f676630929a71297852d01dd92a287103e861/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/lh.Schaefer2018_400Parcels_17Networks_order.annot"
+    },
+    "stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/lh.Schaefer2018_400Parcels_7Networks_order.annot": {
+      "sha256": "48dcdc0c63df9feddb34eb631ef3571dfbd73360709a3aa799e05e1bc7d9e2b5",
+      "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/634f676630929a71297852d01dd92a287103e861/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/lh.Schaefer2018_400Parcels_7Networks_order.annot"
+    },
+    "stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/rh.Schaefer2018_400Parcels_17Networks_order.annot": {
+      "sha256": "d3f478247140acbc996ceb70cc0861daf7997b23a5234fb78cca5262b24a4741",
+      "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/634f676630929a71297852d01dd92a287103e861/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/rh.Schaefer2018_400Parcels_17Networks_order.annot"
+    },
+    "stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/rh.Schaefer2018_400Parcels_7Networks_order.annot": {
+      "sha256": "1c24e9c5e2e35df05ddb8b82c60ea4ebbbbe48986bc11aa24a58ede47742f5aa",
+      "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/634f676630929a71297852d01dd92a287103e861/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/FreeSurfer5.3/fsaverage5/label/rh.Schaefer2018_400Parcels_7Networks_order.annot"
+    }
+  },
+  "icbm_other2tal": [
+    [
+      0.9357,
+      0.0029,
+      -0.0072,
+      -1.0423
+    ],
+    [
+      -0.0065,
+      0.9396,
+      -0.0726,
+      -1.394
+    ],
+    [
+      0.0103,
+      0.0752,
+      0.8967,
+      3.6475
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "locations": {
+    "dmpfc_chua2011": {
+      "dominant_parcels": {
+        "LH_DefaultB_PFCd_1": 22
+      },
+      "left": 22,
+      "n_vertices": 22,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 5.98638,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultB_PFCd_1",
+              "nearest_vertex": 1859,
+              "parcel": "LH_DefaultB_PFCd_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 5.51395,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultB_PFCd_1",
+              "nearest_vertex": 1859,
+              "parcel": "LH_DefaultB_PFCd_1",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 6.09073,
+              "hemi": "R",
+              "method": "aff",
+              "nearest_parcel": "RH_DefaultB_PFCd_1",
+              "nearest_vertex": 13909,
+              "parcel": "RH_DefaultB_PFCd_1",
+              "reason": "dropped_far_from_surface",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 5.57582,
+              "hemi": "R",
+              "method": "noaff",
+              "nearest_parcel": "RH_DefaultB_PFCd_1",
+              "nearest_vertex": 10504,
+              "parcel": "RH_DefaultB_PFCd_1",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "between_subject",
+          "direction": "+",
+          "hemi_rule": "midline",
+          "label": "dmPFC",
+          "modality": "text with audio",
+          "n": "91",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "07",
+          "roi": "dmpfc_chua2011",
+          "role": "location",
+          "source": "Chua et al. 2011",
+          "space": "MNI152",
+          "table_page": "main p.3 / Supplement",
+          "threshold": "ROI logistic regression",
+          "x": "0",
+          "y": "54",
+          "z": "30"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "falk2010jocn_core": {
+      "dominant_parcels": {
+        "LH_DefaultB_PFCd_1": 14,
+        "LH_DefaultB_PFCd_2": 24,
+        "LH_DefaultB_PFCd_4": 15,
+        "LH_DefaultB_Temp_1": 7,
+        "LH_DefaultB_Temp_2": 2,
+        "LH_LimbicA_TempPole_7": 4,
+        "LH_TempPar_1": 19,
+        "RH_DefaultA_Temp_1": 4,
+        "RH_DefaultB_AntTemp_1": 2,
+        "RH_SomMotB_Aud_1": 4,
+        "RH_TempPar_1": 8,
+        "RH_TempPar_2": 14
+      },
+      "left": 85,
+      "n_vertices": 117,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 3.55056,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultB_PFCd_2",
+              "nearest_vertex": 4083,
+              "parcel": "LH_DefaultB_PFCd_2",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 4.64084,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultB_PFCd_2",
+              "nearest_vertex": 4083,
+              "parcel": "LH_DefaultB_PFCd_2",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "DMPFC",
+          "modality": "text with audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "05",
+          "roi": "falk2010jocn_core",
+          "role": "location",
+          "source": "Falk Rameson et al. 2010 JoCN",
+          "space": "MNI152",
+          "table_page": "Table 2",
+          "threshold": "p<.005 uncorrected in each sample",
+          "x": "-12",
+          "y": "60",
+          "z": "36"
+        },
+        {
+          "assignments": [
+            {
+              "distance_mm": 2.79616,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultB_PFCd_4",
+              "nearest_vertex": 6199,
+              "parcel": "LH_DefaultB_PFCd_4",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 3.87931,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultB_PFCd_4",
+              "nearest_vertex": 883,
+              "parcel": "LH_DefaultB_PFCd_4",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "DMPFC",
+          "modality": "text with audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "05",
+          "roi": "falk2010jocn_core",
+          "role": "location",
+          "source": "Falk Rameson et al. 2010 JoCN",
+          "space": "MNI152",
+          "table_page": "Table 2",
+          "threshold": "p<.005 uncorrected in each sample",
+          "x": "-10",
+          "y": "52",
+          "z": "44"
+        },
+        {
+          "assignments": [
+            {
+              "distance_mm": 1.46755,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_TempPar_1",
+              "nearest_vertex": 9952,
+              "parcel": "LH_TempPar_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 2.03773,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_TempPar_1",
+              "nearest_vertex": 9952,
+              "parcel": "LH_TempPar_1",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "left TP",
+          "modality": "text with audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "05",
+          "roi": "falk2010jocn_core;tp_l",
+          "role": "location",
+          "source": "Falk Rameson et al. 2010 JoCN",
+          "space": "MNI152",
+          "table_page": "Table 2",
+          "threshold": "p<.005 uncorrected in each sample",
+          "x": "-56",
+          "y": "8",
+          "z": "-18"
+        },
+        {
+          "assignments": [
+            {
+              "distance_mm": 4.62252,
+              "hemi": "R",
+              "method": "aff",
+              "nearest_parcel": "RH_TempPar_2",
+              "nearest_vertex": 17415,
+              "parcel": "RH_TempPar_2",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 4.27143,
+              "hemi": "R",
+              "method": "noaff",
+              "nearest_parcel": "RH_TempPar_2",
+              "nearest_vertex": 17415,
+              "parcel": "RH_TempPar_2",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "right TP",
+          "modality": "text with audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "05",
+          "roi": "falk2010jocn_core;tp_r",
+          "role": "location",
+          "source": "Falk Rameson et al. 2010 JoCN",
+          "space": "MNI152",
+          "table_page": "Table 2",
+          "threshold": "p<.005 uncorrected in each sample",
+          "x": "60",
+          "y": "4",
+          "z": "-16"
+        }
+      ],
+      "reason": "accepted",
+      "right": 32
+    },
+    "ifg47_l_chua2011": {
+      "dominant_parcels": {
+        "LH_DefaultB_PFCv_1": 15,
+        "LH_DefaultB_PFCv_2": 2,
+        "LH_DefaultB_PFCv_3": 24,
+        "LH_DefaultB_PFCv_4": 6
+      },
+      "left": 47,
+      "n_vertices": 47,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 3.09274,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultB_PFCv_3",
+              "nearest_vertex": 3088,
+              "parcel": "LH_DefaultB_PFCv_3",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 3.79034,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultB_PFCv_3",
+              "nearest_vertex": 3088,
+              "parcel": "LH_DefaultB_PFCv_3",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "between_subject",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "left IFG47",
+          "modality": "text with audio",
+          "n": "91",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "07",
+          "roi": "ifg47_l_chua2011",
+          "role": "location",
+          "source": "Chua et al. 2011",
+          "space": "MNI152",
+          "table_page": "main p.3 / Supplement",
+          "threshold": "ROI logistic regression",
+          "x": "-48",
+          "y": "27",
+          "z": "-9"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "ipl_ifg_how_gt_why_vezich2017_l": {
+      "dominant_parcels": {
+        "LH_ContA_IPS_2": 1,
+        "LH_ContA_PFCl_2": 3,
+        "LH_ContA_PFClv_1": 30,
+        "LH_ContA_PFClv_2": 6,
+        "LH_DefaultB_PFCv_4": 18,
+        "LH_DefaultB_PFCv_5": 3,
+        "LH_DorsAttnB_PostC_1": 2,
+        "LH_DorsAttnB_PostC_2": 16,
+        "LH_DorsAttnB_PostC_3": 29,
+        "LH_DorsAttnB_PostC_4": 2,
+        "LH_SalVentAttnA_ParOper_3": 4,
+        "LH_SomMotA_3": 1,
+        "LH_SomMotA_4": 13
+      },
+      "left": 128,
+      "n_vertices": 128,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 4.02764,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DorsAttnB_PostC_2",
+              "nearest_vertex": 8730,
+              "parcel": "LH_DorsAttnB_PostC_2",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 3.16222,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DorsAttnB_PostC_2",
+              "nearest_vertex": 8730,
+              "parcel": "LH_DorsAttnB_PostC_2",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "rostral IPL left",
+          "modality": "text+audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "09",
+          "roi": "ipl_ifg_how_gt_why_vezich2017_l;ripl_vezich2017",
+          "role": "location",
+          "source": "Vezich et al. 2017",
+          "space": "MNI152",
+          "table_page": "Table 4 / p.293",
+          "threshold": "whole-brain contrast",
+          "x": "-54",
+          "y": "-28",
+          "z": "46"
+        },
+        {
+          "assignments": [
+            {
+              "distance_mm": 0.8229,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_ContA_PFClv_1",
+              "nearest_vertex": 9226,
+              "parcel": "LH_ContA_PFClv_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 1.75675,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_ContA_PFClv_1",
+              "nearest_vertex": 9226,
+              "parcel": "LH_ContA_PFClv_1",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "left pIFG",
+          "modality": "text+audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "09",
+          "roi": "ipl_ifg_how_gt_why_vezich2017_l;pifg_vezich2017",
+          "role": "location",
+          "source": "Vezich et al. 2017",
+          "space": "MNI152",
+          "table_page": "Table 4 / p.293",
+          "threshold": "whole-brain contrast",
+          "x": "-46",
+          "y": "32",
+          "z": "12"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "l_angular_chua2011": {
+      "dominant_parcels": {
+        "LH_ContB_IPL_1": 13,
+        "LH_ContB_IPL_2": 5,
+        "LH_DefaultA_IPL_1": 15,
+        "LH_DefaultB_IPL_2": 16
+      },
+      "left": 49,
+      "n_vertices": 49,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 2.17014,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_ContB_IPL_1",
+              "nearest_vertex": 916,
+              "parcel": "LH_ContB_IPL_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 1.19115,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_ContB_IPL_1",
+              "nearest_vertex": 916,
+              "parcel": "LH_ContB_IPL_1",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "between_subject",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "left angular",
+          "modality": "text with audio",
+          "n": "91",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "07",
+          "roi": "l_angular_chua2011",
+          "role": "location",
+          "source": "Chua et al. 2011",
+          "space": "MNI152",
+          "table_page": "main p.3 / Supplement",
+          "threshold": "ROI logistic regression",
+          "x": "-51",
+          "y": "-63",
+          "z": "33"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "mpfc_falk2010": {
+      "dominant_parcels": {
+        "LH_DefaultA_PFCm_1": 14,
+        "LH_LimbicB_OFC_5": 2,
+        "RH_DefaultA_PFCm_1": 3,
+        "RH_DefaultA_PFCm_2": 3,
+        "RH_LimbicB_OFC_6": 14
+      },
+      "left": 16,
+      "n_vertices": 36,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 5.65538,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultA_PFCm_1",
+              "nearest_vertex": 3657,
+              "parcel": "LH_DefaultA_PFCm_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 5.10736,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultA_PFCm_1",
+              "nearest_vertex": 3657,
+              "parcel": "LH_DefaultA_PFCm_1",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 4.67331,
+              "hemi": "R",
+              "method": "aff",
+              "nearest_parcel": "RH_LimbicB_OFC_6",
+              "nearest_vertex": 13320,
+              "parcel": "RH_LimbicB_OFC_6",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 5.02547,
+              "hemi": "R",
+              "method": "noaff",
+              "nearest_parcel": "RH_LimbicB_OFC_6",
+              "nearest_vertex": 13320,
+              "parcel": "RH_LimbicB_OFC_6",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "between_subject",
+          "direction": "+",
+          "hemi_rule": "midline",
+          "label": "MPFC cube centre",
+          "modality": "text+image with audio",
+          "n": "20",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "04",
+          "roi": "mpfc_falk2010",
+          "role": "location",
+          "source": "Falk et al. 2010 JNeurosci",
+          "space": "MNI152",
+          "table_page": "ROI definition / pp.8422-8423",
+          "threshold": "ROI correlation",
+          "x": "0",
+          "y": "60",
+          "z": "-9"
+        }
+      ],
+      "reason": "accepted",
+      "right": 20
+    },
+    "pifg_vezich2017": {
+      "dominant_parcels": {
+        "LH_ContA_PFCl_2": 3,
+        "LH_ContA_PFClv_1": 30,
+        "LH_ContA_PFClv_2": 6,
+        "LH_DefaultB_PFCv_4": 18,
+        "LH_DefaultB_PFCv_5": 3
+      },
+      "left": 60,
+      "n_vertices": 60,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 0.8229,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_ContA_PFClv_1",
+              "nearest_vertex": 9226,
+              "parcel": "LH_ContA_PFClv_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 1.75675,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_ContA_PFClv_1",
+              "nearest_vertex": 9226,
+              "parcel": "LH_ContA_PFClv_1",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "left pIFG",
+          "modality": "text+audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "09",
+          "roi": "ipl_ifg_how_gt_why_vezich2017_l;pifg_vezich2017",
+          "role": "location",
+          "source": "Vezich et al. 2017",
+          "space": "MNI152",
+          "table_page": "Table 4 / p.293",
+          "threshold": "whole-brain contrast",
+          "x": "-46",
+          "y": "32",
+          "z": "12"
+        },
+        {
+          "assignments": [
+            {
+              "distance_mm": 7.90467,
+              "hemi": "R",
+              "method": "aff",
+              "nearest_parcel": "RH_ContA_PFCl_1",
+              "nearest_vertex": 14319,
+              "parcel": "RH_ContA_PFCl_1",
+              "reason": "dropped_far_from_surface",
+              "unstable_assignment": true
+            },
+            {
+              "distance_mm": 9.1484,
+              "hemi": "R",
+              "method": "noaff",
+              "nearest_parcel": "RH_ContA_PFCl_3",
+              "nearest_vertex": 13643,
+              "parcel": "RH_ContA_PFCl_3",
+              "unstable_assignment": true
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "right pIFG",
+          "modality": "text+audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "09",
+          "roi": "pifg_vezich2017",
+          "role": "location",
+          "source": "Vezich et al. 2017",
+          "space": "MNI152",
+          "table_page": "Table 4 / p.293",
+          "threshold": "whole-brain contrast",
+          "x": "52",
+          "y": "38",
+          "z": "16"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "precuneus_chua2011": {
+      "dominant_parcels": {
+        "LH_DefaultA_pCunPCC_1": 6,
+        "LH_DefaultA_pCunPCC_2": 28,
+        "LH_DefaultA_pCunPCC_3": 21,
+        "LH_DefaultA_pCunPCC_6": 1,
+        "LH_DefaultA_pCunPCC_7": 20
+      },
+      "left": 76,
+      "n_vertices": 76,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 3.37045,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultA_pCunPCC_2",
+              "nearest_vertex": 311,
+              "parcel": "LH_DefaultA_pCunPCC_2",
+              "reason": "accepted",
+              "unstable_assignment": true
+            },
+            {
+              "distance_mm": 3.7519,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultA_pCunPCC_7",
+              "nearest_vertex": 5318,
+              "parcel": "LH_DefaultA_pCunPCC_7",
+              "unstable_assignment": true
+            }
+          ],
+          "contrast": "",
+          "design": "between_subject",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "precuneus",
+          "modality": "text with audio",
+          "n": "91",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "07",
+          "roi": "precuneus_chua2011",
+          "role": "location",
+          "source": "Chua et al. 2011",
+          "space": "MNI152",
+          "table_page": "main p.3 / Supplement",
+          "threshold": "ROI logistic regression",
+          "x": "-6",
+          "y": "-51",
+          "z": "36"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "ripl_vezich2017": {
+      "dominant_parcels": {
+        "LH_ContA_IPS_2": 1,
+        "LH_DorsAttnB_PostC_1": 2,
+        "LH_DorsAttnB_PostC_2": 16,
+        "LH_DorsAttnB_PostC_3": 29,
+        "LH_DorsAttnB_PostC_4": 2,
+        "LH_SalVentAttnA_ParOper_3": 4,
+        "LH_SomMotA_3": 1,
+        "LH_SomMotA_4": 13,
+        "RH_ContA_IPS_2": 1,
+        "RH_ContA_IPS_3": 5,
+        "RH_ContA_IPS_4": 3,
+        "RH_DorsAttnB_PostC_3": 29,
+        "RH_DorsAttnB_PostC_4": 2,
+        "RH_DorsAttnB_PostC_5": 4
+      },
+      "left": 68,
+      "n_vertices": 112,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 4.02764,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DorsAttnB_PostC_2",
+              "nearest_vertex": 8730,
+              "parcel": "LH_DorsAttnB_PostC_2",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 3.16222,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DorsAttnB_PostC_2",
+              "nearest_vertex": 8730,
+              "parcel": "LH_DorsAttnB_PostC_2",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "rostral IPL left",
+          "modality": "text+audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "09",
+          "roi": "ipl_ifg_how_gt_why_vezich2017_l;ripl_vezich2017",
+          "role": "location",
+          "source": "Vezich et al. 2017",
+          "space": "MNI152",
+          "table_page": "Table 4 / p.293",
+          "threshold": "whole-brain contrast",
+          "x": "-54",
+          "y": "-28",
+          "z": "46"
+        },
+        {
+          "assignments": [
+            {
+              "distance_mm": 5.58821,
+              "hemi": "R",
+              "method": "aff",
+              "nearest_parcel": "RH_DorsAttnB_PostC_3",
+              "nearest_vertex": 14503,
+              "parcel": "RH_DorsAttnB_PostC_3",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 5.08825,
+              "hemi": "R",
+              "method": "noaff",
+              "nearest_parcel": "RH_DorsAttnB_PostC_3",
+              "nearest_vertex": 18663,
+              "parcel": "RH_DorsAttnB_PostC_3",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "rostral IPL right",
+          "modality": "text+audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "09",
+          "roi": "ripl_vezich2017",
+          "role": "location",
+          "source": "Vezich et al. 2017",
+          "space": "MNI152",
+          "table_page": "Table 4 / p.293",
+          "threshold": "whole-brain contrast",
+          "x": "36",
+          "y": "-38",
+          "z": "32"
+        }
+      ],
+      "reason": "accepted",
+      "right": 44
+    },
+    "rmpfc_chua2009": {
+      "dominant_parcels": {
+        "LH_DefaultA_PFCm_3": 17,
+        "LH_DefaultA_PFCm_5": 25,
+        "LH_DefaultB_PFCd_1": 6,
+        "LH_DefaultB_PFCd_2": 6
+      },
+      "left": 54,
+      "n_vertices": 54,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 3.8506,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultA_PFCm_5",
+              "nearest_vertex": 52,
+              "parcel": "LH_DefaultA_PFCm_5",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 3.08182,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultA_PFCm_5",
+              "nearest_vertex": 2797,
+              "parcel": "LH_DefaultA_PFCm_5",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "rMPFC",
+          "modality": "text+audio",
+          "n": "24",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "19",
+          "roi": "rmpfc_chua2009",
+          "role": "location",
+          "source": "Chua et al. 2009",
+          "space": "MNI152",
+          "table_page": "Table 1 / p.3",
+          "threshold": "p<.005 uncorrected K>=5",
+          "x": "-12",
+          "y": "63",
+          "z": "12"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "tp_l": {
+      "dominant_parcels": {
+        "LH_DefaultB_Temp_1": 7,
+        "LH_DefaultB_Temp_2": 2,
+        "LH_LimbicA_TempPole_7": 4,
+        "LH_TempPar_1": 19
+      },
+      "left": 32,
+      "n_vertices": 32,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 1.46755,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_TempPar_1",
+              "nearest_vertex": 9952,
+              "parcel": "LH_TempPar_1",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 2.03773,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_TempPar_1",
+              "nearest_vertex": 9952,
+              "parcel": "LH_TempPar_1",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "left TP",
+          "modality": "text with audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "05",
+          "roi": "falk2010jocn_core;tp_l",
+          "role": "location",
+          "source": "Falk Rameson et al. 2010 JoCN",
+          "space": "MNI152",
+          "table_page": "Table 2",
+          "threshold": "p<.005 uncorrected in each sample",
+          "x": "-56",
+          "y": "8",
+          "z": "-18"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    },
+    "tp_r": {
+      "dominant_parcels": {
+        "RH_DefaultA_Temp_1": 4,
+        "RH_DefaultB_AntTemp_1": 2,
+        "RH_SomMotB_Aud_1": 4,
+        "RH_TempPar_1": 8,
+        "RH_TempPar_2": 14
+      },
+      "left": 0,
+      "n_vertices": 32,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 4.62252,
+              "hemi": "R",
+              "method": "aff",
+              "nearest_parcel": "RH_TempPar_2",
+              "nearest_vertex": 17415,
+              "parcel": "RH_TempPar_2",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 4.27143,
+              "hemi": "R",
+              "method": "noaff",
+              "nearest_parcel": "RH_TempPar_2",
+              "nearest_vertex": 17415,
+              "parcel": "RH_TempPar_2",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "right TP",
+          "modality": "text with audio",
+          "n": "",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "05",
+          "roi": "falk2010jocn_core;tp_r",
+          "role": "location",
+          "source": "Falk Rameson et al. 2010 JoCN",
+          "space": "MNI152",
+          "table_page": "Table 2",
+          "threshold": "p<.005 uncorrected in each sample",
+          "x": "60",
+          "y": "4",
+          "z": "-16"
+        }
+      ],
+      "reason": "accepted",
+      "right": 32
+    },
+    "vmpfc_chua2009": {
+      "dominant_parcels": {
+        "LH_DefaultA_PFCm_1": 5,
+        "LH_DefaultA_PFCm_2": 44,
+        "LH_LimbicB_OFC_1": 1,
+        "LH_LimbicB_OFC_3": 3,
+        "LH_LimbicB_OFC_4": 1
+      },
+      "left": 54,
+      "n_vertices": 54,
+      "peaks": [
+        {
+          "assignments": [
+            {
+              "distance_mm": 3.18411,
+              "hemi": "L",
+              "method": "aff",
+              "nearest_parcel": "LH_DefaultA_PFCm_2",
+              "nearest_vertex": 4870,
+              "parcel": "LH_DefaultA_PFCm_2",
+              "reason": "accepted",
+              "unstable_assignment": false
+            },
+            {
+              "distance_mm": 3.01646,
+              "hemi": "L",
+              "method": "noaff",
+              "nearest_parcel": "LH_DefaultA_PFCm_2",
+              "nearest_vertex": 261,
+              "parcel": "LH_DefaultA_PFCm_2",
+              "unstable_assignment": false
+            }
+          ],
+          "contrast": "",
+          "design": "within_subject_condition",
+          "direction": "+",
+          "hemi_rule": "side",
+          "label": "vmPFC",
+          "modality": "text+audio",
+          "n": "24",
+          "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+          "paper_id": "19",
+          "roi": "vmpfc_chua2009",
+          "role": "location",
+          "source": "Chua et al. 2009",
+          "space": "MNI152",
+          "table_page": "Table 1 / p.3",
+          "threshold": "p<.005 uncorrected K>=5",
+          "x": "-6",
+          "y": "39",
+          "z": "-12"
+        }
+      ],
+      "reason": "accepted",
+      "right": 0
+    }
+  },
+  "mni152_to_mni305": [
+    [
+      1.002171370304817,
+      0.007145067887742245,
+      -0.01767231767569371,
+      0.05284517871525262
+    ],
+    [
+      -0.014587541073423919,
+      0.999019151307188,
+      0.0026621067957371494,
+      -1.5518578168238213
+    ],
+    [
+      0.012930060858469337,
+      0.009411056052249019,
+      1.002702855745077,
+      -1.2012288540499079
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "mni305_to_mni152": [
+    [
+      0.9975,
+      -0.0073,
+      0.0176,
+      -0.0429
+    ],
+    [
+      0.0146,
+      1.0009,
+      -0.0024,
+      1.5496
+    ],
+    [
+      -0.013,
+      -0.0093,
+      0.9971,
+      1.184
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "nibabel": "5.4.2",
+  "nilearn": "0.14.1",
+  "npz_sha256": "c5ca6bb873d2e0d140a83dd94ae30c2c1dfca2959e6b50a7ae6ed019424bfe0d",
+  "numpy": "2.5.4",
+  "peaks": [
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.65538,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 3657,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.10736,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 3657,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.67331,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_LimbicB_OFC_6",
+          "nearest_vertex": 13320,
+          "parcel": "RH_LimbicB_OFC_6",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.02547,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_LimbicB_OFC_6",
+          "nearest_vertex": 13320,
+          "parcel": "RH_LimbicB_OFC_6",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "message response predicts later behavior change",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "midline",
+      "label": "MPFC cube centre (Soon 2008)",
+      "modality": "text+image with audio",
+      "n": "20",
+      "note": "10mm cube; related_definition: Vezich/Falk later ventral MPFC cluster is not this cube",
+      "paper_id": "04",
+      "roi": "vmpfc_frontopolar",
+      "role": "primary",
+      "source": "Falk et al. 2010 JNeurosci",
+      "space": "MNI152",
+      "table_page": "ROI definition / pp.8422-8423",
+      "threshold": "ROI correlation",
+      "x": "0",
+      "y": "60",
+      "z": "-9"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.34771,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_LimbicB_OFC_4",
+          "nearest_vertex": 4874,
+          "parcel": "LH_LimbicB_OFC_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.84075,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_LimbicB_OFC_4",
+          "nearest_vertex": 4874,
+          "parcel": "LH_LimbicB_OFC_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.96536,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 11429,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 0.50858,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 17933,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "WTP parametric effect",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "mirror",
+      "label": "right mOFC",
+      "modality": "food images",
+      "n": "19",
+      "note": "Image analogy; primary nonfood rewards not tested",
+      "paper_id": "06",
+      "roi": "mofc",
+      "role": "primary",
+      "source": "Plassmann et al. 2007",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.9987",
+      "threshold": "p<.001 uncorrected",
+      "x": "4",
+      "y": "30",
+      "z": "-18"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.98638,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCd_1",
+          "nearest_vertex": 1859,
+          "parcel": "LH_DefaultB_PFCd_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.51395,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCd_1",
+          "nearest_vertex": 1859,
+          "parcel": "LH_DefaultB_PFCd_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 6.09073,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultB_PFCd_1",
+          "nearest_vertex": 13909,
+          "parcel": "RH_DefaultB_PFCd_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.57582,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultB_PFCd_1",
+          "nearest_vertex": 10504,
+          "parcel": "RH_DefaultB_PFCd_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "tailored-neutral predicts quitting",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "midline",
+      "label": "dmPFC",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "Location only; direction from Falk JoCN",
+      "paper_id": "07",
+      "roi": "dmpfc",
+      "role": "primary",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "0",
+      "y": "54",
+      "z": "30"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.55056,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCd_2",
+          "nearest_vertex": 4083,
+          "parcel": "LH_DefaultB_PFCd_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.64084,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCd_2",
+          "nearest_vertex": 4083,
+          "parcel": "LH_DefaultB_PFCd_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "DMPFC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "dmpfc",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-12",
+      "y": "60",
+      "z": "36"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.79616,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCd_4",
+          "nearest_vertex": 6199,
+          "parcel": "LH_DefaultB_PFCd_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.87931,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCd_4",
+          "nearest_vertex": 883,
+          "parcel": "LH_DefaultB_PFCd_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "DMPFC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "dmpfc",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-10",
+      "y": "52",
+      "z": "44"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.48449,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_SalVentAttnA_Ins_3",
+          "nearest_vertex": 5005,
+          "parcel": "LH_SalVentAttnA_Ins_3",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.01422,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_SalVentAttnA_Ins_3",
+          "nearest_vertex": 1188,
+          "parcel": "LH_SalVentAttnA_Ins_3",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 0.74757,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_SalVentAttnA_Ins_2",
+          "nearest_vertex": 15117,
+          "parcel": "RH_SalVentAttnA_Ins_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.81994,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_SalVentAttnA_Ins_2",
+          "nearest_vertex": 15116,
+          "parcel": "RH_SalVentAttnA_Ins_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "purchasing associated with deactivation",
+      "design": "within_subject_condition",
+      "direction": "-",
+      "hemi_rule": "mirror",
+      "label": "bilateral insula",
+      "modality": "product images + price",
+      "n": "26",
+      "note": "AFNI Talairach; image-price analogy",
+      "paper_id": "03",
+      "roi": "insula",
+      "role": "primary",
+      "source": "Knutson et al. 2007",
+      "space": "Talairach_AFNI",
+      "table_page": "Table 1 / pp.149-151",
+      "threshold": "p<.001",
+      "x": "32",
+      "y": "10",
+      "z": "9"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.17123,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultB_PFCv_1",
+          "nearest_vertex": 11381,
+          "parcel": "RH_DefaultB_PFCv_1",
+          "reason": "accepted",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 1.92567,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_SalVentAttnB_Ins_1",
+          "nearest_vertex": 13301,
+          "parcel": "RH_SalVentAttnB_Ins_1",
+          "reason": "accepted",
+          "unstable_assignment": true
+        }
+      ],
+      "contrast": "dogmatic>suggestive",
+      "design": "within_subject_condition",
+      "direction": "-",
+      "hemi_rule": "side",
+      "label": "right IFG/anterior insula",
+      "modality": "text",
+      "n": "37",
+      "note": "Anonymous manuscript version; both affine assignments retained",
+      "paper_id": "11",
+      "roi": "r_ifg_ai",
+      "role": "primary",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "40",
+      "y": "28",
+      "z": "-7"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.37045,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_pCunPCC_2",
+          "nearest_vertex": 311,
+          "parcel": "LH_DefaultA_pCunPCC_2",
+          "reason": "accepted",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 3.7519,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_pCunPCC_7",
+          "nearest_vertex": 5318,
+          "parcel": "LH_DefaultA_pCunPCC_7",
+          "reason": "accepted",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 4.2503,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultA_pCunPCC_2",
+          "nearest_vertex": 16504,
+          "parcel": "RH_DefaultA_pCunPCC_2",
+          "reason": "accepted",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 5.20904,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultA_pCunPCC_5",
+          "nearest_vertex": 13080,
+          "parcel": "RH_DefaultA_pCunPCC_5",
+          "reason": "accepted",
+          "unstable_assignment": true
+        }
+      ],
+      "contrast": "quitting prediction p=.078",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "mirror",
+      "label": "precuneus/PCC",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "Direction from Chua 2009 high>low / less deactivation; mixed sources",
+      "paper_id": "07",
+      "roi": "pcc_precuneus",
+      "role": "primary",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "-6",
+      "y": "-51",
+      "z": "36"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.87533,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_ContB_IPL_1",
+          "nearest_vertex": 10554,
+          "parcel": "RH_ContB_IPL_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 2.92933,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_ContB_IPL_1",
+          "nearest_vertex": 10554,
+          "parcel": "RH_ContB_IPL_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "right TPJ box centre",
+      "modality": "app recommendation + peer feedback",
+      "n": "65",
+      "note": "box_centre; BA22/39/40 intersection with 40x16x24mm box; susceptibility not message effectiveness",
+      "paper_id": "20",
+      "roi": "r_tpj",
+      "role": "primary",
+      "source": "Cascio et al. 2015",
+      "space": "MNI152",
+      "table_page": "anatomical ROI definition",
+      "threshold": "r=.25 p=.041 uncorrected",
+      "x": "60",
+      "y": "-52",
+      "z": "30"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 6.57771,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_SomMotB_Aud_2",
+          "nearest_vertex": 9415,
+          "network_mismatch": true,
+          "parcel": "LH_TempPar_3",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 8.57778,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_SomMotB_Aud_2",
+          "nearest_vertex": 9415,
+          "network_mismatch": true,
+          "parcel": "LH_TempPar_3",
+          "reason": "network_mismatch_no_nearby_allowed_vertex",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left pSTS",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "lateral_temporal",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-56",
+      "y": "-30",
+      "z": "8"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.72453,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_TempPar_4",
+          "nearest_vertex": 20431,
+          "parcel": "RH_TempPar_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.03609,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_TempPar_4",
+          "nearest_vertex": 20431,
+          "parcel": "RH_TempPar_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "right pSTS",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "lateral_temporal",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "68",
+      "y": "-14",
+      "z": "-6"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.46755,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_TempPar_1",
+          "nearest_vertex": 9952,
+          "parcel": "LH_TempPar_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 2.03773,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_TempPar_1",
+          "nearest_vertex": 9952,
+          "parcel": "LH_TempPar_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left TP",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "lateral_temporal",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-56",
+      "y": "8",
+      "z": "-18"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.62252,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_TempPar_2",
+          "nearest_vertex": 17415,
+          "parcel": "RH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.27143,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_TempPar_2",
+          "nearest_vertex": 17415,
+          "parcel": "RH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "right TP",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "lateral_temporal",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "60",
+      "y": "4",
+      "z": "-16"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.61452,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_TempPar_2",
+          "nearest_vertex": 5083,
+          "parcel": "LH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.87255,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_TempPar_2",
+          "nearest_vertex": 5082,
+          "parcel": "LH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left lateral temporal",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "lateral_temporal",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-64",
+      "y": "-22",
+      "z": "-2"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.09227,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_TempPar_2",
+          "nearest_vertex": 12034,
+          "parcel": "RH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.82157,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_TempPar_2",
+          "nearest_vertex": 18262,
+          "parcel": "RH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive conjunction",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "right lateral temporal",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "lateral_temporal",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "58",
+      "y": "-4",
+      "z": "-6"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.75491,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCv_5",
+          "nearest_vertex": 2222,
+          "parcel": "LH_DefaultB_PFCv_5",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.72911,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCv_5",
+          "nearest_vertex": 2222,
+          "parcel": "LH_DefaultB_PFCv_5",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive>unpersuasive",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left VLPFC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "",
+      "paper_id": "05",
+      "roi": "l_ifg",
+      "role": "primary",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-58",
+      "y": "28",
+      "z": "10"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 0.8229,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContA_PFClv_1",
+          "nearest_vertex": 9226,
+          "parcel": "LH_ContA_PFClv_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.75675,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContA_PFClv_1",
+          "nearest_vertex": 9226,
+          "parcel": "LH_ContA_PFClv_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "How>Why",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left pIFG",
+      "modality": "text+audio",
+      "n": "",
+      "note": "Table 4 whole-brain How>Why peak; ROI analysis used Spunt & Adolphs 2014 masks; opposite constructs",
+      "paper_id": "09",
+      "roi": "l_ifg",
+      "role": "primary",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "-46",
+      "y": "32",
+      "z": "12"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.40059,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCl_1",
+          "nearest_vertex": 2924,
+          "parcel": "LH_DefaultB_PFCl_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.01097,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCl_1",
+          "nearest_vertex": 1003,
+          "parcel": "LH_DefaultB_PFCl_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive vs nonpersuasive",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "left MFG",
+      "modality": "text",
+      "n": "",
+      "note": "",
+      "paper_id": "12",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Yomogida et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / Supplement",
+      "threshold": "reported group contrast",
+      "x": "-44",
+      "y": "24",
+      "z": "44"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.8505,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContA_IPS_2",
+          "nearest_vertex": 5023,
+          "parcel": "LH_ContA_IPS_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 2.41671,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContA_IPS_2",
+          "nearest_vertex": 9353,
+          "parcel": "LH_ContA_IPS_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "persuasive vs nonpersuasive",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "left SMG",
+      "modality": "text",
+      "n": "",
+      "note": "",
+      "paper_id": "12",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Yomogida et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / Supplement",
+      "threshold": "reported group contrast",
+      "x": "-58",
+      "y": "-48",
+      "z": "42"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.27811,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_SalVentAttnB_PFCl_1",
+          "nearest_vertex": 16032,
+          "parcel": "RH_SalVentAttnB_PFCl_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.84398,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_SalVentAttnB_PFCl_1",
+          "nearest_vertex": 10898,
+          "parcel": "RH_SalVentAttnB_PFCl_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "WTP parametric effect",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "right DLPFC",
+      "modality": "food images",
+      "n": "19",
+      "note": "",
+      "paper_id": "06",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Plassmann et al. 2007",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.9987",
+      "threshold": "p<.001 uncorrected",
+      "x": "44",
+      "y": "44",
+      "z": "18"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.02764,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DorsAttnB_PostC_2",
+          "nearest_vertex": 8730,
+          "parcel": "LH_DorsAttnB_PostC_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.16222,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DorsAttnB_PostC_2",
+          "nearest_vertex": 8730,
+          "parcel": "LH_DorsAttnB_PostC_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "How>Why",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "rostral IPL left",
+      "modality": "text+audio",
+      "n": "",
+      "note": "Table 4; rIPL means rostral not right; PDF minus signs preserved",
+      "paper_id": "09",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "-54",
+      "y": "-28",
+      "z": "46"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.36509,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DorsAttnA_SPL_5",
+          "nearest_vertex": 1051,
+          "parcel": "LH_DorsAttnA_SPL_5",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.10095,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DorsAttnA_SPL_5",
+          "nearest_vertex": 1051,
+          "parcel": "LH_DorsAttnA_SPL_5",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "PPI",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left SPL",
+      "modality": "video PSA",
+      "n": "28",
+      "note": "PPI target (5mm sphere), video PSAs; MFG-SPL coupling, not activation",
+      "paper_id": "18",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Huskey et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.1905",
+      "threshold": "PPI target 5mm sphere",
+      "x": "-40",
+      "y": "-48",
+      "z": "48"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.48183,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContC_pCun_2",
+          "nearest_vertex": 2860,
+          "parcel": "LH_ContC_pCun_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 6.26788,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContC_pCun_2",
+          "nearest_vertex": 2860,
+          "parcel": "LH_ContC_pCun_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 8.09181,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_ContC_pCun_5",
+          "nearest_vertex": 14462,
+          "parcel": "RH_ContC_pCun_5",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 7.28526,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_ContC_pCun_5",
+          "nearest_vertex": 12163,
+          "parcel": "RH_ContC_pCun_5",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "PPI",
+      "direction": "0",
+      "hemi_rule": "midline",
+      "label": "medial SPL",
+      "modality": "video PSA",
+      "n": "28",
+      "note": "PPI target (5mm sphere), video PSAs; MFG-SPL coupling, not activation",
+      "paper_id": "18",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Huskey et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.1905",
+      "threshold": "PPI target 5mm sphere",
+      "x": "0",
+      "y": "-74",
+      "z": "52"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.28944,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DorsAttnA_SPL_7",
+          "nearest_vertex": 11921,
+          "parcel": "RH_DorsAttnA_SPL_7",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.60221,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DorsAttnA_SPL_7",
+          "nearest_vertex": 17999,
+          "parcel": "RH_DorsAttnA_SPL_7",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "PPI",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "right SPL",
+      "modality": "video PSA",
+      "n": "28",
+      "note": "PPI target (5mm sphere), video PSAs; MFG-SPL coupling, not activation",
+      "paper_id": "18",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Huskey et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.1905",
+      "threshold": "PPI target 5mm sphere",
+      "x": "28",
+      "y": "-52",
+      "z": "58"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 6.89671,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultB_PFCv_2",
+          "nearest_vertex": 16179,
+          "parcel": "RH_DefaultB_PFCv_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.00094,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultB_PFCv_2",
+          "nearest_vertex": 11860,
+          "parcel": "RH_DefaultB_PFCv_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "dogmatic>suggestive",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "right IFG extra",
+      "modality": "text",
+      "n": "37",
+      "note": "",
+      "paper_id": "11",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "54",
+      "y": "28",
+      "z": "-7"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.16281,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultB_PFCv_1",
+          "nearest_vertex": 15079,
+          "parcel": "RH_DefaultB_PFCv_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.68106,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultB_PFCv_1",
+          "nearest_vertex": 19399,
+          "parcel": "RH_DefaultB_PFCv_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "dogmatic>suggestive",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "right IFG extra",
+      "modality": "text",
+      "n": "37",
+      "note": "",
+      "paper_id": "11",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "36",
+      "y": "24",
+      "z": "-14"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.97882,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 12466,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.15995,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 11404,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "suggestive>dogmatic",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "VMPFC",
+      "modality": "text",
+      "n": "37",
+      "note": "",
+      "paper_id": "11",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "15",
+      "y": "49",
+      "z": "-7"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.11896,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_2",
+          "nearest_vertex": 3663,
+          "parcel": "LH_DefaultA_PFCm_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.68528,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_2",
+          "nearest_vertex": 3663,
+          "parcel": "LH_DefaultA_PFCm_2",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "suggestive>dogmatic",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "VMPFC",
+      "modality": "text",
+      "n": "37",
+      "note": "",
+      "paper_id": "11",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "-16",
+      "y": "46",
+      "z": "-4"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.06061,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 15165,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.94551,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 16941,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "suggestive>dogmatic",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "VMPFC",
+      "modality": "text",
+      "n": "37",
+      "note": "",
+      "paper_id": "11",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "1",
+      "y": "49",
+      "z": "-4"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.88989,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContB_PFCmp_1",
+          "nearest_vertex": 8996,
+          "parcel": "LH_ContB_PFCmp_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.42291,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContB_PFCmp_1",
+          "nearest_vertex": 8995,
+          "parcel": "LH_ContB_PFCmp_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "dogmatic>suggestive",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "DMPFC",
+      "modality": "text",
+      "n": "37",
+      "note": "DMPFC dogmatic peak outside dmpfc prior ROI",
+      "paper_id": "11",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Hernandez-Vergara et al. 2025",
+      "space": "MNI152",
+      "table_page": "Tables 1-2 / manuscript pp.27-28",
+      "threshold": "FWEc",
+      "x": "-2",
+      "y": "28",
+      "z": "52"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.29427,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 5939,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.08905,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 5939,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "self-MPFC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "Location benchmark only; anatomical key has no construct label",
+      "paper_id": "17",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Pegors et al. 2017",
+      "space": "MNI152",
+      "table_page": "self-MPFC ROI definition",
+      "threshold": "ROI",
+      "x": "-6",
+      "y": "56",
+      "z": "-5"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.23553,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 7616,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.26767,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 7616,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "benchmark",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "MPFC",
+      "modality": "product images + price",
+      "n": "26",
+      "note": "",
+      "paper_id": "03",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Knutson et al. 2007",
+      "space": "Talairach_AFNI",
+      "table_page": "Table 1 / pp.149-151",
+      "threshold": "p<.001",
+      "x": "-4",
+      "y": "59",
+      "z": "-3"
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "inter_subject_similarity",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "Schaefer-200 7N #90",
+      "modality": "Mandarin video",
+      "n": "",
+      "note": "7Networks_LH_Default_PFC_8; authors call it dACC; IS-RSA on videos; location benchmark only (WS11)",
+      "paper_id": "02",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "benchmark",
+      "source": "Li et al. 2026",
+      "space": "MNI152",
+      "table_page": "Study 1/2",
+      "threshold": "IS-RSA",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 7.28077,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 19574,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 7.17377,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultA_PFCm_1",
+          "nearest_vertex": 15245,
+          "parcel": "RH_DefaultA_PFCm_1",
+          "reason": "excluded",
+          "unstable_assignment": true
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "NAcc right",
+      "modality": "product images + price",
+      "n": "26",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "03",
+      "roi": "",
+      "role": "excluded",
+      "source": "Knutson et al. 2007",
+      "space": "Talairach_AFNI",
+      "table_page": "Table 1 / pp.149-151",
+      "threshold": "p<.001",
+      "x": "10",
+      "y": "12",
+      "z": "-1"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.81395,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_LimbicB_OFC_4",
+          "nearest_vertex": 5828,
+          "parcel": "LH_LimbicB_OFC_4",
+          "reason": "excluded",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 6.1886,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 677,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": true
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "NAcc left",
+      "modality": "product images + price",
+      "n": "26",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "03",
+      "roi": "",
+      "role": "excluded",
+      "source": "Knutson et al. 2007",
+      "space": "Talairach_AFNI",
+      "table_page": "Table 1 / pp.149-151",
+      "threshold": "p<.001",
+      "x": "-10",
+      "y": "11",
+      "z": "0"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 11.14639,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 5364,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 11.22394,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 5364,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "caudate",
+      "modality": "text+audio",
+      "n": "",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "09",
+      "roi": "",
+      "role": "excluded",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "-12",
+      "y": "6",
+      "z": "12"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 10.38302,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_SalVentAttnA_Ins_4",
+          "nearest_vertex": 14990,
+          "parcel": "RH_SalVentAttnA_Ins_4",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 10.18592,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_SalVentAttnA_Ins_4",
+          "nearest_vertex": 14990,
+          "parcel": "RH_SalVentAttnA_Ins_4",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "PPI",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "putamen",
+      "modality": "video PSA",
+      "n": "28",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "18",
+      "roi": "",
+      "role": "excluded",
+      "source": "Huskey et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.1905",
+      "threshold": "PPI target 5mm sphere",
+      "x": "28",
+      "y": "-6",
+      "z": "4"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.0216,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 5460,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.47548,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 2441,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "PPI",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "amygdala",
+      "modality": "video PSA",
+      "n": "28",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "18",
+      "roi": "",
+      "role": "excluded",
+      "source": "Huskey et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.1905",
+      "threshold": "PPI target 5mm sphere",
+      "x": "-26",
+      "y": "-2",
+      "z": "-18"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.8241,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 1792,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.72607,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 1792,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "HCMP",
+      "modality": "text with audio",
+      "n": "",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "05",
+      "roi": "",
+      "role": "excluded",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-16",
+      "y": "-30",
+      "z": "-2"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 6.10739,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 9778,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.42163,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 1310,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "thalamus",
+      "modality": "text+audio",
+      "n": "",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "09",
+      "roi": "",
+      "role": "excluded",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "-8",
+      "y": "-14",
+      "z": "10"
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "PPI",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "cerebellum",
+      "modality": "video PSA",
+      "n": "28",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "18",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "excluded",
+      "source": "Huskey et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.1905",
+      "threshold": "PPI target 5mm sphere",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 9.78534,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_LimbicA_TempPole_3",
+          "nearest_vertex": 5474,
+          "parcel": "LH_LimbicA_TempPole_3",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 8.68125,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_LimbicA_TempPole_3",
+          "nearest_vertex": 5474,
+          "parcel": "LH_LimbicA_TempPole_3",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "MTL",
+      "modality": "health messages",
+      "n": "",
+      "note": "Subcortical / outside released cortex-only checkpoint; never selected",
+      "paper_id": "14",
+      "roi": "",
+      "role": "excluded",
+      "source": "Cooper et al. 2015",
+      "space": "MNI152",
+      "table_page": "MTL result",
+      "threshold": "reported peak",
+      "x": "-13",
+      "y": "-5",
+      "z": "-38"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.22397,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 5408,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 2.18198,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 9820,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.57804,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 19656,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.23736,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "MEDIAL_WALL",
+          "nearest_vertex": 17027,
+          "parcel": "MEDIAL_WALL",
+          "reason": "medial_wall",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "midline",
+      "label": "unpublished PCC centroid",
+      "modality": "text with audio",
+      "n": "",
+      "note": "Not in the paper; medial wall; never selected",
+      "paper_id": "16",
+      "roi": "",
+      "role": "excluded",
+      "source": "Cooper et al. 2017",
+      "space": "MNI152",
+      "table_page": "PCC / trait results",
+      "threshold": "PCC t(33)=-1.24 p=.22",
+      "x": "0",
+      "y": "-42",
+      "z": "21"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.55633,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_pCunPCC_2",
+          "nearest_vertex": 7836,
+          "parcel": "LH_DefaultA_pCunPCC_2",
+          "reason": "null_record",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 5.74348,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_pCunPCC_6",
+          "nearest_vertex": 3811,
+          "parcel": "LH_DefaultA_pCunPCC_6",
+          "reason": "null_record",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 6.49161,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultA_pCunPCC_2",
+          "nearest_vertex": 14436,
+          "parcel": "RH_DefaultA_pCunPCC_2",
+          "reason": "null_record",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 6.44813,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultA_pCunPCC_2",
+          "nearest_vertex": 14434,
+          "parcel": "RH_DefaultA_pCunPCC_2",
+          "reason": "null_record",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "midline",
+      "label": "precuneus",
+      "modality": "text+image with audio",
+      "n": "20",
+      "note": "r=.34 p=.147",
+      "paper_id": "04",
+      "roi": "",
+      "role": "null_record",
+      "source": "Falk et al. 2010 JNeurosci",
+      "space": "MNI152",
+      "table_page": "ROI definition / pp.8422-8423",
+      "threshold": "ROI correlation",
+      "x": "0",
+      "y": "-57",
+      "z": "39"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.17014,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContB_IPL_1",
+          "nearest_vertex": 916,
+          "parcel": "LH_ContB_IPL_1",
+          "reason": "null_record",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.19115,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContB_IPL_1",
+          "nearest_vertex": 916,
+          "parcel": "LH_ContB_IPL_1",
+          "reason": "null_record",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "angular",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "OR=1.07 ns",
+      "paper_id": "07",
+      "roi": "",
+      "role": "null_record",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "-51",
+      "y": "-63",
+      "z": "33"
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "left TPJ",
+      "modality": "app recommendation + peer feedback",
+      "n": "65",
+      "note": "Null susceptibility association; not message efficacy",
+      "paper_id": "20",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cascio et al. 2015",
+      "space": "MNI152",
+      "table_page": "anatomical ROI definition",
+      "threshold": "r=.25 p=.041 uncorrected",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "mPFC",
+      "modality": "app recommendation + peer feedback",
+      "n": "65",
+      "note": "Null susceptibility association; not message efficacy",
+      "paper_id": "20",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cascio et al. 2015",
+      "space": "MNI152",
+      "table_page": "anatomical ROI definition",
+      "threshold": "r=.25 p=.041 uncorrected",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "AI",
+      "modality": "app recommendation + peer feedback",
+      "n": "65",
+      "note": "Null susceptibility association; not message efficacy",
+      "paper_id": "20",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cascio et al. 2015",
+      "space": "MNI152",
+      "table_page": "anatomical ROI definition",
+      "threshold": "r=.25 p=.041 uncorrected",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "dACC",
+      "modality": "app recommendation + peer feedback",
+      "n": "65",
+      "note": "Null susceptibility association; not message efficacy",
+      "paper_id": "20",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cascio et al. 2015",
+      "space": "MNI152",
+      "table_page": "anatomical ROI definition",
+      "threshold": "r=.25 p=.041 uncorrected",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "dmPFC",
+      "modality": "app recommendation + peer feedback",
+      "n": "65",
+      "note": "Null susceptibility association; not message efficacy",
+      "paper_id": "20",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cascio et al. 2015",
+      "space": "MNI152",
+      "table_page": "anatomical ROI definition",
+      "threshold": "r=.25 p=.041 uncorrected",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "PCC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "Null result",
+      "paper_id": "16",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cooper et al. 2017",
+      "space": "MNI152",
+      "table_page": "PCC / trait results",
+      "threshold": "PCC t(33)=-1.24 p=.22",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "MPFC-trait",
+      "modality": "text with audio",
+      "n": "",
+      "note": "Null result",
+      "paper_id": "16",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Cooper et al. 2017",
+      "space": "MNI152",
+      "table_page": "PCC / trait results",
+      "threshold": "PCC t(33)=-1.24 p=.22",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "inter_subject_similarity",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "Study-2 vmPFC",
+      "modality": "Mandarin video",
+      "n": "",
+      "note": "Null IS-RSA result",
+      "paper_id": "02",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Li et al. 2026",
+      "space": "MNI152",
+      "table_page": "Study 1/2",
+      "threshold": "IS-RSA",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [],
+      "contrast": "",
+      "design": "inter_subject_similarity",
+      "direction": "0",
+      "hemi_rule": "side",
+      "label": "Study-2 dmPFC",
+      "modality": "Mandarin video",
+      "n": "",
+      "note": "Null IS-RSA result",
+      "paper_id": "02",
+      "reason": "non_coordinate_record",
+      "roi": "",
+      "role": "null_record",
+      "source": "Li et al. 2026",
+      "space": "MNI152",
+      "table_page": "Study 1/2",
+      "threshold": "IS-RSA",
+      "x": "",
+      "y": "",
+      "z": ""
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.65538,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 3657,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.10736,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_1",
+          "nearest_vertex": 3657,
+          "parcel": "LH_DefaultA_PFCm_1",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.67331,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_LimbicB_OFC_6",
+          "nearest_vertex": 13320,
+          "parcel": "RH_LimbicB_OFC_6",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.02547,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_LimbicB_OFC_6",
+          "nearest_vertex": 13320,
+          "parcel": "RH_LimbicB_OFC_6",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "midline",
+      "label": "MPFC cube centre",
+      "modality": "text+image with audio",
+      "n": "20",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "04",
+      "roi": "mpfc_falk2010",
+      "role": "location",
+      "source": "Falk et al. 2010 JNeurosci",
+      "space": "MNI152",
+      "table_page": "ROI definition / pp.8422-8423",
+      "threshold": "ROI correlation",
+      "x": "0",
+      "y": "60",
+      "z": "-9"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.55056,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCd_2",
+          "nearest_vertex": 4083,
+          "parcel": "LH_DefaultB_PFCd_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.64084,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCd_2",
+          "nearest_vertex": 4083,
+          "parcel": "LH_DefaultB_PFCd_2",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "DMPFC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "05",
+      "roi": "falk2010jocn_core",
+      "role": "location",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-12",
+      "y": "60",
+      "z": "36"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.79616,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCd_4",
+          "nearest_vertex": 6199,
+          "parcel": "LH_DefaultB_PFCd_4",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.87931,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCd_4",
+          "nearest_vertex": 883,
+          "parcel": "LH_DefaultB_PFCd_4",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "DMPFC",
+      "modality": "text with audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "05",
+      "roi": "falk2010jocn_core",
+      "role": "location",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-10",
+      "y": "52",
+      "z": "44"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 1.46755,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_TempPar_1",
+          "nearest_vertex": 9952,
+          "parcel": "LH_TempPar_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 2.03773,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_TempPar_1",
+          "nearest_vertex": 9952,
+          "parcel": "LH_TempPar_1",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "left TP",
+      "modality": "text with audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "05",
+      "roi": "falk2010jocn_core;tp_l",
+      "role": "location",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "-56",
+      "y": "8",
+      "z": "-18"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.62252,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_TempPar_2",
+          "nearest_vertex": 17415,
+          "parcel": "RH_TempPar_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 4.27143,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_TempPar_2",
+          "nearest_vertex": 17415,
+          "parcel": "RH_TempPar_2",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "right TP",
+      "modality": "text with audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "05",
+      "roi": "falk2010jocn_core;tp_r",
+      "role": "location",
+      "source": "Falk Rameson et al. 2010 JoCN",
+      "space": "MNI152",
+      "table_page": "Table 2",
+      "threshold": "p<.005 uncorrected in each sample",
+      "x": "60",
+      "y": "4",
+      "z": "-16"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 4.02764,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DorsAttnB_PostC_2",
+          "nearest_vertex": 8730,
+          "parcel": "LH_DorsAttnB_PostC_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.16222,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DorsAttnB_PostC_2",
+          "nearest_vertex": 8730,
+          "parcel": "LH_DorsAttnB_PostC_2",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "rostral IPL left",
+      "modality": "text+audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "09",
+      "roi": "ipl_ifg_how_gt_why_vezich2017_l;ripl_vezich2017",
+      "role": "location",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "-54",
+      "y": "-28",
+      "z": "46"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 0.8229,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContA_PFClv_1",
+          "nearest_vertex": 9226,
+          "parcel": "LH_ContA_PFClv_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.75675,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContA_PFClv_1",
+          "nearest_vertex": 9226,
+          "parcel": "LH_ContA_PFClv_1",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "left pIFG",
+      "modality": "text+audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "09",
+      "roi": "ipl_ifg_how_gt_why_vezich2017_l;pifg_vezich2017",
+      "role": "location",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "-46",
+      "y": "32",
+      "z": "12"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 7.90467,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_ContA_PFCl_1",
+          "nearest_vertex": 14319,
+          "parcel": "RH_ContA_PFCl_1",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 9.1484,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_ContA_PFCl_3",
+          "nearest_vertex": 13643,
+          "parcel": "RH_ContA_PFCl_3",
+          "unstable_assignment": true
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "right pIFG",
+      "modality": "text+audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "09",
+      "roi": "pifg_vezich2017",
+      "role": "location",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "52",
+      "y": "38",
+      "z": "16"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.58821,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DorsAttnB_PostC_3",
+          "nearest_vertex": 14503,
+          "parcel": "RH_DorsAttnB_PostC_3",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.08825,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DorsAttnB_PostC_3",
+          "nearest_vertex": 18663,
+          "parcel": "RH_DorsAttnB_PostC_3",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "rostral IPL right",
+      "modality": "text+audio",
+      "n": "",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "09",
+      "roi": "ripl_vezich2017",
+      "role": "location",
+      "source": "Vezich et al. 2017",
+      "space": "MNI152",
+      "table_page": "Table 4 / p.293",
+      "threshold": "whole-brain contrast",
+      "x": "36",
+      "y": "-38",
+      "z": "32"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 5.98638,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCd_1",
+          "nearest_vertex": 1859,
+          "parcel": "LH_DefaultB_PFCd_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.51395,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCd_1",
+          "nearest_vertex": 1859,
+          "parcel": "LH_DefaultB_PFCd_1",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 6.09073,
+          "hemi": "R",
+          "method": "aff",
+          "nearest_parcel": "RH_DefaultB_PFCd_1",
+          "nearest_vertex": 13909,
+          "parcel": "RH_DefaultB_PFCd_1",
+          "reason": "dropped_far_from_surface",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 5.57582,
+          "hemi": "R",
+          "method": "noaff",
+          "nearest_parcel": "RH_DefaultB_PFCd_1",
+          "nearest_vertex": 10504,
+          "parcel": "RH_DefaultB_PFCd_1",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "midline",
+      "label": "dmPFC",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "07",
+      "roi": "dmpfc_chua2011",
+      "role": "location",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "0",
+      "y": "54",
+      "z": "30"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.37045,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_pCunPCC_2",
+          "nearest_vertex": 311,
+          "parcel": "LH_DefaultA_pCunPCC_2",
+          "reason": "accepted",
+          "unstable_assignment": true
+        },
+        {
+          "distance_mm": 3.7519,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_pCunPCC_7",
+          "nearest_vertex": 5318,
+          "parcel": "LH_DefaultA_pCunPCC_7",
+          "unstable_assignment": true
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "precuneus",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "07",
+      "roi": "precuneus_chua2011",
+      "role": "location",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "-6",
+      "y": "-51",
+      "z": "36"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.8506,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_5",
+          "nearest_vertex": 52,
+          "parcel": "LH_DefaultA_PFCm_5",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.08182,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_5",
+          "nearest_vertex": 2797,
+          "parcel": "LH_DefaultA_PFCm_5",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "rMPFC",
+      "modality": "text+audio",
+      "n": "24",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "19",
+      "roi": "rmpfc_chua2009",
+      "role": "location",
+      "source": "Chua et al. 2009",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.3",
+      "threshold": "p<.005 uncorrected K>=5",
+      "x": "-12",
+      "y": "63",
+      "z": "12"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.18411,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultA_PFCm_2",
+          "nearest_vertex": 4870,
+          "parcel": "LH_DefaultA_PFCm_2",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.01646,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultA_PFCm_2",
+          "nearest_vertex": 261,
+          "parcel": "LH_DefaultA_PFCm_2",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "within_subject_condition",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "vmPFC",
+      "modality": "text+audio",
+      "n": "24",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "19",
+      "roi": "vmpfc_chua2009",
+      "role": "location",
+      "source": "Chua et al. 2009",
+      "space": "MNI152",
+      "table_page": "Table 1 / p.3",
+      "threshold": "p<.005 uncorrected K>=5",
+      "x": "-6",
+      "y": "39",
+      "z": "-12"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 2.17014,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_ContB_IPL_1",
+          "nearest_vertex": 916,
+          "parcel": "LH_ContB_IPL_1",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 1.19115,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_ContB_IPL_1",
+          "nearest_vertex": 916,
+          "parcel": "LH_ContB_IPL_1",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "left angular",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "07",
+      "roi": "l_angular_chua2011",
+      "role": "location",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "-51",
+      "y": "-63",
+      "z": "33"
+    },
+    {
+      "assignments": [
+        {
+          "distance_mm": 3.09274,
+          "hemi": "L",
+          "method": "aff",
+          "nearest_parcel": "LH_DefaultB_PFCv_3",
+          "nearest_vertex": 3088,
+          "parcel": "LH_DefaultB_PFCv_3",
+          "reason": "accepted",
+          "unstable_assignment": false
+        },
+        {
+          "distance_mm": 3.79034,
+          "hemi": "L",
+          "method": "noaff",
+          "nearest_parcel": "LH_DefaultB_PFCv_3",
+          "nearest_vertex": 3088,
+          "parcel": "LH_DefaultB_PFCv_3",
+          "unstable_assignment": false
+        }
+      ],
+      "contrast": "",
+      "design": "between_subject",
+      "direction": "+",
+      "hemi_rule": "side",
+      "label": "left IFG47",
+      "modality": "text with audio",
+      "n": "91",
+      "note": "K2b: 10mm sphere on labelled MID; nearest surface <=6mm; no network filter",
+      "paper_id": "07",
+      "roi": "ifg47_l_chua2011",
+      "role": "location",
+      "source": "Chua et al. 2011",
+      "space": "MNI152",
+      "table_page": "main p.3 / Supplement",
+      "threshold": "ROI logistic regression",
+      "x": "-48",
+      "y": "27",
+      "z": "-9"
+    }
+  ],
+  "rois": {
+    "dmpfc": {
+      "flags": [
+        "between_subject_source",
+        "social_content_confound"
+      ],
+      "left": 158,
+      "n_vertices": 191,
+      "network_composition": {
+        "Default": 191
+      },
+      "parcels": [
+        "LH_DefaultB_PFCd_1",
+        "LH_DefaultB_PFCd_2",
+        "LH_DefaultB_PFCd_4",
+        "RH_DefaultB_PFCd_1"
+      ],
+      "right": 33
+    },
+    "insula": {
+      "flags": [
+        "image_price_analogy"
+      ],
+      "left": 62,
+      "n_vertices": 93,
+      "network_composition": {
+        "SalVentAttn": 93
+      },
+      "parcels": [
+        "LH_SalVentAttnA_Ins_3",
+        "RH_SalVentAttnA_Ins_2"
+      ],
+      "right": 31
+    },
+    "l_ifg": {
+      "flags": [
+        "opposite_constructs"
+      ],
+      "left": 76,
+      "n_vertices": 76,
+      "network_composition": {
+        "Cont": 34,
+        "Default": 42
+      },
+      "parcels": [
+        "LH_ContA_PFClv_1",
+        "LH_DefaultB_PFCv_5"
+      ],
+      "right": 0
+    },
+    "lateral_temporal": {
+      "flags": [
+        "language_confound"
+      ],
+      "left": 136,
+      "n_vertices": 264,
+      "network_composition": {
+        "TempPar": 264
+      },
+      "parcels": [
+        "LH_TempPar_1",
+        "LH_TempPar_2",
+        "LH_TempPar_3",
+        "RH_TempPar_2",
+        "RH_TempPar_4"
+      ],
+      "right": 128
+    },
+    "mofc": {
+      "flags": [
+        "dropout_risk",
+        "image_analogy"
+      ],
+      "left": 50,
+      "n_vertices": 142,
+      "network_composition": {
+        "Default": 92,
+        "Limbic": 50
+      },
+      "parcels": [
+        "LH_LimbicB_OFC_4",
+        "RH_DefaultA_PFCm_1"
+      ],
+      "right": 92
+    },
+    "pcc_precuneus": {
+      "flags": [
+        "mixed_sources",
+        "unstable_assignment"
+      ],
+      "left": 102,
+      "n_vertices": 169,
+      "network_composition": {
+        "Default": 169
+      },
+      "parcels": [
+        "LH_DefaultA_pCunPCC_2",
+        "LH_DefaultA_pCunPCC_7",
+        "RH_DefaultA_pCunPCC_2",
+        "RH_DefaultA_pCunPCC_5"
+      ],
+      "right": 67
+    },
+    "r_ifg_ai": {
+      "flags": [
+        "unstable_assignment"
+      ],
+      "left": 0,
+      "n_vertices": 100,
+      "network_composition": {
+        "Default": 56,
+        "SalVentAttn": 44
+      },
+      "parcels": [
+        "RH_SalVentAttnB_Ins_1",
+        "RH_DefaultB_PFCv_1"
+      ],
+      "right": 100
+    },
+    "r_tpj": {
+      "flags": [
+        "box_centre_only"
+      ],
+      "left": 0,
+      "n_vertices": 39,
+      "network_composition": {
+        "Cont": 39
+      },
+      "parcels": [
+        "RH_ContB_IPL_1"
+      ],
+      "right": 39
+    },
+    "vmpfc_frontopolar": {
+      "flags": [
+        "dropout_risk"
+      ],
+      "left": 39,
+      "n_vertices": 77,
+      "network_composition": {
+        "Default": 39,
+        "Limbic": 38
+      },
+      "parcels": [
+        "LH_DefaultA_PFCm_1",
+        "RH_LimbicB_OFC_6"
+      ],
+      "right": 38
+    }
+  },
+  "talairach_afni_to_mni152": [
+    [
+      1.0686001818226878,
+      -0.003959206893800996,
+      0.008259711038957732,
+      1.0781555390892308
+    ],
+    [
+      0.006402499024408167,
+      1.0574069702505609,
+      0.08566281257183724,
+      1.168243532406646
+    ],
+    [
+      -0.012811475186137145,
+      -0.08863189955596745,
+      1.107921357723761,
+      -4.178049420864948
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ]
+}

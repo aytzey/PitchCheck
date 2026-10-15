@@ -13,6 +13,53 @@ import os
 from typing import Any
 
 from tribe_service.engine import _WORD_RE, direct_text_segment_words
+from tribe_service import roi_features
+from tribe_service.persuasion_features import roi_prior_from_summary
+
+ROI_SYNTH_Z = 0.5  # Unvalidated literature-prior threshold.
+
+
+def _roi_findings(fmri):
+    fmri = fmri or {}
+    summary = fmri.get("roi_summary")
+    prior = roi_prior_from_summary(summary, fmri.get("text_feature_compatible"),
+                                   roi_features.roi_multipliers(fmri.get("text_feature_model")),
+                                   encoder=fmri.get("text_feature_model"))
+    if not prior or not prior["applied"]:
+        return []
+    items = []
+    for key in ("vmpfc_frontopolar", "dmpfc", "r_ifg_ai"):
+        row = summary["rois"].get(key)
+        if not isinstance(row, dict) or key not in prior["centers"]:
+            continue
+        z = row["z"] - prior["centers"][key]
+        high = z >= ROI_SYNTH_Z
+        if key == "vmpfc_frontopolar" and (high or z <= -ROI_SYNTH_Z):
+            item = {"key": "roi_vmpfc_high" if high else "roi_vmpfc_low", "kind": "strength" if high else "gap",
+                    "observation": f"Predicted medial prefrontal (frontopolar) response analogue is {'above' if high else 'below'} this pitch's cortical average (z={z:.2f}, average-reader model).",
+                    "finding": "Why/gain-framed text+audio ads raised MPFC vs factual ones (within-subject); MPFC response to persuasive messages predicted later behaviour change across people.",
+                    "citation": "Vezich et al. 2017; Falk et al. 2010",
+                    "source_keys": ["vezich_2017_framing_action", "falk_2010_persuasion_change"],
+                    "lever": "Keep the why/gain framing in any rewrite." if high else "Say why the outcome matters to this reader (their goal or gain) before listing features."}
+        elif key == "dmpfc" and z <= -ROI_SYNTH_Z:
+            item = {"key": "roi_dmpfc_low", "kind": "gap",
+                    "observation": f"Predicted dorsomedial prefrontal response analogue is below this pitch's cortical average (z={z:.2f}, average-reader model; a property of the text, not a read on this recipient).",
+                    "finding": "Text arguments that each reader later rated persuasive drew more DMPFC activity than ones rated unpersuasive, in US and Korean samples (within-subject, uncorrected). The region also responds to social content in text without persuasive intent.",
+                    "citation": "Falk, Rameson et al. 2010 (JoCN); Yomogida et al. 2017 (Suppl.)",
+                    "source_keys": ["falk_2010_jocn_mentalizing_network", "yomogida_2017_norm_persuasion"],
+                    "lever": "State the claim and your reason in the reader's terms; add a true persona fact only if one exists."}
+        elif key == "r_ifg_ai" and high:
+            item = {"key": "roi_r_ifg_ai_high", "kind": "gap",
+                    "observation": f"Predicted right inferior frontal / anterior insula response analogue is above this pitch's cortical average (z={z:.2f}, average-reader model).",
+                    "finding": "Dogmatic health messages engaged right IFG/anterior insula more than suggestive ones and were rated less persuasive (text, within-subject, self-report).",
+                    "citation": "Hernández-Vergara et al. 2025",
+                    "source_keys": ["hernandez_vergara_2025_dogmatic_tone"],
+                    "lever": "Swap commands and must/need-to wording for a suggestion or a question; keep the ask easy to decline."}
+        else:
+            continue
+        items.append({**item, "axis": "cortical_roi", "roi": key,
+                      "sort_score": 50 + 50 * math.tanh(-z if key == "r_ifg_ai" else z)})
+    return items
 
 
 def _safe_score(axes: dict[str, dict[str, Any]], key: str, default: float = 50.0) -> float:
@@ -275,6 +322,8 @@ def synthesize_research_findings(
 
     gaps: list[dict[str, Any]] = []
     strengths: list[dict[str, Any]] = []
+    for item in _roi_findings(fmri_summary):
+        (gaps if item["kind"] == "gap" else strengths).append(item)
 
     # Raw-feature grounding: sustain_ratio is the fraction of segments above the
     # pitch's own mean response — a direct TRIBE measure of how much of the
@@ -417,7 +466,7 @@ def synthesize_research_findings(
         })
 
     # Severity order: biggest gaps first, then patterns/strengths.
-    gaps.sort(key=lambda item: _safe_score(neuro_axes, str(item.get("axis", "")), 50.0))
+    gaps.sort(key=lambda item: item.get("sort_score", _safe_score(neuro_axes, str(item.get("axis", "")), 50.0)))
     items = [*gaps, *strengths][:5]
 
     return {

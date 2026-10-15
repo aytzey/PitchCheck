@@ -215,3 +215,22 @@ def test_localization_reports_mapping_and_context(monkeypatch):
     monkeypatch.setattr(research_synthesis, "LOCALIZATION_CONTEXT_SEGMENTS", 0)
     narrow = research_synthesis.localize_pitch_segments(DANA, {"temporal_trace": trace, "temporal_trace_basis": "synthetic_word_order"})
     assert narrow["weakest"]["context_text"] == narrow["weakest"]["text"]
+
+
+def test_roi_rules_citations_and_rollback(monkeypatch):
+    import json
+    from tribe_service import persuasion_features as pf
+    summary = {'rois': {key: {'z': z} for key, z in [('vmpfc_frontopolar', -1), ('dmpfc', -1), ('r_ifg_ai', 1)]}}
+    fmri = {'roi_summary': summary, 'text_feature_compatible': True}
+    items = synthesize_research_findings(_axes(fluency=60), fmri)['items']
+    assert {item['key'] for item in items} == {'roi_vmpfc_low', 'roi_dmpfc_low', 'roi_r_ifg_ai_high'}
+    for item, source in zip(items, ['Vezich', 'Falk, Rameson', 'Hernández-Vergara']):
+        assert source in item['citation'] and item['axis'] == 'cortical_roi'
+        assert 'Predicted average-reader response' in item['observation']
+        assert item['source_keys'] and item['lever']
+    summary['rois']['vmpfc_frontopolar']['z'] = 1
+    assert any(i['key'] == 'roi_vmpfc_high' for i in synthesize_research_findings(_axes(), fmri)['items'])
+    baseline = json.dumps(synthesize_research_findings(_axes()), sort_keys=True)
+    assert json.dumps(synthesize_research_findings(_axes(), {'roi_summary': None}), sort_keys=True) == baseline
+    monkeypatch.setattr(pf, 'ROI_PRIOR_WEIGHT', 0)
+    assert json.dumps(synthesize_research_findings(_axes(), fmri), sort_keys=True) == baseline

@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from tribe_service import native_core
+from tribe_service import native_core, roi_features
 
 
 def _env_int(name: str, default: int, minimum: int) -> int:
@@ -538,6 +538,7 @@ _prediction_cache_bytes = 0
 _prediction_cache_lock = threading.Lock()
 
 DIRECT_TEXT_TIMING_BASIS = "synthetic_word_order"
+DIRECT_TEXT_EVENT_VERSION = "direct_v1"
 REAL_TIME_TIMING_BASIS = "real_time_seconds"
 TRIBE_PREDICTION_SUBJECT_BASIS = "average_subject"
 TRIBE_CORTICAL_MESH = "fsaverage5"
@@ -821,6 +822,10 @@ def load_runtime_models() -> None:
     model = get_model()
     if not TRIBE_ALLOW_MOCK:
         model.data.text_feature.model
+
+
+def _summary_overlay(matrix: np.ndarray) -> dict[str, Any]:
+    return {**_text_feature_metadata(), "roi_summary": roi_features.roi_summary(matrix)}
 
 
 def _text_feature_metadata() -> dict[str, Any]:
@@ -1297,7 +1302,7 @@ def _summarize_fmri_output_from_matrix(
     return {
         "segments": n_segments,
         "voxel_count": n_voxels,
-        **_text_feature_metadata(),
+        **_summary_overlay(predictions),
         "global_mean_abs": float(abs_preds.mean()),
         "global_peak_abs": float(abs_preds.max()),
         "temporal_trace": [round(v, 4) for v in temporal_trace],
@@ -1325,7 +1330,7 @@ def summarize_fmri_output(
         LOGGER.warning("Rust fMRI summary failed; using Python fallback: %s", exc)
         native_summary = None
     if native_summary is not None:
-        return {**native_summary, **_timing_metadata_for_input_mode(mode), **_text_feature_metadata()}
+        return {**native_summary, **_timing_metadata_for_input_mode(mode), **_summary_overlay(predictions)}
     return _summarize_fmri_output_from_matrix(
         predictions,
         text_input_mode=text_input_mode,
@@ -1477,7 +1482,7 @@ def analyze_predictions(
         native_analysis = None
     if native_analysis is not None:
         raw_features, fmri_summary, neural_signals = native_analysis
-        return raw_features, {**fmri_summary, **_timing_metadata_for_input_mode(mode), **_text_feature_metadata()}, neural_signals
+        return raw_features, {**fmri_summary, **_timing_metadata_for_input_mode(mode), **_summary_overlay(matrix)}, neural_signals
 
     raw_features = _extract_features_from_matrix(matrix)
     fmri_summary = _summarize_fmri_output_from_matrix(

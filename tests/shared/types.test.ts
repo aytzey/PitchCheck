@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { isPitchScoreReport, normalizePitchScoreReport, normalizeRefineEvidence, platformValues } from "@/shared/types";
 import { BREAKDOWN_KEYS, NEURAL_SIGNAL_KEYS, PLATFORMS } from "@/shared/constants";
+import { roiSummary, roiPrior } from "../fixtures/roi";
+import { specificityContrast } from "../fixtures/specificity";
 
 const contextFit = {
   persona_pain_alignment: { score: 70, note: "Pain" },
@@ -236,5 +238,79 @@ describe("shared/types", () => {
     expect(evidence?.rows[1]).toMatchObject({ semantic: 70, neural: 100, selection: 66 });
     expect(normalizeRefineEvidence({ mode: "model", evaluations: [] })).toBeNull();
     expect(normalizeRefineEvidence("nope")).toBeNull();
+    const base = { evaluations: [{ id: "original" }], roi_readout: { direction: "higher", delta: 123, used_in_selection: true } };
+    expect(normalizeRefineEvidence(base)?.roi).toEqual({ direction: "higher", usedInSelection: true });
+    expect(normalizeRefineEvidence({ ...base, roi_readout: { direction: "<script>" } })?.roi).toBeNull();
+    expect(normalizeRefineEvidence({ evaluations: {} })).toBeNull();
+    expect(normalizeRefineEvidence({ evaluations: Array.from({ length: 6 }, (_, i) => ({ id: `c${i + 1}` })) })?.rows).toHaveLength(4);
+  });
+});
+
+it("preserves signed ROI fields and provenance while filtering malformed statistics", () => {
+  const payload = {
+    persuasion_score: 60,
+    fmri_output: { segments: 6, voxel_count: 20484, global_mean_abs: 0.2, global_peak_abs: 0.5,
+      roi_summary: { ...roiSummary, rois: { ...roiSummary.rois, invalid: { z: "no", n_vertices: 10 } } } },
+    robustness: { neural_score: 60, roi_prior: roiPrior, roi_prior_points: -1.2 },
+  };
+  const normalized = normalizePitchScoreReport(payload)!;
+  expect(normalized.fmri_output?.roi_summary).toEqual(roiSummary);
+  expect(normalized.robustness?.roi_prior).toEqual(roiPrior);
+  expect(normalized.robustness?.roi_prior_points).toBe(-1.2);
+  const malformed = normalizePitchScoreReport({ ...payload,
+    fmri_output: { ...payload.fmri_output, roi_summary: { ...roiSummary, cortex_sd_signed: Infinity } },
+    robustness: { neural_score: 60, roi_prior: { ...roiPrior, raw: NaN }, roi_prior_points: "bad" },
+  })!;
+  expect(malformed.fmri_output?.roi_summary).toBeNull();
+  expect(malformed.robustness?.roi_prior).toBeNull();
+  expect(malformed.robustness?.roi_prior_points).toBeUndefined();
+  expect(normalizePitchScoreReport({ persuasion_score: 60 })?.fmri_output).toBeNull();
+});
+
+describe("specificity contrast normalization", () => {
+  const normalize = (specificity: unknown, shadow: unknown = 60.25) => normalizePitchScoreReport({
+    persuasion_score: 62, robustness: { specificity_contrast: specificity, score_without_specificity_prior: shadow },
+  })!.robustness!;
+
+  it("round-trips signed contrast metadata and the finite shadow score", () => {
+    const result = normalize({ ...specificityContrast, medial_z: -1.84, prior_points: -1.26 });
+    expect(result.specificity_contrast).toEqual({ ...specificityContrast, medial_z: -1.84, prior_points: -1.26 });
+    expect(result.score_without_specificity_prior).toBe(60.25);
+    expect(normalize({ available: false, reason: "skipped_busy" }).specificity_contrast)
+      .toMatchObject({ available: false, reason: "skipped_busy" });
+    expect(normalizePitchScoreReport({ persuasion_score: 60 })!.robustness).toBeNull();
+  });
+
+  it("filters malformed fields and bounds every nested collection and text", () => {
+    const result = normalize({ ...specificityContrast,
+      medial_z: "abc", prior_points: Infinity, relative_change: "0.1", roi_multiplier: "bad", grounded: "true",
+      rois: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`roi_${i}`, { z: "-1.2", pct: "30", role: "p".repeat(800) }])),
+      top_parcels: [{ name: "bad", z: NaN }, ...Array.from({ length: 5 }, () => ({ name: "parcel", z: "-2" }))],
+      replaced: [null, { span: "", category: "blank" }, ...Array.from({ length: 6 }, () => ({
+        span: "s".repeat(800), category: "c".repeat(800), persona_fact: "f".repeat(800), grounded: "false",
+      }))],
+      control_text: "x".repeat(3000), n_words: [20, "bad"], text_feature_compatible: "false",
+    }, Infinity);
+    const contrast = result.specificity_contrast!;
+    expect(contrast.medial_z).toBeUndefined();
+    expect(contrast.prior_points).toBeUndefined();
+    expect(contrast.roi_multiplier).toBeUndefined();
+    expect(contrast.relative_change).toBe(0.1);
+    expect(contrast.grounded).toBe(false);
+    expect(Object.keys(contrast.rois!)).toHaveLength(8);
+    expect(contrast.rois!.roi_0).toMatchObject({ z: -1.2, pct: 30 });
+    expect(contrast.rois!.roi_0.role).toHaveLength(500);
+    expect(contrast.top_parcels).toHaveLength(3);
+    expect(contrast.top_parcels![0].z).toBe(-2);
+    expect(contrast.replaced).toHaveLength(4);
+    expect(contrast.replaced![0]).toMatchObject({ grounded: false });
+    for (const field of ["span", "category", "persona_fact"] as const) expect(contrast.replaced![0][field]).toHaveLength(500);
+    expect(contrast.control_text).toHaveLength(2000);
+    expect(contrast.n_words).toBeUndefined();
+    expect(contrast.text_feature_compatible).toBeUndefined();
+    expect(result.score_without_specificity_prior).toBeNull();
+    expect(normalize({ available: "true" }).specificity_contrast).toBeNull();
+    expect(normalize([]).specificity_contrast).toBeNull();
+    expect(normalize({ available: true, rois: { bad: { z: Infinity, pct: 10 } } }).specificity_contrast!.rois).toEqual({});
   });
 });

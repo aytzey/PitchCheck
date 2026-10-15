@@ -9,7 +9,10 @@ deterministic scoring audit.
 from __future__ import annotations
 
 import math
+import os
 from typing import Any
+
+from tribe_service import roi_features
 
 
 # ponytail: hand-set unvalidated prior; retune when paired outcome or human-rating data exists.
@@ -21,7 +24,7 @@ NEURO_AXIS_WEIGHTS = {
     "processing_fluency": 0.15,
 }
 
-CALIBRATION_METHODOLOGY_VERSION = "neural_only_v2.2"
+CALIBRATION_METHODOLOGY_VERSION = "neural_only_v2.3"
 
 # Provenance registry for every cited finding and literature prior. Optional evidence_level
 # (";"-joined) and modality appear only on entries read or abstract-checked; absent = unverified.
@@ -191,8 +194,8 @@ RESEARCH_SOURCES = [
         "title": "Self-related neural response to tailored smoking-cessation messages predicts quitting",
         "url": "https://doi.org/10.1038/nn.2761",
         "evidence_level": "individual_differences_in_sample",
-        "modality": "fMRI; audio-visual statements tailored from each smoker's survey (N=87)",
-        "finding": "dmPFC response to tailored vs neutral statements predicted quitting at 4 months (OR=1.31); tailored statements were remembered better, but memory did not predict quitting; no self-report comparison.",
+        "modality": "fMRI; audio-visual statements tailored from motivated smokers' surveys (N=91 scanned, 87 follow-up)",
+        "finding": "dmPFC response to tailored vs neutral statements predicted quitting at 4 months (in-sample individual-level OR=1.31); the combined three-region OR=1.36 included angular cortex, precuneus alone p=.078. Memory did not predict quitting; no self-report comparison. Small single-laboratory health sample; disclosed commercial tailoring interests; not a validated message-level effect.",
     },
     {
         "key": "klucharev_2008_expert_power",
@@ -309,7 +312,7 @@ RESEARCH_SOURCES = [
         "url": "https://doi.org/10.1016/j.biopsych.2008.08.030",
         "evidence_level": "within_subject_condition_contrast",
         "modality": "fMRI; audio + on-screen smoking messages (N=24)",
-        "finding": "High-tailored messages engaged rMPFC and precuneus/PCC (partly as less deactivation) versus low-tailored; behavior was not tested.",
+        "finding": "High-tailored messages engaged rMPFC and precuneus/PCC (partly as less deactivation) versus low-tailored (N=24 motivated smokers, uncorrected thresholds); behavior was not tested. Small single-laboratory health sample with disclosed commercial tailoring interests.",
     },
     {
         "key": "cascio_2015_peer_recommendations",
@@ -636,8 +639,68 @@ def neuro_axis_score_from_axes(axes: dict[str, dict[str, Any]]) -> float:
     return clamp(score / max(total_weight, 1e-9))
 
 
+# Literature prior, UNVALIDATED: direction of the closest message-level finding.
+ROI_PRIOR_WEIGHT = clamp(_safe_float(os.getenv("PITCHCHECK_ROI_PRIOR_WEIGHT"), 0.15), 0.0, 0.5)
+ROI_ENCODER_MISMATCH_FACTOR = clamp(_safe_float(os.getenv("PITCHCHECK_ROI_ENCODER_MISMATCH_FACTOR"), 0.5), 0.0, 1.0)
+SPECIFICITY_SCORE_WEIGHT = max(0.0, _safe_float(os.getenv("PITCHCHECK_SPECIFICITY_SCORE_WEIGHT"), 1.5))
+SPECIFICITY_Z_MIN = max(0.0, _safe_float(os.getenv("PITCHCHECK_SPECIFICITY_Z_MIN"), 1.0))
+SPECIFICITY_REFINE_PENALTY = clamp(_safe_float(os.getenv("PITCHCHECK_SPECIFICITY_REFINE_PENALTY"), 2.0), 0.0, 2.0)
+
+
+def specificity_prior_points(contrast: dict | None) -> float:
+    """Unvalidated literature prior: persona grounding, z dead zone, then a signed ±3 ceiling."""
+    if not contrast or contrast.get("available") is not True or contrast.get("grounded") is not True:
+        return 0.0
+    z = _safe_float(contrast.get("medial_z"), 0.0)
+    excess = max(0.0, min(abs(z), SPECIFICITY_Z_MIN + 2.0) - SPECIFICITY_Z_MIN)
+    return round(clamp(math.copysign(excess, z) * SPECIFICITY_SCORE_WEIGHT, -3.0, 3.0), 2)
+
+
+# shortcut: provisional unit defaults; replace with per-encoder benchmark/Stage-0 artifacts after a GPU run.
+ROI_Z_SCALE = 1.0
+ROI_UNIT_PROVENANCE = "provisional_unit_defaults:ws07;gpu_not_run"
+ROI_PRIOR = {
+    "vmpfc_frontopolar": (+1, 0.30, 0.0, ("falk_2010_persuasion_change", "vezich_2017_framing_action")),
+    "dmpfc": (+1, 0.20, 0.0, ("falk_2010_jocn_mentalizing_network", "chua_2011_tailored_self_related")),
+    "r_ifg_ai": (-1, 0.20, 0.0, ("hernandez_vergara_2025_dogmatic_tone",)),
+    "mofc": (+1, 0.15, 0.0, ("plassmann_2007_wtp_ofc", "hernandez_vergara_2025_dogmatic_tone")),
+    "insula": (-1, 0.15, 0.0, ("knutson_2007_neural_purchase",)),
+    "pcc_precuneus": (+1, 0.05, 0.0, ("chua_2009_tailoring", "chua_2011_tailored_self_related")),
+}
+
+
+def roi_prior_from_summary(summary, text_feature_compatible=None, multipliers=None, encoder=None):
+    """K4: multipliers shrink only the numerator; a neutral prior leaves the anchor unchanged."""
+    rois = summary.get("rois") if isinstance(summary, dict) else None
+    if ROI_PRIOR_WEIGHT <= 0 or not isinstance(rois, dict):
+        return None
+    avail = [k for k in ROI_PRIOR if isinstance(rois.get(k), dict) and
+             isinstance(rois[k].get("z"), (int, float)) and math.isfinite(rois[k]["z"])]
+    if not avail:
+        return None
+    calibration = roi_features.roi_calibration(encoder)
+    centers = {k: _safe_float(calibration.get("centers", {}).get(k), ROI_PRIOR[k][2]) for k in avail}
+    scale = _safe_float(calibration.get("ROI_Z_SCALE"), ROI_Z_SCALE)
+    if scale <= 1e-12:
+        scale = ROI_Z_SCALE
+    m = {k: clamp(_safe_float((multipliers or {}).get(k), 1.0), 0.0, 1.0) for k in avail}
+    terms = {k: ROI_PRIOR[k][0] * ROI_PRIOR[k][1] * m[k] * (rois[k]["z"] - centers[k]) for k in avail}
+    raw = sum(terms.values()) / sum(ROI_PRIOR[k][1] for k in avail)
+    mismatch = text_feature_compatible is False
+    weight = ROI_PRIOR_WEIGHT * (ROI_ENCODER_MISMATCH_FACTOR if mismatch else 1.0)
+    return {"score": round(50 + 50 * math.tanh(raw / scale), 1), "raw": round(raw, 4),
+            "weight": round(weight, 4), "applied": weight > 0, "multipliers": m,
+            "terms": {k: round(v, 4) for k, v in terms.items()}, "version": "roi_prior_v1",
+            "centers": centers, "ROI_Z_SCALE": scale, "encoder": encoder,
+            "unit_calibration_provenance": calibration.get("provenance", ROI_UNIT_PROVENANCE),
+            "provenance": "literature_prior_unvalidated" + (";encoder_mismatch" if mismatch else "")}
+
+
 def evidence_score_from_analysis(neural_signals: dict[str, float], evidence: dict[str, Any] | None = None) -> float:
     axis_score = neuro_axis_score_from_axes(neuro_axes_from_analysis(neural_signals, evidence))
+    roi = evidence.get("roi_prior") if isinstance(evidence, dict) else None
+    if isinstance(roi, dict) and roi.get("applied"):
+        axis_score = clamp(axis_score + roi["weight"] * (clamp(roi["score"]) - 50))
     return quality_adjusted_score(axis_score, evidence)
 
 

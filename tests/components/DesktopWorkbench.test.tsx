@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DesktopWorkbench from "@/components/DesktopWorkbench";
 import type { PitchScoreReport } from "@/shared/types";
+import { roiSummary, roiPrior } from "../fixtures/roi";
+import { specificityContrast } from "../fixtures/specificity";
 
 const mockFetch = vi.fn();
 const tauriMocks = vi.hoisted(() => ({
@@ -112,6 +114,50 @@ async function renderReport(report: unknown) {
   fireEvent.click(screen.getByRole("button", { name: /Score message/ }));
   await screen.findByText("Variant re-rank");
 }
+
+describe("WS12 desktop specificity contrast", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+    mockFetch.mockReset();
+    tauriMocks.invoke.mockReset();
+    delete window.__TAURI_INTERNALS__;
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it.each([
+    [1.3, 1.84, true, "Specific details: +1.3 pts (literature prior) — keep these true details", 1],
+    [-0.8, -1.84, true, "Specific details: -0.8 pts (literature prior) — tie details to this reader", 1],
+    [0, 1.84, false, "No score effect: details not in persona", 1],
+    [0, 0.9, true, "No score effect: details barely change the predicted response", 1],
+    [0, 1.84, true, "No score effect: specificity literature prior not applied", 1],
+    [0, 1.5, true, "No score effect: details barely change the predicted response", 2],
+  ] as const)("shows the action for prior %s, z %s, grounded %s", async (points, z, grounded, action, zMin) => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report, robustness: { ...report.robustness,
+      specificity_contrast: { ...specificityContrast, prior_points: points, medial_z: z, grounded, z_min: zMin },
+    } });
+    const row = screen.getByText("SPC").closest(".pc-rank-row")!;
+    expect(screen.getByText(action)).toBeDefined();
+    expect(action.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(row.textContent).toContain("exp");
+    expect(row.getAttribute("title")).toContain("predicted average-reader medial prefrontal / posterior-medial response");
+    expect(row.getAttribute("title")).toContain(`${z >= 0 ? "+" : ""}${z.toFixed(1)} SD`);
+    expect(row.previousElementSibling?.textContent).toContain("processing_fluency");
+    const comparison = screen.getByText("Compared with").closest("details")!;
+    expect(comparison.open).toBe(false);
+    expect(comparison.textContent).toContain(specificityContrast.control_text);
+    expect(screen.getAllByText(/cannot tell whether these details are true or relevant for this recipient/)).toHaveLength(2);
+  });
+
+  it.each([undefined, null, { available: false, reason: "skipped_busy" }, { available: "true" }])(
+    "hides SPC for absent, skipped, or invalid contrast %#", async (contrast) => {
+      const report = fullReport(78, true);
+      await renderReport({ ...report, robustness: { ...report.robustness, specificity_contrast: contrast } });
+      expect(screen.queryByText("SPC")).toBeNull();
+      expect(screen.queryByText("Compared with")).toBeNull();
+    },
+  );
+});
 
 describe("DesktopWorkbench", () => {
   beforeEach(() => {
@@ -381,5 +427,80 @@ describe("DesktopWorkbench", () => {
 
     expect(await screen.findByText("After . refined")).toBeDefined();
     expect(refineCalls).toBe(2);
+  });
+});
+
+describe("WS07 desktop ROI fields", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+    mockFetch.mockReset();
+    tauriMocks.invoke.mockReset();
+    delete window.__TAURI_INTERNALS__;
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it("hides the ROI row for old servers and shares the signal explanation", async () => {
+    await renderReport(fullReport(78, true));
+    expect(screen.queryByText("ROI prior (literature prior)")).toBeNull();
+    expect(screen.getAllByText("About these signals")).toHaveLength(2);
+    expect(screen.queryByRole("img", { name: "Signed ROI analogues for the average reader" })).toBeNull();
+  });
+
+  it("fills the ROI row, uses atlas centroids and sends only levers to refine", async () => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report,
+      fmri_output: { ...report.fmri_output, roi_summary: roiSummary },
+      robustness: { ...report.robustness, roi_prior: roiPrior, roi_prior_points: -1.2,
+        research_synthesis: { items: [{ key: "roi_vmpfc_low", kind: "gap", axis: "cortical_roi",
+          observation: "Predicted medial prefrontal response z=-0.5", finding: "Finding", citation: "Vezich et al. 2017",
+          lever: "Say why the outcome matters to this reader." }] } },
+    });
+    expect(screen.getByText("ROI prior (literature prior)")).toBeDefined();
+    expect(screen.getByText("-1.2 pts")).toBeDefined();
+    expect(screen.getByText(/external fidelity: weak · in silico: null/)).toBeDefined();
+    expect(screen.getByRole("img", { name: "Signed ROI analogues for the average reader" })).toBeDefined();
+    expect(screen.queryByText(/Positions are decorative/)).toBeNull();
+    expect(screen.getByText(/signed ROI analogues \(average reader\)/)).toBeDefined();
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ refined_message: "A concrete rewrite with a clear ask.", model: "test" }) });
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
+    await screen.findByText("After . refined");
+    const suggestions = JSON.parse(mockFetch.mock.calls[1][1].body as string).suggestions.join(" ");
+    expect(suggestions).toContain("Say why the outcome matters");
+    expect(suggestions).not.toContain("z=-0.5");
+    expect(suggestions).not.toContain("medial prefrontal");
+  });
+
+  it("labels an experimental research hypothesis HYP", async () => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report, robustness: { ...report.robustness, research_synthesis: {
+      items: [{ key: "falk2010jocn_core_low_relative", kind: "hypothesis", axis: null, experimental: true,
+        reference: "default_prior_within_draft", observation: "Predicted average-reader response is relatively low.",
+        finding: "Unvalidated literature prior; not this recipient.", citation: "Falk, Rameson et al. 2010 (JoCN)",
+        lever: "State the claim and your reason in the reader's own terms." }],
+    } } });
+    expect(screen.getByText("HYP")).toBeDefined();
+  });
+
+  it.each([
+    ["higher", true, "≤0.5 pt nudge"],
+    ["higher", false, "not used for ranking"],
+    ["lower", false, "not used for ranking"],
+    ["no_reliable_difference", true, "experimental"],
+  ])("shows the concise ROI readout %s (Jev=%s)", async (direction, jev, label) => {
+    await renderReport(fullReport(78, true));
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({
+      refined_message: "A concrete rewrite with a clear ask.", model: "test", tribe_guidance: {
+        mode: "model", selected_id: "c1", improved: true,
+        evaluations: [{ id: "original", eligible: true }, { id: "c1", eligible: true }],
+        ...(jev ? { selection_policy: {} } : {}), roi_readout: { direction, used_in_selection: jev },
+      },
+    }) });
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
+    const line = await screen.findByText(/Medial-prefrontal response vs your draft:/);
+    expect(line.textContent).toContain(label);
+    expect(line.textContent!.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(line.getAttribute("title")).toContain("Predicted average-reader response");
+    expect(screen.getAllByText(/not a mental state/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/vmPFC/)).toBeNull();
   });
 });

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import asyncio
@@ -28,7 +29,8 @@ from tribe_service.schemas import (
     RewriteSuggestion,
     TopMove,
 )
-from tribe_service import score_log
+from tribe_service import engine, score_log
+from tribe_service.specificity import make_specificity_twin, measure_specificity
 from tribe_service.engine import (
     _WORD_RE,
     FEATURE_KEYS,
@@ -53,8 +55,10 @@ from tribe_service.llm_layer import (
     _openrouter_enabled,
     plan_tribe_refinement,
     OPENROUTER_ENABLED,
+    ROI_ENCODER_MISMATCH_FACTOR,
 )
-from tribe_service.persuasion_features import calibration_quality_weight, evidence_score_from_analysis, neuro_axes_from_analysis
+from tribe_service.persuasion_features import (calibration_quality_weight, evidence_score_from_analysis,
+                                               neuro_axes_from_analysis, SPECIFICITY_REFINE_PENALTY)
 from tribe_service.auth import (
     AUTH_STORE,
     AuthConfigurationError,
@@ -87,6 +91,7 @@ TRIBE_MAX_LLM_CONCURRENCY = _env_int("TRIBE_MAX_LLM_CONCURRENCY", 2, 1)
 TRIBE_LLM_TIMEOUT_SECONDS = _env_float("TRIBE_LLM_TIMEOUT_SECONDS", 180.0, 1.0)
 TRIBE_IDLE_UNLOAD_SECONDS = _env_float("TRIBE_IDLE_UNLOAD_SECONDS", 600.0, 0.0)
 MAX_REQUEST_BODY_BYTES = _env_int("PITCHCHECK_MAX_REQUEST_BODY_BYTES", 128 * 1024, 1024)
+SPECIFICITY_ENABLED = os.getenv("PITCHCHECK_SPECIFICITY_CONTRAST", "1") == "1"
 
 _score_lock = asyncio.Semaphore(TRIBE_MAX_SCORE_CONCURRENCY)
 _llm_lock = asyncio.Semaphore(TRIBE_MAX_LLM_CONCURRENCY)
@@ -279,12 +284,14 @@ def _log_detached_worker_result(task: asyncio.Task) -> None:
         )
 
 
-async def _run_with_backpressure(function, *args, lock, timeout, track_runtime=False, **kwargs):
+async def _run_with_backpressure(function, *args, lock, timeout, track_runtime=False, wait_for_slot=True, **kwargs):
     try:
-        await asyncio.wait_for(
-            lock.acquire(),
-            timeout=TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS,
-        )
+        if wait_for_slot:
+            await asyncio.wait_for(lock.acquire(), timeout=TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS)
+        else:
+            if lock.locked():  # Semaphore.locked also includes queued primary waiters.
+                raise ScoreQueueTimeoutError
+            await lock.acquire()  # No suspension when free: check and acquire stay atomic.
     except asyncio.TimeoutError as exc:
         raise ScoreQueueTimeoutError from exc
 
@@ -322,6 +329,37 @@ async def _score_text_with_backpressure(message: str):
         score_text, message, lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS,
         track_runtime=True,
     )
+
+
+def _start_specificity_twin(message: str, persona: str):
+    if not SPECIFICITY_ENABLED or TRIBE_ALLOW_MOCK:
+        return None
+    if ROI_ENCODER_MISMATCH_FACTOR <= 0 and engine._text_feature_metadata().get("text_feature_compatible") is False:
+        future = asyncio.get_running_loop().create_future()
+        future.set_result({"available": False, "reason": "encoder_mismatch_disabled"})
+        return future
+    # ponytail: fixed 20-s twin budget; revisit only if real latency monitoring warrants it.
+    task = asyncio.create_task(_run_with_backpressure(make_specificity_twin, message, persona,
+                                                     lock=_llm_lock, timeout=20.0))
+    _worker_tasks.add(task)
+    task.add_done_callback(_worker_tasks.discard)
+    task.add_done_callback(_log_detached_worker_result)
+    return task
+
+
+async def _specificity(message: str, twin_task, original=None):
+    if twin_task is None:
+        return None
+    try:
+        twin = await twin_task
+        if not twin.get("available"):
+            return twin
+        if _score_lock.locked():
+            return {"available": False, "reason": "skipped_busy"}
+        return await _run_with_backpressure(measure_specificity, message, twin, original, lock=_score_lock,
+                                            timeout=TRIBE_SCORE_TIMEOUT_SECONDS, track_runtime=True, wait_for_slot=False)
+    except Exception as exc:  # Optional work must never turn a primary /score into a 429/504.
+        return {"available": False, "reason": f"skipped_{type(exc).__name__}"}
 
 
 async def _idle_unload_loop() -> None:
@@ -444,6 +482,7 @@ def _score_log_record(request, report, raw_features, fmri_data, neural_signals) 
 async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)):
     """Score a sales pitch for persuasion effectiveness against a target persona."""
     try:
+        twin_task = _start_specificity_twin(request.message, request.persona)
         # 1. Run TRIBE text scoring
         predictions = await _score_text_with_backpressure(request.message)
 
@@ -452,6 +491,7 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             analyze_predictions, predictions,
             text_input_mode=TRIBE_TEXT_INPUT_MODE,
         )
+        specificity = await _specificity(request.message, twin_task, predictions)
 
         # 3. LLM interpretation or deterministic neural-only report.
         llm_result = await _run_with_backpressure(
@@ -464,6 +504,7 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             raw_features=raw_features,
             fmri_summary=fmri_data,
             openrouter_model=request.open_router_model,
+            **({"specificity_contrast": specificity} if specificity is not None else {}),
         )
 
         # 4. Assemble PitchScoreReport
@@ -565,6 +606,20 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         )
 
 
+_REFINE_ROI_KEYS = ("mpfc_falk2010", "falk2010jocn_core", "ipl_ifg_how_gt_why_vezich2017_l")
+
+
+def _roi_features(fmri: dict) -> dict:
+    summary = fmri.get("roi_summary")
+    locations = summary.get("locations") if isinstance(summary, dict) else None
+    if not isinstance(locations, dict):
+        return {}
+    values = {key: row.get("minus_cortex") for key in _REFINE_ROI_KEYS
+              if isinstance(row := locations.get(key), dict)}
+    return {key: round(float(value), 6) for key, value in values.items()
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)}
+
+
 def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str,
                                baseline: dict | None = None) -> list[dict]:
     measurements = [baseline] if baseline is not None else []
@@ -577,6 +632,8 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
             "id": "original" if index == 0 else f"c{index}", "message": text,
             "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
             "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
+            "roi_prior_score": (evidence.get("roi_prior") or {}).get("score"),
+            "roi_features": _roi_features(fmri),
             "quality_weight": calibration_quality_weight(evidence),
             "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
             "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],
@@ -617,6 +674,7 @@ def _log_refine_candidates(message: str, guidance: dict, *, jev: bool) -> None:
 async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_auth)):
     """Generate drafts, measure each with TRIBE, then select a context-validated measured draft."""
     try:
+        twin_task = _start_specificity_twin(request.message, request.persona) if SPECIFICITY_REFINE_PENALTY > 0 else None
         baseline = strategy = None
         if request.jev_strategy:
             if not _openrouter_enabled(request.open_router_model):
@@ -649,11 +707,13 @@ async def refine_pitch(request: PitchRefineRequest, _: str = Depends(require_aut
                 baseline,
                 lock=_score_lock, timeout=TRIBE_SCORE_TIMEOUT_SECONDS, track_runtime=True,
             )
+            specificity = await _specificity(request.message, twin_task)
             result = await _run_with_backpressure(
                 select_tribe_refinement, request.message, request.persona, request.platform,
                 request.suggestions, result, measurements,
                 [item.model_dump() for item in request.clarification_answers],
                 lock=_llm_lock, timeout=TRIBE_LLM_TIMEOUT_SECONDS,
+                **({"specificity": specificity} if specificity is not None else {}),
             )
             if score_log.enabled():
                 try:

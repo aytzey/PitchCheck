@@ -79,8 +79,10 @@ export interface NeuroAxisReport {
 // One citation-anchored link between TRIBE geometry and a published finding
 export interface ResearchSynthesisItem {
   key: string;
-  kind: "gap" | "strength" | "pattern";
-  axis?: string;
+  kind: "gap" | "strength" | "pattern" | "hypothesis";
+  axis?: string | null;
+  experimental?: boolean;
+  reference?: string;
   observation: string;
   finding: string;
   citation: string;
@@ -129,9 +131,35 @@ export interface ResearchSynthesis {
   basis?: string;
 }
 
+export interface SpecificityContrast {
+  available: boolean;
+  grounded: boolean;
+  medial_z?: number;
+  z_min?: number;
+  relative_change?: number;
+  prior_points?: number;
+  roi_multiplier?: number;
+  rois?: Record<string, { z: number; pct: number; role?: string }>;
+  top_parcels?: Array<{ name: string; z: number }>;
+  replaced?: Array<{ span: string; category: string; persona_fact: string; grounded: boolean }>;
+  control_text?: string;
+  n_words?: [number, number];
+  encoder?: string;
+  text_feature_compatible?: boolean;
+  direction?: string;
+  basis?: string;
+  caveat?: string;
+  reason?: string;
+  provenance?: string;
+}
+
 // Robustness/calibration metadata for the final persuasion score
 export interface RobustnessReport {
   context_fit_rubric_version?: string;
+  roi_prior?: RoiPrior | null;
+  roi_prior_points?: number;
+  specificity_contrast?: SpecificityContrast | null;
+  score_without_specificity_prior?: number | null;
   neural_prior_score?: number;
   neural_score: number;
   quality_adjusted_neural_score?: number;
@@ -219,6 +247,7 @@ export interface PitchScoreReport {
 
 // fMRI output from TRIBE neural model
 export interface FmriOutput {
+  roi_summary?: RoiSummary | null;
   segments: number;
   voxel_count: number;
   global_mean_abs: number;
@@ -234,6 +263,41 @@ export interface FmriOutput {
   temporal_trace_basis?: "real_time_seconds" | "synthetic_word_order";
   temporal_segment_label?: string;
   temporal_trace_note?: string;
+}
+
+export interface RoiStats {
+  mean_signed: number;
+  minus_cortex: number;
+  z: number;
+  n_vertices: number;
+  in_silico_check?: string;
+  external_fidelity?: { status: string; r_over_ceiling?: number; factor?: number; source?: string };
+}
+
+export interface RoiSummary {
+  atlas: string;
+  basis: string;
+  roi_set_version: string;
+  location_set_version: string;
+  asset_sha256: string;
+  subject_basis: string;
+  caveat: string;
+  cortex_mean_signed: number;
+  cortex_sd_signed: number;
+  rois: Record<string, RoiStats>;
+  locations: Record<string, RoiStats>;
+}
+
+export interface RoiPrior {
+  score: number;
+  raw: number;
+  weight: number;
+  applied: boolean;
+  version: string;
+  provenance: string;
+  terms: Record<string, number>;
+  multipliers: Record<string, number>;
+  unit_calibration_provenance?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -548,6 +612,68 @@ function normalizeContextFit(value: unknown): ContextFitReport | null {
   };
 }
 
+function normalizeRoiStats(value: unknown): Record<string, RoiStats> {
+  if (!isRecord(value)) return {};
+  const entries: Array<[string, RoiStats]> = [];
+  for (const [key, row] of Object.entries(value).slice(0, 64)) {
+    if (!/^[a-z][a-z0-9_]{0,79}$/.test(key) || !isRecord(row)) continue;
+    const mean = parseFiniteNumber(row.mean_signed);
+    const minus = parseFiniteNumber(row.minus_cortex);
+    const z = parseFiniteNumber(row.z);
+    const n = normalizeInteger(row.n_vertices);
+    if (mean === null || minus === null || z === null || n === null || n <= 0 || n > 20484) continue;
+    const item: RoiStats = { mean_signed: mean, minus_cortex: minus, z, n_vertices: n };
+    if (["pass", "pass_broad", "null", "reversed", "not_run", "uninformative"].includes(String(row.in_silico_check))) {
+      item.in_silico_check = String(row.in_silico_check);
+    }
+    if (isRecord(row.external_fidelity)) {
+      const f = row.external_fidelity;
+      const factor = parseFiniteNumber(f.factor);
+      item.external_fidelity = {
+        status: ["ok", "weak", "unmeasurable", "not_benchmarked"].includes(String(f.status)) ? String(f.status) : "not_benchmarked",
+        r_over_ceiling: parseFiniteNumber(f.r_over_ceiling) ?? undefined,
+        factor: factor === null ? undefined : clamp(factor, 0, 1),
+        source: normalizeOptionalText(f.source, MAX_SHORT_TEXT_CHARS) || undefined,
+      };
+    }
+    entries.push([key, item]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function normalizeRoiSummary(value: unknown): RoiSummary | null {
+  if (!isRecord(value)) return null;
+  const mean = parseFiniteNumber(value.cortex_mean_signed);
+  const sd = parseFiniteNumber(value.cortex_sd_signed);
+  const rois = normalizeRoiStats(value.rois);
+  if (mean === null || sd === null || sd <= 0 || !Object.keys(rois).length) return null;
+  return {
+    atlas: normalizeOptionalText(value.atlas, MAX_SHORT_TEXT_CHARS),
+    basis: normalizeOptionalText(value.basis, MAX_SHORT_TEXT_CHARS),
+    roi_set_version: normalizeOptionalText(value.roi_set_version, MAX_SHORT_TEXT_CHARS),
+    location_set_version: normalizeOptionalText(value.location_set_version, MAX_SHORT_TEXT_CHARS),
+    asset_sha256: normalizeOptionalText(value.asset_sha256, MAX_SHORT_TEXT_CHARS),
+    subject_basis: normalizeOptionalText(value.subject_basis, MAX_SHORT_TEXT_CHARS),
+    caveat: normalizeOptionalText(value.caveat, MAX_REPORT_TEXT_CHARS),
+    cortex_mean_signed: mean, cortex_sd_signed: sd, rois, locations: normalizeRoiStats(value.locations),
+  };
+}
+
+function normalizeRoiPrior(value: unknown): RoiPrior | null {
+  if (!isRecord(value)) return null;
+  const score = normalizeScore(value.score);
+  const raw = parseFiniteNumber(value.raw);
+  const weight = parseFiniteNumber(value.weight);
+  if (score === null || raw === null || weight === null || weight < 0 || weight > 0.5 || typeof value.applied !== "boolean") return null;
+  return {
+    score, raw, weight, applied: value.applied && weight > 0,
+    version: normalizeOptionalText(value.version, MAX_SHORT_TEXT_CHARS),
+    provenance: normalizeOptionalText(value.provenance, MAX_SHORT_TEXT_CHARS),
+    terms: normalizeNumberRecord(value.terms), multipliers: normalizeNumberRecord(value.multipliers),
+    unit_calibration_provenance: normalizeOptionalText(value.unit_calibration_provenance, MAX_SHORT_TEXT_CHARS) || undefined,
+  };
+}
+
 function normalizeFmriOutput(value: unknown): FmriOutput | null {
   if (!isRecord(value)) return null;
   const segments = normalizeInteger(value.segments);
@@ -575,6 +701,7 @@ function normalizeFmriOutput(value: unknown): FmriOutput | null {
     temporal_trace_basis: temporalTraceBasis,
     temporal_segment_label: normalizeOptionalText(value.temporal_segment_label, MAX_SHORT_TEXT_CHARS) || undefined,
     temporal_trace_note: normalizeOptionalText(value.temporal_trace_note, MAX_REPORT_TEXT_CHARS) || undefined,
+    roi_summary: normalizeRoiSummary(value.roi_summary),
   };
 }
 
@@ -623,6 +750,58 @@ function normalizeNeuroAxes(value: unknown) {
     };
   }
   return Object.keys(axes).length ? axes : undefined;
+}
+
+function normalizeSpecificityContrast(value: unknown): SpecificityContrast | null {
+  if (!isRecord(value) || typeof value.available !== "boolean") return null;
+  const rois: Array<[string, { z: number; pct: number; role?: string }]> = [];
+  if (isRecord(value.rois)) {
+    for (const [key, row] of Object.entries(value.rois).slice(0, 8)) {
+      if (!/^[a-z][a-z0-9_]{0,79}$/.test(key) || !isRecord(row)) continue;
+      const z = parseFiniteNumber(row.z);
+      const pct = parseFiniteNumber(row.pct);
+      if (z !== null && pct !== null) rois.push([key, {
+        z, pct, role: normalizeOptionalText(row.role, MAX_SHORT_TEXT_CHARS) || undefined,
+      }]);
+    }
+  }
+  const contrast: SpecificityContrast = {
+    available: value.available,
+    grounded: value.grounded === true,
+    medial_z: parseFiniteNumber(value.medial_z) ?? undefined,
+    z_min: parseFiniteNumber(value.z_min) ?? undefined,
+    relative_change: parseFiniteNumber(value.relative_change) ?? undefined,
+    prior_points: parseFiniteNumber(value.prior_points) ?? undefined,
+    roi_multiplier: parseFiniteNumber(value.roi_multiplier) ?? undefined,
+    rois: Object.fromEntries(rois),
+    top_parcels: normalizeItems(value.top_parcels, 3, (row) => {
+      if (!isRecord(row)) return null;
+      const name = normalizeOptionalText(row.name, MAX_SHORT_TEXT_CHARS);
+      const z = parseFiniteNumber(row.z);
+      return name && z !== null ? { name, z } : null;
+    }),
+    replaced: normalizeItems(value.replaced, 4, (row) => {
+      if (!isRecord(row)) return null;
+      const span = normalizeText(row.span, "", MAX_SHORT_TEXT_CHARS);
+      const category = normalizeText(row.category, "", MAX_SHORT_TEXT_CHARS);
+      return span && category ? { span, category,
+        persona_fact: normalizeText(row.persona_fact, "", MAX_SHORT_TEXT_CHARS), grounded: row.grounded === true,
+      } : null;
+    }),
+    control_text: normalizeText(value.control_text, "", MAX_REPORT_TEXT_CHARS),
+    encoder: normalizeOptionalText(value.encoder, MAX_SHORT_TEXT_CHARS) || undefined,
+    text_feature_compatible: typeof value.text_feature_compatible === "boolean" ? value.text_feature_compatible : undefined,
+    direction: normalizeOptionalText(value.direction, MAX_SHORT_TEXT_CHARS) || undefined,
+    basis: normalizeOptionalText(value.basis, MAX_SHORT_TEXT_CHARS) || undefined,
+    caveat: normalizeOptionalText(value.caveat, MAX_REPORT_TEXT_CHARS) || undefined,
+    reason: normalizeOptionalText(value.reason, MAX_SHORT_TEXT_CHARS) || undefined,
+    provenance: normalizeOptionalText(value.provenance, MAX_SHORT_TEXT_CHARS) || undefined,
+  };
+  if (Array.isArray(value.n_words) && value.n_words.length === 2) {
+    const words = value.n_words.map(parseFiniteNumber);
+    if (words.every((n) => n !== null && Number.isInteger(n) && n >= 0)) contrast.n_words = words as [number, number];
+  }
+  return contrast;
 }
 
 function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
@@ -680,6 +859,10 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
         source_keys: normalizeStringArray(prior.source_keys, 16, 120),
       }
     : null;
+  report.roi_prior = normalizeRoiPrior(value.roi_prior);
+  report.roi_prior_points = parseFiniteNumber(value.roi_prior_points) ?? undefined;
+  report.specificity_contrast = normalizeSpecificityContrast(value.specificity_contrast);
+  report.score_without_specificity_prior = parseFiniteNumber(value.score_without_specificity_prior);
   return report;
 }
 
@@ -737,6 +920,7 @@ export interface RefineEvidence {
   improved: boolean;
   jev: boolean;
   rows: RefineEvaluation[];
+  roi: { direction: "higher" | "lower" | "no_reliable_difference"; usedInSelection: boolean } | null;
 }
 
 const REFINE_CANDIDATE_ID = /^(original|c[1-9])$/;
@@ -761,11 +945,16 @@ export function normalizeRefineEvidence(value: unknown): RefineEvidence | null {
         : [];
     });
   if (!rows.length) return null;
+  const roi = isRecord(value.roi_readout) ? value.roi_readout : null;
+  const direction = roi?.direction;
   return {
     mode: value.mode === "model" || value.mode === "mock" ? value.mode : "unknown",
     selectedId: candidateId(value.selected_id),
     improved: value.improved === true,
     jev: isRecord(value.selection_policy),
     rows,
+    roi: direction === "higher" || direction === "lower" || direction === "no_reliable_difference"
+      ? { direction, usedInSelection: roi?.used_in_selection === true }
+      : null,
   };
 }

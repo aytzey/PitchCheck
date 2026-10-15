@@ -1,7 +1,8 @@
 # WS08 in-silico track
 
-Prepared 2026-10-16. No GPU inference, blind classifier, owner review, or live
-runtime check has been run for this implementation. This track measures sensitivity
+Prepared 2026-10-16. No GPU inference or live runtime check has been run for
+this track. The frozen blind-classification and delegated sample-review records
+are described below. This track measures sensitivity
 of TRIBE's average-subject text prediction to authored linguistic forms. It never
 gates shipping literature priors and does not establish persuasion effectiveness,
 reader-specific states, or human replication.
@@ -20,8 +21,10 @@ These rows are a dated work ledger, not measured null results. Actual runs add
 nulls and exclusions. No synthetic test output is installed as a product reference.
 
 The fixtures and pre-registrations are committed on `research/integrated`.
-Blind classification and owner review remain pending before the first GPU run. §9.3's measured Stage 0 reference files and S2 results remain pending
-GPU execution; neither acceptance item is claimed complete.
+The frozen sidecars record passed blind classification and a delegated supervisor
+review of 20% of the sample; they identify that delegation explicitly. §9.3's
+measured Stage 0 reference files and S2 results remain pending GPU execution;
+neither acceptance item is claimed complete.
 
 ## Frozen inputs and review
 
@@ -60,8 +63,12 @@ any cross-pair word-8-gram overlap ≥0.10 (intersection divided by the smaller
 text's distinct 8-gram count). Every condition is checked, including all Stage 0
 independent and neutral texts. Within-pair matching is intentional; structure
 and retest copies are excluded from diversity comparisons. This catches the
-rejected template pattern, but semantic independence still needs the pending
-blind classification and owner review. The independent reference set has 30
+rejected template pattern. Semantic independence is a separate question from
+this mechanical check. The frozen blind check and delegated sample review are
+recorded in [the manipulation-check artifact](manipulation_check/blind_labels_2026-10-16.json):
+360/360 condition labels and 30/30 paraphrase-equivalence groups matched. These
+records were merged from `research/parallel`; integration did not repeat that
+classification or represent it as a new owner review. The independent reference set has 30
 pitches per channel, with 10 in each length bucket.
 
 ## Running later

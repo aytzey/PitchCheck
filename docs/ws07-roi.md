@@ -129,3 +129,25 @@ shadows; `final_score_without_literature_priors` removes all three together.
 Full-precision `prior_inputs` and blend inputs drive WS10 replay, while response
 scores keep their existing display precision. Methodology remains
 `neural_only_v2.3`. All numeric ROI values and contrasts stay out of LLM payloads.
+
+### Integration verification (2026-10-16)
+
+The three requested merges passed their full checkpoints: Python 387, 402 and
+512 passing tests respectively (four optional dependency skips at each); Vitest
+89, Rust 11, lint, TypeScript and production build all passed. Integration fixes
+then reached 523 passing Python tests. The source `research/parallel` advanced
+during the run with diverse frozen fixtures, a diversity guard and the recorded
+manipulation/sample checks; an additional merge retained those updates.
+
+The final code passes **530 Python tests, 4 skips, 0 failures**, **89 Vitest tests**
+and **11 Rust tests**, plus lint, `tsc --noEmit -p .` and `npm run build`. The Rust
+target is the requested shared `PitchCheck/src-tauri/target`. All five offline
+script selfchecks passed. Two skipped Python cases need `exca.cachedict`; two
+need Torch in the supplied CPU venv. The existing Starlette/httpx warning and
+Next.js multiple-lockfile warning do not fail their checks. All 19 rollback
+variables have one README table row and one env example and reach Compose.
+
+No GPU inference, paid API, production request, browser smoke or outcome/fidelity
+study was performed by integration. The inherited WS07 unit artifacts and frozen
+WS08 review records were checked locally; real Stage-0/S2 measurements remain
+pending and no synthetic reference is installed as runtime data.

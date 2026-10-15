@@ -1,5 +1,8 @@
 import json
+from collections import Counter
 from pathlib import Path
+import random
+import re
 from types import SimpleNamespace, ModuleType
 import sys
 
@@ -8,6 +11,16 @@ import pytest
 
 from scripts.research import run_contrasts as harness
 from tribe_service.tests.fixtures.ws08_synthetic import contrasts, reference
+
+
+def sentences(text):
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text)]
+
+
+def pronouns(text):
+    return Counter(re.findall(r"\b(?:i|me|my|mine|myself|we|us|our|ours|ourselves|you|your|yours|"
+                              r"yourself|yourselves|he|him|his|himself|she|her|hers|herself|"
+                              r"it|its|itself|they|them|their|theirs|themselves)\b", text.casefold()))
 
 
 @pytest.mark.parametrize("family,count", [("stage0", 405), ("S2", 200), ("S4", 100), ("S1", 80), ("S3", 80)])
@@ -19,6 +32,8 @@ def test_preregistrations_and_fixture_contracts(family, count):
     assert sidecar["manipulation_check"]["owner_sample_fraction"] == 0
     assert all(v <= 1 for v in sidecar["weight_policy"].values())
     assert sidecar["generation"]["model"] and sidecar["generation"]["prompt"]
+    assert sidecar["generation"]["author"] == "OpenAI Codex gpt-6.1-sol, hand-written per item"
+    assert sidecar["generation"]["temperature"] is None
 
 
 def test_stage0_families_keep_facts_pronouns_cta_and_token_multisets():
@@ -26,17 +41,69 @@ def test_stage0_families_keep_facts_pronouns_cta_and_token_multisets():
     _, rows, _ = harness.load_fixtures("stage0")
     originals = {r["pair_id"]: r for r in rows if r["condition"] == "p0"}
     assert len(originals) == 30
+    channels = {"email", "linkedin", "cold-call-script", "landing-page", "ad-copy"}
+    assert Counter(r["channel"] for r in originals.values()) == Counter({c: 6 for c in channels})
     for r in rows:
         if r.get("role") == "paraphrase":
             original = originals[r["pair_id"]]["text"]
-            assert llm_layer._refine_concrete_details(r["text"]) <= llm_layer._refine_concrete_details(original)
-            assert r["text"].endswith("Would you like to review the workspace together?")
+            assert llm_layer._refine_concrete_details(r["text"]) == llm_layer._refine_concrete_details(original)
+            assert sentences(r["text"])[-1] == sentences(original)[-1]
+            assert pronouns(r["text"]) == pronouns(original)
         if r["condition"] == "scrambled":
             mate = next(x for x in rows if x["pair_id"] == r["pair_id"] and x["condition"] == "nopunct")
             assert sorted(engine._WORD_RE.findall(r["text"])) == sorted(engine._WORD_RE.findall(mate["text"]))
-    buckets = {min(2, 0 if len(engine._WORD_RE.findall(r["text"])) <= 60 else 1 if len(engine._WORD_RE.findall(r["text"])) <= 150 else 2)
-               for r in originals.values()}
-    assert buckets == {0, 1, 2}
+            index = int(r["pair_id"].removeprefix("structure"))
+            source = originals[f"para{index:02d}"]["text"]
+            assert engine._WORD_RE.findall(mate["text"]) == engine._WORD_RE.findall(source)
+            shuffled = engine._WORD_RE.findall(source)
+            random.Random(index).shuffle(shuffled)
+            assert engine._WORD_RE.findall(r["text"]) == shuffled
+        if r.get("role") == "retest":
+            index = int(r["pair_id"].removeprefix("retest"))
+            assert r["text"] == originals[f"para{index:02d}"]["text"]
+    assert Counter(r["role"] for r in rows) == {
+        "paraphrase": 150, "independent": 150, "neutral": 30, "structure": 60, "retest": 15,
+    }
+    assert Counter(r["pair_id"] for r in rows if r.get("role") == "retest") == {
+        f"retest{i}": 3 for i in range(5)
+    }
+    for channel in channels:
+        counts = [len(engine._WORD_RE.findall(r["text"])) for r in originals.values() if r["channel"] == channel]
+        assert Counter(0 if n <= 60 else 1 if n <= 150 else 2 for n in counts) == {0: 2, 1: 2, 2: 2}
+        independent = [r for r in rows if r.get("role") == "independent" and r["channel"] == channel]
+        assert len(independent) == 30
+        assert {0 if len(engine._WORD_RE.findall(r["text"])) <= 60 else
+                1 if len(engine._WORD_RE.findall(r["text"])) <= 150 else 2 for r in independent} == {0, 1, 2}
+
+
+@pytest.mark.parametrize("family,conditions", [("S1", ["T", "U_you", "U"]),
+                                               ("S2", ["Fact", "How", "Whygain", "Whyloss"])])
+def test_manipulations_keep_shared_sentences_and_cta(family, conditions):
+    from tribe_service import engine
+    _, rows, _ = harness.load_fixtures(family)
+    if family == "S2":
+        assert all(45 <= len(engine._WORD_RE.findall(r["text"])) <= 60 for r in rows)
+    for pair in {r["pair_id"] for r in rows}:
+        group = {r["condition"]: r["text"] for r in rows if r["pair_id"] == pair}
+        texts = [sentences(group[c]) for c in conditions]
+        assert len({len(t) for t in texts}) == 1
+        changed = [i for i in range(len(texts[0])) if len({t[i] for t in texts}) > 1]
+        assert len(changed) == 1 and changed[0] != len(texts[0]) - 1
+        if family == "S1":
+            assert all(len(sentences(t)) == 5 for t in group.values())
+            a, b = group["T"], group["U_you"]
+        elif "Fact_you" in group:
+            a, b = group["Fact_you"], group["Whygain"]
+            assert sentences(group["Fact_you"])[-1] == texts[0][-1]
+        else:
+            assert not re.search(r"\b(?:skin|body|hands?|faces?|arms?|ears?|neck|nose|lips?|legs?|"
+                                 r"feet|foot|eyes?|fingers?|palms?|shoulders?|cheeks?|forehead|"
+                                 r"scalp|wrists?|ankles?|elbows?|knees?|thumbs?|backs?|chests?|"
+                                 r"toes?|heels?|fingertips?)\b", group["How_nobody"], re.I)
+            assert sentences(group["How_nobody"])[-1] == texts[0][-1]
+            continue
+        assert Counter(re.findall(r"\b(?:you|your|yours|yourself|yourselves)\b", a.casefold())) == Counter(
+            re.findall(r"\b(?:you|your|yours|yourself|yourselves)\b", b.casefold()))
 
 
 def test_hash_mismatch_and_overlong_text_rejected(tmp_path):
@@ -52,6 +119,43 @@ def test_hash_mismatch_and_overlong_text_rejected(tmp_path):
     (tmp_path / "S1.json").write_text(json.dumps(sidecar))
     with pytest.raises(ValueError, match="240"):
         harness.load_fixtures("S1", tmp_path)
+
+
+@pytest.mark.parametrize("role", [None, "independent"])
+@pytest.mark.parametrize("duplicate", ["sentence", "phrase"])
+def test_fixture_preflight_rejects_cross_pair_templates(tmp_path, role, duplicate):
+    # These are excerpts of the rejected WS08 templates, with distinct topic nouns.
+    a = "Your team can use this workspace for invoice review while keeping the current process visible."
+    b = "Your team can use this workspace for shift planning while keeping the current process visible."
+    if duplicate == "sentence":
+        a += " A list records the current owner and the next action for each item."
+        b += " A list records the current owner and the next action for each item."
+    else:
+        a += " A list records the current owner and the next action for each item."
+        b += " A list records the current owner and the next action beside each request."
+    family = "stage0" if role else "S1"
+    rows = [{"family": family, "pair_id": pair, "condition": "original", "text": text, "role": role}
+            for pair, text in [("one", a), ("two", b)]]
+    path = tmp_path / f"{family}.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows))
+    harness.write_json(tmp_path / f"{family}.json", {
+        "schema_version": 1, "family": family, "stimuli_file": path.name,
+        "stimuli_sha256": harness.sha256(path), "contrasts": [],
+    })
+    with pytest.raises(ValueError, match="diversity.*(?:sentence|8-gram)"):
+        harness.load_fixtures(family, tmp_path)
+
+
+def test_fixture_diversity_allows_matching_inside_pair(tmp_path):
+    text = "A rural repair cooperative offers blade sharpening before the spring planting season."
+    rows = [{"family": "S1", "pair_id": "same", "condition": c, "text": text} for c in ("a", "b")]
+    path = tmp_path / "S1.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows))
+    harness.write_json(tmp_path / "S1.json", {
+        "schema_version": 1, "family": "S1", "stimuli_file": path.name,
+        "stimuli_sha256": harness.sha256(path), "contrasts": [],
+    })
+    assert len(harness.load_fixtures("S1", tmp_path)[1]) == 2
 
 
 @pytest.mark.parametrize("mock,cache,mode", [(True, 0, "direct"), (False, 1, "direct"), (False, 0, "audio")])
@@ -245,11 +349,20 @@ def test_lexical_condition_confound_is_not_reported_as_adjusted_signal():
 def test_cost_sentence_position_and_secondary_window():
     from tribe_service import engine
     _, rows, _ = harness.load_fixtures("S3")
-    for pair in harness.paired_rows(rows, {"conditions": ["excessive", "reasonable"]}):
-        a, b = pair
-        assert a["cost_word_index"] == b["cost_word_index"]
-        matches = list(engine._WORD_RE.finditer(a["text"]))
-        assert a["text"][matches[a["cost_word_index"]].start():].startswith("The required monthly payment")
+    for pair_id in {r["pair_id"] for r in rows}:
+        group = {r["condition"]: r for r in rows if r["pair_id"] == pair_id}
+        assert len({r["cost_word_index"] for r in group.values()}) == 1
+        for r in group.values():
+            matches = list(engine._WORD_RE.finditer(r["text"]))
+            assert r["cost_word_index"] == len(engine._WORD_RE.findall(sentences(r["text"])[0]))
+            assert r["text"][matches[r["cost_word_index"]].start():].startswith(sentences(r["text"])[1])
+        for a, b in [("reasonable", "excessive"), ("number_low", "number_high")]:
+            assert re.sub(r"\d+", "#", group[a]["text"]) == re.sub(r"\d+", "#", group[b]["text"])
+        for cost, number in [("reasonable", "number_low"), ("excessive", "number_high")]:
+            assert re.findall(r"\d+", group[cost]["text"]) == re.findall(r"\d+", group[number]["text"])
+            for i, (a, b) in enumerate(zip(sentences(group[cost]["text"]), sentences(group[number]["text"]))):
+                if i != 1:
+                    assert a == b
     row = rows[0]
     n = len(engine._WORD_RE.findall(row["text"]))
     import math

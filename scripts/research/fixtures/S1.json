@@ -5,11 +5,11 @@
   "minimum_pairs": 16,
   "target_pairs": 20,
   "generation": {
-    "author": "OpenAI Codex (GPT-6), fixed templates authored in this implementation",
-    "model": "GPT-6",
+    "author": "OpenAI Codex gpt-6.1-sol, hand-written per item",
+    "model": "gpt-6.1-sol",
     "temperature": null,
-    "temperature_note": "Not exposed by the coding harness; no external LLM calls.",
-    "prompt": "Write original English synthetic stimuli for the WS08 condition definitions and length limits. Keep facts and invitations matched; do not copy paper text or use customer data."
+    "temperature_note": "Not exposed by the coding harness; every stimulus was written as complete item-specific prose without templates or external LLM calls.",
+    "prompt": "Hand-write 20 distinct English five-sentence topics across software, services, recruiting, nonprofit, consumer, partnership, and internal proposals. For each, write T, U_you, U, and a scientific N block around 60 words. Change only the first situation sentence across T/U_you/U; preserve product facts and the invitation. Match T/U_you second-person pronouns, remove second-person pronouns in U, and keep lengths within 10 percent. No sentences or extended phrase sequences may repeat across topics."
   },
   "manipulation_check": {
     "blind_classifier": "pending",
@@ -51,7 +51,7 @@
   },
   "family": "S1",
   "stimuli_file": "S1.jsonl",
-  "stimuli_sha256": "412fa09a3c045441f55964a816adc350aa601edcd36344ec314fcd69e95bfdce",
+  "stimuli_sha256": "15198de3bd0fbb8d12667acae2f8e69e76a95f9657acf3b69fd4c23bb6c8d8db",
   "contrasts": [
     {
       "name": "T>U_you",

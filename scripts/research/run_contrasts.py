@@ -56,6 +56,34 @@ def write_json(item, value):
     item.write_text(json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
 
 
+def check_diversity(rows):
+    """Reject cross-pair replication; matched conditions and derived controls are intentional."""
+    from tribe_service.engine import _WORD_RE
+    sentences, texts = {}, []
+    for row in rows:
+        if row.get("role") in {"structure", "retest"}:
+            continue
+        pair = row["pair_id"]
+        for sentence in re.split(r"[.!?]+(?=\s|$)", row["text"]):
+            normalized = tuple(_WORD_RE.findall(sentence.casefold()))
+            if not normalized:
+                continue
+            other = sentences.setdefault(normalized, pair)
+            if other != pair:
+                raise ValueError(f"Fixture diversity: repeated sentence in {other} and {pair}")
+        words = _WORD_RE.findall(row["text"].casefold())
+        grams = {tuple(words[i:i + 8]) for i in range(len(words) - 7)}
+        texts.append((pair, row["condition"], grams))
+    for i, (pair, condition, grams) in enumerate(texts):
+        for other, other_condition, other_grams in texts[:i]:
+            if pair == other or not grams or not other_grams:
+                continue
+            overlap = len(grams & other_grams) / min(len(grams), len(other_grams))
+            if overlap >= .10:
+                raise ValueError(f"Fixture diversity: 8-gram overlap {overlap:.3f} >= .10 "
+                                 f"in {other}/{other_condition} and {pair}/{condition}")
+
+
 def load_fixtures(family, fixtures=FIXTURES):
     from tribe_service.engine import _WORD_RE
     sidecar_path = fixtures / f"{family}.json"
@@ -82,6 +110,7 @@ def load_fixtures(family, fixtures=FIXTURES):
     for counts in groups.values():
         if max(counts) > min(counts) * 1.1 or (sidecar.get("minimal_pairs") and max(counts) - min(counts) > 2):
             raise ValueError("Unmatched within-pair lengths")
+    check_diversity(rows)
     for contrast in sidecar.get("contrasts", []):
         selected = [r for r in rows if all(r.get(k) == v for k, v in contrast.get("select", {}).items())]
         counts = [sum(r["condition"] == c for r in selected) for condition in contrast["conditions"]

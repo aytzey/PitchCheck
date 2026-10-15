@@ -31,9 +31,12 @@ sidecars. Each fixes the text SHA-256, contrasts, directions, ROI names, Holm
 groups, minimum 16 / target 20 pairs, seed, thresholds and multiplier policy.
 S4 hashes and selects the B2B cohort from **S2.jsonl**, avoiding duplicate stimuli.
 The JSONL text is original English material, never copied from papers or customers.
-Generation used fixed templates authored by Codex (GPT-6); the prompt is recorded
-in each sidecar. The harness does not expose its sampling temperature; that field
-is explicitly null, and no paid generation or classification API was called.
+The rejected template corpus was replaced on 2026-10-16. Each original,
+paraphrase, independent pitch, neutral text, and contrast condition was written
+individually as full prose by OpenAI Codex gpt-6.1-sol; only structure controls
+and retest copies are derived. The prompt is recorded in each sidecar. The
+harness does not expose its sampling temperature; that field is explicitly null,
+and no paid generation or classification API was called.
 
 Before freezing, use a different model family to classify shuffled texts without
 hypotheses or ROI names, and have the owner read at least 20%. Record the classifier
@@ -52,6 +55,15 @@ S1 has five statements per condition and matches second-person pronoun counts
 between T and U_you. S3 holds the cost sentence at the same word index and has
 number-only controls with the same numbers but no cost meaning. All texts obey
 the engine tokenizer's 240-word ceiling, pair length ±10%, and S3's ≤2-word limit.
+
+Fixture preflight rejects any normalized sentence shared by different pairs and
+any cross-pair word-8-gram overlap ≥0.10 (intersection divided by the smaller
+text's distinct 8-gram count). Every condition is checked, including all Stage 0
+independent and neutral texts. Within-pair matching is intentional; structure
+and retest copies are excluded from diversity comparisons. This catches the
+rejected template pattern, but semantic independence still needs the pending
+blind classification and owner review. The independent reference set has 30
+pitches per channel, with 10 in each length bucket.
 
 ## Running later
 

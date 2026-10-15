@@ -5,11 +5,13 @@
   "minimum_pairs": 16,
   "target_pairs": 20,
   "generation": {
-    "author": "OpenAI Codex (GPT-6), fixed templates authored in this implementation",
-    "model": "GPT-6",
+    "author": "OpenAI Codex gpt-6.1-sol, hand-written per item",
+    "model": "gpt-6.1-sol",
     "temperature": null,
     "temperature_note": "Not exposed by the coding harness; no external LLM calls.",
-    "prompt": "Write original English synthetic stimuli for the WS08 condition definitions and length limits. Keep facts and invitations matched; do not copy paper text or use customer data."
+    "prompt": "Individually hand-write diverse realistic English pitches and meaning-preserving paraphrases, with matched facts, CTA, pronouns and length. Author every neutral text independently. No slot templates or prose generator. Only punctuation removal, seeded token shuffling and exact retest copies are deterministic derivations. Independent reference pitches are separately hand-written per item.",
+    "structure_controls": "nopunct joins engine._WORD_RE tokens in original order; scrambled shuffles a copy with random.Random(original_index), indices 0 through 29.",
+    "retest_copies": "para00 through para04, each copied exactly for r0/r1/r2; prediction cache remains disabled by the runner."
   },
   "manipulation_check": {
     "blind_classifier": "pending",
@@ -51,7 +53,7 @@
   },
   "family": "stage0",
   "stimuli_file": "stage0.jsonl",
-  "stimuli_sha256": "67c1c8c562568ad363460c71fb4d9a266e91da2be14a7c9eb8c5fc7821b309dd",
+  "stimuli_sha256": "85ca45a490629ceec5a3433a2b725b7768c140b614fe5f95445c0d140296a2f1",
   "contrasts": [],
   "encoders": [
     "meta-llama/Llama-3.2-3B",

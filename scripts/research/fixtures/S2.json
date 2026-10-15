@@ -5,11 +5,11 @@
   "minimum_pairs": 16,
   "target_pairs": 20,
   "generation": {
-    "author": "OpenAI Codex (GPT-6), fixed templates authored in this implementation",
-    "model": "GPT-6",
+    "author": "OpenAI Codex gpt-6.1-sol, hand-written per item",
+    "model": "gpt-6.1-sol",
     "temperature": null,
     "temperature_note": "Not exposed by the coding harness; no external LLM calls.",
-    "prompt": "Write original English synthetic stimuli for the WS08 condition definitions and length limits. Keep facts and invitations matched; do not copy paper text or use customer data."
+    "prompt": "Individually write complete natural English WS08 S2/S4 texts: 20 distinct sunscreen situations and 20 diverse organizational offers. Match facts and CTA within each frame, alter one sentence at the same index, use 45–60 engine words with within-frame lengths within 10%, and avoid repeated sentences or sustained wording across frames. Contrast descriptive Fact, procedural How, gain Why, and loss Why; sunscreen How_nobody contains no body words, and product-focused B2B Fact_you matches the Whygain second-person pronoun multiset. Use no prose templates, customer data, or copied paper text. Leave independent blind classification and owner review pending."
   },
   "manipulation_check": {
     "blind_classifier": "pending",
@@ -51,7 +51,7 @@
   },
   "family": "S2",
   "stimuli_file": "S2.jsonl",
-  "stimuli_sha256": "0abd10d4aa3c94892de458c5abdc1e12da4cc35223c89ac618049b4ac667d621",
+  "stimuli_sha256": "b444e9c230941cbd1fe742f8dc30a510d2224968934e91cb288e93a4079042e6",
   "contrasts": [
     {
       "name": "sunscreen:How>Why",

@@ -150,3 +150,23 @@ def test_invalid_unit_artifacts_keep_provisional_defaults(monkeypatch, tmp_path,
     monkeypatch.setattr(roi, 'ROI_ASSET_DIR', tmp_path)
     (tmp_path / 'roi_unit_calibration_test.json').write_text(json.dumps(broken))
     assert roi.roi_calibration('test') == {}
+
+
+@pytest.mark.parametrize("encoder,weight", [("NousResearch/Hermes-3-Llama-3.2-3B", 0.075),
+                                           ("meta-llama/Llama-3.2-3B", 0.15)])
+def test_committed_gpu_unit_calibration_loads_for_matching_encoder(encoder, weight):
+    from pathlib import Path
+    from tribe_service.persuasion_features import ROI_PRIOR, roi_prior_from_summary
+
+    data = roi.roi_calibration(encoder)
+    corpus = Path(__file__).parents[2] / "scripts/fixtures/roi-unit-calibration.json"
+    assert data["encoder"] == encoder and data["n_cases"] == len(json.loads(corpus.read_text())) == 64
+    assert data["atlas_sha256"] == roi.load_roi_assets()[4]
+    assert data["corpus_sha256"] == hashlib.sha256(corpus.read_bytes()).hexdigest()
+    assert data["gpu"] == "NVIDIA GeForce RTX 3070" and data["validated"] is False
+    assert set(data["centers"]) == set(ROI_PRIOR)
+    summary = {"rois": {k: {"z": data["centers"][k]} for k in ROI_PRIOR}}
+    prior = roi_prior_from_summary(summary, encoder.startswith("meta-llama/"), encoder=encoder)
+    assert prior["score"] == 50 and prior["weight"] == weight
+    assert prior["unit_calibration_provenance"] == data["provenance"]
+    assert prior["provenance"].startswith("literature_prior_unvalidated")

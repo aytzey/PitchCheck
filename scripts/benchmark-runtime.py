@@ -6,6 +6,7 @@ The fixed synthetic pitches contain no customer data. --compare checks predictio
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import resource
@@ -22,15 +23,26 @@ from tribe_service import engine, roi_features
 from tribe_service.persuasion_features import ROI_PRIOR, roi_prior_from_summary
 
 
+def load_corpus(path):
+    messages = json.loads(path.read_text())
+    if (not isinstance(messages, list) or len(messages) < 2
+            or any(not isinstance(text, str) or not text.strip() for text in messages)
+            or len(set(messages)) != len(messages)):
+        raise ValueError("Corpus must be a JSON list of at least two distinct, non-empty texts")
+    return messages
+
+
 def unit_calibration(rows, encoder, run_id):
     """Unit adjustment, not validation; repeated warm-cache cases get no extra weight."""
     unique = {row["case"]: row["roi_summary"] for row in rows}
+    if len(unique) < 2 or len({summary["asset_sha256"] for summary in unique.values()}) != 1:
+        raise ValueError("ROI unit calibration needs distinct cases from the same atlas")
     centers = {key: float(np.median([summary["rois"][key]["z"] for summary in unique.values()])) for key in ROI_PRIOR}
     raw = [sum(sign * weight * (summary["rois"][key]["z"] - centers[key])
                for key, (sign, weight, _, _) in ROI_PRIOR.items()) / sum(row[1] for row in ROI_PRIOR.values())
            for summary in unique.values()]
     scale = float(np.std(raw))
-    if len(unique) < 2 or not np.isfinite(scale) or scale <= 1e-12:
+    if not np.isfinite(scale) or scale <= 1e-12:
         raise ValueError("ROI unit calibration needs distinct, non-degenerate predictions")
     return {"schema_version": 1, "encoder": encoder, "centers": centers, "ROI_Z_SCALE": scale,
             "atlas_sha256": next(iter(unique.values()))["asset_sha256"], "n_cases": len(unique),
@@ -78,6 +90,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--compare", type=Path)
+    parser.add_argument("--corpus", type=Path, help="JSON list of distinct texts; default is the timing benchmark")
     parser.add_argument("--run-id", help="Provenance identifier for the encoder-specific unit artifact")
     parser.add_argument("--roi-floors-from", type=Path, help="CPU-only: reduce saved benchmark matrices; no models loaded")
     parser.add_argument("--encoder", help="Required with --roi-floors-from; must match the recorded benchmark runtime")
@@ -103,6 +116,7 @@ def main():
         args.output.mkdir(parents=True, exist_ok=True)
         (args.output / "roi_default_floors.json").write_text(json.dumps(artifact, indent=2, allow_nan=False) + "\n")
         return
+    messages = load_corpus(args.corpus) if args.corpus else None
     import torch
     assert not engine.TRIBE_ALLOW_MOCK, "Unit calibration requires real predictions"
     torch.manual_seed(0)
@@ -123,7 +137,8 @@ def main():
         "Your team can compare the change history, find the owner and restore the last working "
         "version from one screen. Would a short demonstration next Tuesday help you evaluate it?"
     )
-    messages = [f"Jordan, {base}", f"Morgan, {base} " * 3, f"Taylor, {base} " * 9]
+    if messages is None:
+        messages = [f"Jordan, {base}", f"Morgan, {base} " * 3, f"Taylor, {base} " * 9]
     # Timing constants in engine mirror the checkpoint config; fail loudly if upstream drifts.
     data_cfg = engine.get_model().data
     tribe_cfg = {"neuro_offset": data_cfg.neuro.offset, "tr": data_cfg.TR,
@@ -131,7 +146,7 @@ def main():
     assert tribe_cfg == {"neuro_offset": engine.TRIBE_HEMODYNAMIC_LAG_SECONDS, "tr": engine.TRIBE_TR_SECONDS,
                          "text_hz": engine.TRIBE_TEXT_FEATURE_HZ, "window_trs": engine.TRIBE_WINDOW_TRS}, tribe_cfg
     rows = []
-    for index in [0, 1, 2, 1]:
+    for index in (range(len(messages)) if args.corpus else [0, 1, 2, 1]):
         started = time.perf_counter()
         predictions = engine.score_text(messages[index])
         assert predictions.ndim == 2 and predictions.shape[1] == 20484
@@ -140,7 +155,8 @@ def main():
             assert engine.direct_text_segment_words(
                 messages[index], predictions.shape[0], engine.DIRECT_TEXT_TIMING_BASIS
             ) is not None, predictions.shape
-        row = {"case": index, "wall_seconds": round(time.perf_counter() - started, 4),
+        row = {"case": index, "words": len(engine._WORD_RE.findall(messages[index])),
+               "wall_seconds": round(time.perf_counter() - started, 4),
                "metrics": engine.last_score_metrics()}
         row["feature_cache_entries"] = len(engine.get_model().data.text_feature.infra.cache_dict)
         row["roi_summary"] = roi_features.roi_summary(predictions)
@@ -161,6 +177,9 @@ def main():
         rows.append(row)
         print(json.dumps(row), flush=True)
     calibration = unit_calibration(rows, engine.TRIBE_TEXT_MODEL, args.run_id or args.output.name)
+    calibration.update({"created_at_utc": datetime.now(timezone.utc).isoformat(), "gpu": torch.cuda.get_device_name(),
+                        "corpus_sha256": hashlib.sha256(args.corpus.read_bytes() if args.corpus else
+                                                       json.dumps(messages).encode()).hexdigest()})
     slug = engine.TRIBE_TEXT_MODEL.replace("/", "__")
     (args.output / f"roi_unit_calibration_{slug}.json").write_text(json.dumps(calibration, indent=2) + "\n")
     (args.output / "roi_default_floors.json").write_text(json.dumps(

@@ -46,6 +46,8 @@ The evaluator's evidence annex covers route matching, framing, same-setting norm
 
 WS04 responses carry `prompt_doctrine_version="doctrine_v2"` in score `robustness` and refine `tribe_guidance`, including clarification responses. CI caps the annex at 4350 characters and the doctrine at 2450. WS04 has **no rollback env switch**: revert its implementation commit with `git revert <WS04-commit>`, rebuild the service using `tribe_service/Dockerfile.server` (which copies Python and the doctrine onto the existing GPU base image), and redeploy. Rebuild/release the desktop to roll back its embedded fallback doctrine too. The same rollback policy is recorded in `.env.example`.
 
+WS05 shares one context-fit rubric across the evaluator, refine critic and Jev reviewer, with aligned writer instructions. Its default `v2` is an unvalidated literature prior applied by analogy: recipient-stated facts, relevant proof, value relative to costs, a concrete next step, voluntary requests and neutral peer information. A single standard imperative CTA is allowed only on ad-copy/landing pages as a product decision. Set `PITCHCHECK_CONTEXT_FIT_RUBRIC=v1` and restart the service to restore the old rubric and Python writer instructions. Every score (including neural-only fallback) records `robustness.context_fit_rubric_version`; every refine result (including clarification) records it in `tribe_guidance`. Facet weights, calibration and neural formulas are unchanged. The desktop fallback embeds the aligned writer wording at build time.
+
 The whole loop takes a few seconds. Write, score, tweak, re-score.
 
 ## How the Scoring Works
@@ -284,6 +286,15 @@ checking persona-specific benefits, next steps, and personal tone. This measures
 model behavior, not persuasion, and never gates release or runs in CI.
 `python scripts/ab-prompt-doctrine.py --selftest` checks the runner offline without API calls.
 
+WS05's frozen English/Turkish minimal pairs are a rubric manipulation check, not evidence of persuasion; thresholds are design choices. The runner compares v1/v2 in the same process with three raw evaluator samples per text, synthetic equal neural measurements, critic checks, writer orientation probes and refine regression cases. It records requested/served models, raw-score medians and spread, ties, controls and rollback warnings. It never runs in CI or gates release. Run later, with an API key and a pinned model:
+
+```bash
+python scripts/eval-rubric-pairs.py --rubric both --model MODEL_ID --output /tmp/rubric-pairs.json
+python scripts/eval-rubric-pairs.py --selftest
+```
+
+The first command uses a paid API (roughly 1100 calls); it has not been run for this implementation. `--selftest` is entirely offline. By default a completed monitoring run exits 0; `--strict` exits 1 for unmet design thresholds. A greater than 20 percentage-point drop in ad-copy/landing improved-rate warns to revert to v1. No WS06 persona priors are required; personalization-level labels are recorded only if present.
+
 ## Configuration
 
 | Variable | Default | What it does |
@@ -295,6 +306,7 @@ model behavior, not persuasion, and never gates release or runs in CI.
 | `PITCHCHECK_SEMANTIC_BLEND_WEIGHT` | `0.55` | Base share of the final score carried by the band-clamped context-fit read; grows automatically as TRIBE prediction quality drops (0 = neural-only) |
 | `PITCHCHECK_PERSONALIZATION_FACET_WEIGHT` | `1.0` | Share of the Personalization Fit breakdown item taken from the persona read (`persona_pain_alignment`); TRIBE never sees the persona. `0` restores the neural proxy |
 | `PITCHCHECK_CREDIBILITY_FACET_WEIGHT` | `0.5` | Share of the Credibility breakdown item taken from `proof_credibility` (hand-set prior); `0` restores the neural mix |
+| `PITCHCHECK_CONTEXT_FIT_RUBRIC` | `v2` | WS05 unvalidated literature prior for shared rubric and Python writers; `v1` + service restart restores the old wording. Version recorded in score/refine responses |
 | `PITCHCHECK_LOCALIZATION_CONTEXT_SEGMENTS` | `1` | Neighbouring 1-s segments shown around each located span (HRF-dispersion prior, 0–3) |
 | `PITCHCHECK_SCORE_LOG_PATH` / `PITCHCHECK_SCORE_LOG_KEY` | unset | Opt-in numbers-only JSONL log of `/score` and `/refine` for later outcome joins. Needs both; the key (≥32 chars) HMACs message/persona ids. Text is never written |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |

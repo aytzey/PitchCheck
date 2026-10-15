@@ -55,6 +55,7 @@ class TestScore:
         assert isinstance(report["persuasion_evidence"], dict)
         assert isinstance(report["robustness"], dict)
         assert report["robustness"]["prompt_doctrine_version"] == "doctrine_v2"
+        assert report["robustness"]["context_fit_rubric_version"] == "v2"
         assert 0 <= report["robustness"]["confidence"] <= 1
         assert 0 < report["robustness"]["prediction_quality_weight"] <= 1
         assert isinstance(report["robustness"]["neuro_axes"], dict)
@@ -408,6 +409,7 @@ class TestScore:
         assert measured == [original, *candidates]
         assert data["tribe_guidance"]["candidate_count"] == 3
         assert data["tribe_guidance"]["prompt_doctrine_version"] == "doctrine_v2"
+        assert data["tribe_guidance"]["context_fit_rubric_version"] == "v2"
         assert data["tribe_guidance"]["selected_id"] == "c2"
         assert data["tribe_guidance"]["evaluations"][3]["eligible"] is False
         # Context fit alone ties c1/c2; the measured TRIBE prior is what picked c2.
@@ -684,6 +686,7 @@ def test_refine_rejects_length_mismatch_after_measuring_all_candidates(monkeypat
     assert len(writer_payloads) == len(critic_payloads) == 1
     assert result["tribe_guidance"]["candidate_count"] == 3
     assert result["tribe_guidance"]["prompt_doctrine_version"] == "doctrine_v2"
+    assert result["tribe_guidance"]["context_fit_rubric_version"] == "v2"
     assert result["refined_message"] == (original if all_wrong_length else drafts[1])
     evaluations = result["tribe_guidance"]["evaluations"]
     assert evaluations[1]["eligible"] is evaluations[3]["eligible"] is False

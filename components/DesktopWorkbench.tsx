@@ -3460,7 +3460,7 @@ function facetRepairTactic(key: string, label: string) {
     clarity: "Reduce processing load: make the value proposition instantly scannable and keep one clear next step.",
     credibility: "Improve the semantic trust read without inventing facts: use verifiable details already present or ask for a low-risk validation step.",
     emotional_resonance: "Translate the offer into the persona's desired outcome.",
-    personalization_fit: "Tie the opener and value claim to the recipient's role, current context, pain, and decision criteria.",
+    personalization_fit: "Swap category phrases ('teams like yours', 'a lot of') for 1-2 true details the persona states; never invent one.",
     urgency: "Make the timing reason semantically clear, then connect it to a specific low-friction action.",
   };
   return tactics[key] ?? `Improve ${label.toLowerCase()} using the weakest TRIBE signal and persona semantics.`;

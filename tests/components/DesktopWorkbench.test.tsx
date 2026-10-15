@@ -184,6 +184,7 @@ describe("DesktopWorkbench", () => {
     expect(refineCall[0]).toBe("/api/refine");
     const refineBody = JSON.parse(refineCall[1].body as string) as { suggestions: string[] };
     expect(refineBody.suggestions[0]).toContain("Baseline persuasion score 76/100");
+    expect(refineBody.suggestions.join("\n")).toContain("Swap category phrases ('teams like yours', 'a lot of') for 1-2 true details the persona states; never invent one.");
     expect(screen.getByText("Hey Jordan - tighter rewrite with one clear ask.")).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & continue editing" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Accept & re-evaluate" })).toBeDefined();

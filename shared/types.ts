@@ -128,6 +128,7 @@ export interface ResearchSynthesis {
 
 // Robustness/calibration metadata for the final persuasion score
 export interface RobustnessReport {
+  context_fit_rubric_version?: string;
   neural_prior_score?: number;
   neural_score: number;
   quality_adjusted_neural_score?: number;
@@ -605,6 +606,7 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
   const neuralScore = normalizeScore(value.neural_score) ?? normalizeScore(value.final_score) ?? 0;
   const finalScore = normalizeScore(value.final_score) ?? neuralScore;
   const report: RobustnessReport = {
+    context_fit_rubric_version: normalizeOptionalText(value.context_fit_rubric_version, MAX_SHORT_TEXT_CHARS),
     neural_score: neuralScore,
     text_score: parseFiniteNumber(value.text_score),
     evidence_score: normalizeScore(value.evidence_score) ?? finalScore,

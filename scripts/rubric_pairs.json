@@ -1,0 +1,1075 @@
+{
+  "provenance": "Handwritten synthetic rubric manipulation checks; not evidence of persuasion. Thresholds are design choices. Frozen EN/TR contrasts, no customer text or paper quotations.",
+  "cases": [
+    {
+      "id": "a1-01",
+      "family": "a1",
+      "language": "en",
+      "platform": "email",
+      "persona": "A library coordinator checking the supplied catalog preview.",
+      "texts": {
+        "dogmatic": "The catalog preview lists the missing authors. Management insists: you have no choice, review it now. Can you review it?",
+        "suggestive": "The catalog preview lists the missing authors. Perhaps you could review it when useful for your work. Would you review it?"
+      }
+    },
+    {
+      "id": "a1-02",
+      "family": "a1",
+      "language": "en",
+      "platform": "linkedin",
+      "persona": "A developer evaluating the supplied parser error report.",
+      "texts": {
+        "dogmatic": "The report shows parser errors. The director is clear: you must review it now; there is no choice. Can you review it?",
+        "suggestive": "The report shows parser errors. You could review it if that helps your investigation; the choice remains yours. Would you review it?"
+      }
+    },
+    {
+      "id": "a1-03",
+      "family": "a1",
+      "language": "en",
+      "platform": "email",
+      "persona": "A curator comparing the supplied image captions.",
+      "texts": {
+        "dogmatic": "The captions are ready for comparison. Our chief requires your review now; you have no choice about this. Will you review them?",
+        "suggestive": "The captions are ready for comparison. Perhaps a review would help your comparison; you can decide whether it suits. Would you review them?"
+      }
+    },
+    {
+      "id": "a1-04",
+      "family": "a1",
+      "language": "en",
+      "platform": "general",
+      "persona": "A colleague deciding whether to review a supplied proposal.",
+      "texts": {
+        "dogmatic": "The proposal describes the workflow. The committee demands it: you must review this now, with no choice in the matter. Will you?",
+        "suggestive": "The proposal describes the workflow. Perhaps reviewing it would help; you can choose whether that fits your current work. Would you like to?"
+      }
+    },
+    {
+      "id": "a1-05",
+      "family": "a1",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor checking a supplied glossary.",
+      "texts": {
+        "dogmatic": "The glossary marks disputed terms. The publisher insists you must check it now; you have no choice about checking. Can you check it?",
+        "suggestive": "The glossary marks disputed terms. Perhaps you could check it if that would help; you can choose whether to proceed. Would you check it?"
+      }
+    },
+    {
+      "id": "a1-06",
+      "family": "a1",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Katalogdaki eksik yazarları incelemek isteyen kütüphane sorumlusu.",
+      "texts": {
+        "dogmatic": "Katalog önizlemesi eksik yazarları gösteriyor. Yönetim açıkça söylüyor: bunu hemen incelemelisiniz, başka seçeneğiniz yok. Önizlemeyi inceleyebilir misiniz?",
+        "suggestive": "Katalog önizlemesi eksik yazarları gösteriyor. İsterseniz bunu çalışmanıza uygun olduğunda inceleyebilirsiniz; karar size ait. Önizlemeye bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "a1-07",
+      "family": "a1",
+      "language": "tr",
+      "platform": "linkedin",
+      "persona": "Verilen hata raporunu değerlendiren yazılımcı.",
+      "texts": {
+        "dogmatic": "Rapor ayrıştırma hatalarını gösteriyor. Müdürün emri kesin: hemen incelemek zorundasınız, başka seçeneğiniz yok. Bu rapora bakabilir misiniz?",
+        "suggestive": "Rapor ayrıştırma hatalarını gösteriyor. İsterseniz çalışmanıza yardımcı olabilecek bu raporu inceleyebilirsiniz; karar size ait. Rapora bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "a1-08",
+      "family": "a1",
+      "language": "tr",
+      "platform": "general",
+      "persona": "Verilen teklifin iş akışını inceleyen çalışma arkadaşı.",
+      "texts": {
+        "dogmatic": "Teklif iş akışını anlatıyor. Komite emrediyor: bunu şimdi incelemelisiniz, başka seçeneğiniz yok. Bu teklifi benimle gözden geçirir misiniz?",
+        "suggestive": "Teklif iş akışını anlatıyor. Belki incelemek işinize yarayabilir; uygun olup olmadığına kendiniz karar verebilirsiniz. Teklifi birlikte değerlendirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "a2-01",
+      "family": "a2",
+      "language": "en",
+      "platform": "ad-copy",
+      "persona": "A visitor comparing the listed subscription prices.",
+      "texts": {
+        "imperative": "Compare monthly plans for your team. See pricing.",
+        "question": "Compare monthly plans for your team. View pricing?"
+      }
+    },
+    {
+      "id": "a2-02",
+      "family": "a2",
+      "language": "en",
+      "platform": "landing-page",
+      "persona": "A visitor evaluating a trial; no other commitment is stated.",
+      "texts": {
+        "imperative": "Explore the sample workspace at your pace. Start free trial.",
+        "question": "Explore the sample workspace at your pace. Try it free?"
+      }
+    },
+    {
+      "id": "a2-03",
+      "family": "a2",
+      "language": "en",
+      "platform": "ad-copy",
+      "persona": "A visitor checking the supplied import guide.",
+      "texts": {
+        "imperative": "Import your existing spreadsheet using our guide. Read more.",
+        "question": "Import your existing spreadsheet using our guide. Learn more?"
+      }
+    },
+    {
+      "id": "a2-04",
+      "family": "a2",
+      "language": "en",
+      "platform": "landing-page",
+      "persona": "A visitor reviewing the provided change log.",
+      "texts": {
+        "imperative": "The change log records each correction. View the demo.",
+        "question": "The change log records each correction. See the demo?"
+      }
+    },
+    {
+      "id": "a2-05",
+      "family": "a2",
+      "language": "en",
+      "platform": "ad-copy",
+      "persona": "A visitor choosing a report layout.",
+      "texts": {
+        "imperative": "Find a report layout that fits. Browse the examples.",
+        "question": "Find a report layout that fits. See the examples?"
+      }
+    },
+    {
+      "id": "a2-06",
+      "family": "a2",
+      "language": "tr",
+      "platform": "ad-copy",
+      "persona": "Aylık plan fiyatlarını karşılaştırmak isteyen ziyaretçi.",
+      "texts": {
+        "imperative": "Ekibinize uygun aylık planları karşılaştırın. Fiyatları buradan görün.",
+        "question": "Ekibinize uygun aylık planları karşılaştırın. Fiyatlara bakalım mı?"
+      }
+    },
+    {
+      "id": "a2-07",
+      "family": "a2",
+      "language": "tr",
+      "platform": "landing-page",
+      "persona": "Denemeyi değerlendiren ziyaretçi; başka taahhüt belirtilmemiş.",
+      "texts": {
+        "imperative": "Örnek çalışma alanını kendi hızınızda keşfedin. Ücretsiz denemeyi buradan başlatın.",
+        "question": "Örnek çalışma alanını kendi hızınızda keşfedin. Ücretsiz denemeye başlayalım mı?"
+      }
+    },
+    {
+      "id": "a2-08",
+      "family": "a2",
+      "language": "tr",
+      "platform": "ad-copy",
+      "persona": "Verilen içe aktarma kılavuzunu inceleyen ziyaretçi.",
+      "texts": {
+        "imperative": "Mevcut tablonuzu kılavuz yardımıyla aktarabilirsiniz. Kılavuzun tamamını buradan okuyun.",
+        "question": "Mevcut tablonuzu kılavuz yardımıyla aktarabilirsiniz. Kılavuza birlikte bakalım mı?"
+      }
+    },
+    {
+      "id": "b-01",
+      "family": "b",
+      "language": "en",
+      "platform": "email",
+      "persona": "A librarian who needs expertise in archive indexing.",
+      "texts": {
+        "relevant": "An archive indexing specialist reviewed our indexing guide. Would you like to inspect the guide?",
+        "irrelevant": "A celebrity fitness specialist reviewed our indexing guide. Would you like to inspect the guide?"
+      }
+    },
+    {
+      "id": "b-02",
+      "family": "b",
+      "language": "en",
+      "platform": "email",
+      "persona": "A security engineer evaluating credential revocation.",
+      "texts": {
+        "relevant": "A credential security researcher reviewed this revocation design. Would you like to inspect the design?",
+        "irrelevant": "A celebrity fashion designer reviewed this revocation design. Would you like to inspect the design?"
+      }
+    },
+    {
+      "id": "b-03",
+      "family": "b",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor evaluating a spelling checker.",
+      "texts": {
+        "relevant": "A dictionary research editor reviewed our spelling examples. Would you like to inspect the examples?",
+        "irrelevant": "A television sports commentator reviewed our spelling examples. Would you like to inspect the examples?"
+      }
+    },
+    {
+      "id": "b-04",
+      "family": "b",
+      "language": "en",
+      "platform": "email",
+      "persona": "An architect checking the supplied drawing annotations.",
+      "texts": {
+        "relevant": "A building design architect checked our drawing annotations. Would you like to inspect the annotations?",
+        "irrelevant": "A television cooking presenter checked our drawing annotations. Would you like to inspect the annotations?"
+      }
+    },
+    {
+      "id": "b-05",
+      "family": "b",
+      "language": "en",
+      "platform": "email",
+      "persona": "A payroll lead assessing a payroll export.",
+      "texts": {
+        "relevant": "A payroll compliance adviser reviewed the export format. Would you like to inspect the format?",
+        "irrelevant": "A celebrity travel writer reviewed the export format. Would you like to inspect the format?"
+      }
+    },
+    {
+      "id": "b-06",
+      "family": "b",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Arşiv dizinleme uzmanlığı arayan kütüphane sorumlusu.",
+      "texts": {
+        "relevant": "Bir arşiv dizinleme uzmanı bu dizinleme kılavuzunu inceledi. Kılavuzu birlikte gözden geçirmek ister misiniz?",
+        "irrelevant": "Ünlü bir spor yorumcusu bu dizinleme kılavuzunu inceledi. Kılavuzu birlikte gözden geçirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "b-07",
+      "family": "b",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Yetki iptali tasarımını değerlendiren güvenlik mühendisi.",
+      "texts": {
+        "relevant": "Bir kimlik güvenliği araştırmacısı yetki iptali tasarımını inceledi. Tasarımı birlikte gözden geçirmek ister misiniz?",
+        "irrelevant": "Ünlü bir moda tasarımcısı yetki iptali tasarımını inceledi. Tasarımı birlikte gözden geçirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "b-08",
+      "family": "b",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Verilen çizim açıklamalarını inceleyen mimar.",
+      "texts": {
+        "relevant": "Bir yapı tasarım mimarı bu çizim açıklamalarını kontrol etti. Açıklamaları birlikte incelemek ister misiniz?",
+        "irrelevant": "Ünlü bir yemek sunucusu bu çizim açıklamalarını kontrol etti. Açıklamaları birlikte incelemek ister misiniz?"
+      }
+    },
+    {
+      "id": "c-01",
+      "family": "c",
+      "language": "en",
+      "platform": "email",
+      "persona": "A clerk whose stated goal is tracing invoice corrections; an export exists and costs £12.",
+      "texts": {
+        "value": "The export costs £12. It traces invoice corrections back to their source records. Would you review it?",
+        "cost": "The export costs £12. It is available in the format described in our document. Would you review it?"
+      }
+    },
+    {
+      "id": "c-02",
+      "family": "c",
+      "language": "en",
+      "platform": "email",
+      "persona": "A librarian whose stated goal is finding duplicate entries; a preview exists and costs £12.",
+      "texts": {
+        "value": "The preview costs £12. It flags duplicate entries so you can review them together. Would you review it?",
+        "cost": "The preview costs £12. It is available in the format described in our current document. Would you review it?"
+      }
+    },
+    {
+      "id": "c-03",
+      "family": "c",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor seeking consistent spelling; a checker exists and costs £12.",
+      "texts": {
+        "value": "The checker costs £12. It marks spelling differences against your chosen dictionary. Would you review it?",
+        "cost": "The checker costs £12. It is available in the application described here. Would you review it?"
+      }
+    },
+    {
+      "id": "c-04",
+      "family": "c",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator seeking visible unfilled shifts; a rota view exists and costs £12.",
+      "texts": {
+        "value": "The rota costs £12. It highlights unfilled shifts so you can arrange cover. Would you review it?",
+        "cost": "The rota costs £12. It is available through the application described in our document. Would you review it?"
+      }
+    },
+    {
+      "id": "c-05",
+      "family": "c",
+      "language": "en",
+      "platform": "email",
+      "persona": "A researcher seeking original row identifiers; an export exists and costs £12.",
+      "texts": {
+        "value": "The export costs £12. It retains row identifiers so you can trace the source. Would you review it?",
+        "cost": "The export costs £12. It is available through the application described in our current document. Would you review it?"
+      }
+    },
+    {
+      "id": "c-06",
+      "family": "c",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Fatura düzeltmelerini kaynağına kadar izlemek isteyen görevli; dışa aktarma var, bedeli 120 lira.",
+      "texts": {
+        "value": "Dışa aktarma bedeli 120 lira. Fatura düzeltmelerini özgün kayıtlara kadar izleyebilirsiniz. Çıktıya birlikte bakmak ister misiniz?",
+        "cost": "Dışa aktarma bedeli 120 lira. Çıktı uygulamada belirtilen standart dosya biçiminde sunuluyor. Çıktıya birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "c-07",
+      "family": "c",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Çift kayıtları bulmak isteyen kütüphaneci; önizleme var, bedeli 120 lira.",
+      "texts": {
+        "value": "Önizleme bedeli 120 lira. Çift kayıtları birlikte inceleyebilmeniz için işaretleyerek gösteriyor. Görünüme birlikte bakmak ister misiniz?",
+        "cost": "Önizleme bedeli 120 lira. Görünüm uygulamada belirtilen standart dosya biçiminde sunuluyor. Görünüme birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "c-08",
+      "family": "c",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Boş vardiyaları görmek isteyen koordinatör; çizelge var, bedeli 120 lira.",
+      "texts": {
+        "value": "Çizelge bedeli 120 lira. Boş vardiyaları görerek eksik görevlendirmeleri takip edebilirsiniz. Çizelgeye birlikte bakmak ister misiniz?",
+        "cost": "Çizelge bedeli 120 lira. Çizelge uygulamada belirtilen standart dosya biçiminde sunuluyor. Çizelgeye birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "c_order-01",
+      "family": "c_order",
+      "language": "en",
+      "platform": "email",
+      "persona": "A clerk whose stated goal is tracing invoice corrections; an export exists and costs £12.",
+      "texts": {
+        "cost_first": "The export costs £12. It traces invoice corrections back to their source records. Would you review it?",
+        "value_first": "It traces invoice corrections back to their source records. The export costs £12. Would you review it?"
+      }
+    },
+    {
+      "id": "c_order-02",
+      "family": "c_order",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Fatura düzeltmelerini kaynağına kadar izlemek isteyen görevli; dışa aktarma var, bedeli 120 lira.",
+      "texts": {
+        "cost_first": "Dışa aktarma bedeli 120 lira. Fatura düzeltmelerini özgün kayıtlara kadar izleyebilirsiniz. Çıktıya birlikte bakmak ister misiniz?",
+        "value_first": "Fatura düzeltmelerini özgün kayıtlara kadar izleyebilirsiniz. Dışa aktarma bedeli 120 lira. Çıktıya birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "c_order-03",
+      "family": "c_order",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Çift kayıtları bulmak isteyen kütüphaneci; önizleme var, bedeli 120 lira.",
+      "texts": {
+        "cost_first": "Önizleme bedeli 120 lira. Çift kayıtları birlikte inceleyebilmeniz için işaretleyerek gösteriyor. Görünüme birlikte bakmak ister misiniz?",
+        "value_first": "Çift kayıtları birlikte inceleyebilmeniz için işaretleyerek gösteriyor. Önizleme bedeli 120 lira. Görünüme birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "c_order-04",
+      "family": "c_order",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Boş vardiyaları görmek isteyen koordinatör; çizelge var, bedeli 120 lira.",
+      "texts": {
+        "cost_first": "Çizelge bedeli 120 lira. Boş vardiyaları görerek eksik görevlendirmeleri takip edebilirsiniz. Çizelgeye birlikte bakmak ister misiniz?",
+        "value_first": "Boş vardiyaları görerek eksik görevlendirmeleri takip edebilirsiniz. Çizelge bedeli 120 lira. Çizelgeye birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "d-01",
+      "family": "d",
+      "language": "en",
+      "platform": "email",
+      "persona": "A school administrator evaluating an import preview; it accepts the existing class list and previews changes.",
+      "texts": {
+        "concrete": "Upload the class list, then review the changes in the preview. Would you try that workflow?",
+        "vague": "Explore our class list import and consider the available preview features. Would you try that workflow?"
+      }
+    },
+    {
+      "id": "d-02",
+      "family": "d",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor checking a glossary; the tool marks disputed entries for review.",
+      "texts": {
+        "concrete": "Open the glossary, then review each marked disputed entry in context. Would you try that workflow?",
+        "vague": "Explore our glossary workspace and consider the available review features there. Would you try that workflow?"
+      }
+    },
+    {
+      "id": "d-03",
+      "family": "d",
+      "language": "en",
+      "platform": "email",
+      "persona": "A researcher reviewing exported rows; the tool preserves original identifiers.",
+      "texts": {
+        "concrete": "Open the export, then follow a row identifier to its source. Would you try that workflow?",
+        "vague": "Explore our export workspace and consider the available source tracing features. Would you try that workflow?"
+      }
+    },
+    {
+      "id": "d-04",
+      "family": "d",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator reviewing a rota; the tool highlights unfilled shifts.",
+      "texts": {
+        "concrete": "Open the rota, then review the highlighted shifts that need cover. Would you try that workflow?",
+        "vague": "Explore our rota workspace and consider the available shift planning features. Would you try that workflow?"
+      }
+    },
+    {
+      "id": "d-05",
+      "family": "d",
+      "language": "en",
+      "platform": "email",
+      "persona": "A librarian reviewing duplicates; the tool groups matching entries.",
+      "texts": {
+        "concrete": "Open the duplicate group, then compare the matching entries together there. Would you try that workflow?",
+        "vague": "Explore our duplicate workspace and consider the available entry comparison features. Would you try that workflow?"
+      }
+    },
+    {
+      "id": "d-06",
+      "family": "d",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Mevcut sınıf listesini aktararak değişiklik önizlemesini inceleyen okul görevlisi.",
+      "texts": {
+        "concrete": "Sınıf listesini yükleyip önizlemede değişiklikleri inceleyebilirsiniz. Bu iş akışını birlikte denemek ister misiniz?",
+        "vague": "Sınıf listesi için aktarım özelliklerini keşfedebilirsiniz. Bu iş akışını birlikte denemek ister misiniz?"
+      }
+    },
+    {
+      "id": "d-07",
+      "family": "d",
+      "language": "tr",
+      "platform": "email",
+      "persona": "İşaretli sözlük maddelerini bağlamıyla inceleyen editör.",
+      "texts": {
+        "concrete": "Sözlüğü açıp işaretlenen maddeleri bağlamıyla inceleyebilirsiniz. Bu iş akışını birlikte denemek ister misiniz?",
+        "vague": "Sözlük için sunulan inceleme özelliklerini keşfedebilirsiniz. Bu iş akışını birlikte denemek ister misiniz?"
+      }
+    },
+    {
+      "id": "d-08",
+      "family": "d",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Boş vardiyaları işaretleyen çizelgeyi inceleyen koordinatör.",
+      "texts": {
+        "concrete": "Çizelgeyi açıp işaretlenen boş vardiyaları inceleyebilirsiniz. Bu iş akışını birlikte denemek ister misiniz?",
+        "vague": "Çizelge için sunulan planlama özelliklerini keşfedebilirsiniz. Bu iş akışını birlikte denemek ister misiniz?"
+      }
+    },
+    {
+      "id": "f-01",
+      "family": "f",
+      "language": "en",
+      "platform": "email",
+      "persona": "A library coordinator; comparable libraries truly use this catalog view.",
+      "texts": {
+        "threat": "Comparable libraries use this catalog view; refusing it leaves you behind your peers. Would you review it?",
+        "neutral": "Comparable libraries use this catalog view; their use is information for your own comparison. Would you review it?"
+      }
+    },
+    {
+      "id": "f-02",
+      "family": "f",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor; comparable journals truly use this glossary view.",
+      "texts": {
+        "threat": "Comparable journals use this glossary view; refusing it leaves you excluded from serious editors. Would you review it?",
+        "neutral": "Comparable journals use this glossary view; their use is information for your own comparison. Would you review it?"
+      }
+    },
+    {
+      "id": "f-03",
+      "family": "f",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator; comparable teams truly use this rota view.",
+      "texts": {
+        "threat": "Comparable teams use this rota view; refusing it shows you cannot keep up with peers. Would you review it?",
+        "neutral": "Comparable teams use this rota view; their use is information for your own comparison here. Would you review it?"
+      }
+    },
+    {
+      "id": "f-04",
+      "family": "f",
+      "language": "en",
+      "platform": "email",
+      "persona": "A researcher; comparable labs truly use this export format.",
+      "texts": {
+        "threat": "Comparable labs use this export format; refusing it leaves you behind everyone else in research. Would you review it?",
+        "neutral": "Comparable labs use this export format; their use is information for your own comparison here. Would you review it?"
+      }
+    },
+    {
+      "id": "f-05",
+      "family": "f",
+      "language": "en",
+      "platform": "email",
+      "persona": "An architect; comparable studios truly use these drawing annotations.",
+      "texts": {
+        "threat": "Comparable studios use these drawing annotations; refusing them leaves you outside the competent design community. Would you review them?",
+        "neutral": "Comparable studios use these drawing annotations; their use is information for your own comparison here. Would you review them?"
+      }
+    },
+    {
+      "id": "f-06",
+      "family": "f",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Benzer kütüphanelerin bu katalog görünümünü kullandığı bilgisi doğru olan kütüphaneci.",
+      "texts": {
+        "threat": "Benzer kütüphaneler bu katalog görünümünü kullanıyor; reddetmeniz sizi meslektaşlarınızın gerisinde bırakır. Bu görünüme birlikte bakmak ister misiniz?",
+        "neutral": "Benzer kütüphaneler bu katalog görünümünü kullanıyor; bu bilgi kendi karşılaştırmanıza yardımcı olabilir. Bu görünüme birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "f-07",
+      "family": "f",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Benzer dergilerin bu sözlük görünümünü kullandığı bilgisi doğru olan editör.",
+      "texts": {
+        "threat": "Benzer dergiler bu sözlük görünümünü kullanıyor; reddetmeniz sizi yetkin editörlerin dışında bırakır. Bu görünüme birlikte bakmak ister misiniz?",
+        "neutral": "Benzer dergiler bu sözlük görünümünü kullanıyor; bu bilgi kendi karşılaştırmanıza yardımcı olabilir. Bu görünüme birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "f-08",
+      "family": "f",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Benzer ekiplerin bu çizelgeyi kullandığı bilgisi doğru olan koordinatör.",
+      "texts": {
+        "threat": "Benzer ekipler bu çizelgeyi kullanıyor; reddetmeniz herkesin gerisinde kaldığınızı açıkça gösterir. Bu çizelgeye birlikte bakmak ister misiniz?",
+        "neutral": "Benzer ekipler bu çizelgeyi kullanıyor; bu bilgi kendi karşılaştırmanıza yardımcı olabilir. Bu çizelgeye birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "f_control-01",
+      "family": "f_control",
+      "language": "en",
+      "platform": "email",
+      "persona": "A library coordinator; comparable libraries truly use this catalog view.",
+      "texts": {
+        "neutral": "Comparable libraries use this catalog view. It groups entries for review. Would you review it?",
+        "baseline": "This catalog view is available here. It groups entries for review. Would you review it?"
+      }
+    },
+    {
+      "id": "f_control-02",
+      "family": "f_control",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor; comparable journals truly use this glossary view.",
+      "texts": {
+        "neutral": "Comparable journals use this glossary view. It marks terms for review. Would you review it?",
+        "baseline": "This glossary view is available here. It marks terms for review. Would you review it?"
+      }
+    },
+    {
+      "id": "f_control-03",
+      "family": "f_control",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator; comparable teams truly use this rota view.",
+      "texts": {
+        "neutral": "Comparable teams use this rota view. It highlights shifts needing cover. Would you review it?",
+        "baseline": "This rota view is available here. It highlights shifts needing cover. Would you review it?"
+      }
+    },
+    {
+      "id": "f_control-04",
+      "family": "f_control",
+      "language": "en",
+      "platform": "email",
+      "persona": "A researcher; comparable labs truly use this export format.",
+      "texts": {
+        "neutral": "Comparable labs use this export format. It retains the source identifiers. Would you review it?",
+        "baseline": "This export format is available here. It retains the source identifiers. Would you review it?"
+      }
+    },
+    {
+      "id": "f_control-05",
+      "family": "f_control",
+      "language": "en",
+      "platform": "email",
+      "persona": "An architect; comparable studios truly use these drawing annotations.",
+      "texts": {
+        "neutral": "Comparable studios use these drawing annotations. They mark areas for review. Would you review them?",
+        "baseline": "These drawing annotations are available here. They mark areas for review. Would you review them?"
+      }
+    },
+    {
+      "id": "f_control-06",
+      "family": "f_control",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Benzer kütüphanelerin bu katalog görünümünü kullandığı bilgisi doğru olan kütüphaneci.",
+      "texts": {
+        "neutral": "Benzer kütüphaneler bu görünümü kullanıyor. Kayıtlar incelemek için gruplanıyor. Birlikte bakmak ister misiniz?",
+        "baseline": "Bu görünüm uygulamada kullanıma sunuluyor. Kayıtlar incelemek için gruplanıyor. Birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "f_control-07",
+      "family": "f_control",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Benzer dergilerin bu sözlük görünümünü kullandığı bilgisi doğru olan editör.",
+      "texts": {
+        "neutral": "Benzer dergiler bu görünümü kullanıyor. Maddeler incelemek için işaretleniyor. Birlikte bakmak ister misiniz?",
+        "baseline": "Bu görünüm uygulamada kullanıma sunuluyor. Maddeler incelemek için işaretleniyor. Birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "f_control-08",
+      "family": "f_control",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Benzer ekiplerin bu çizelgeyi kullandığı bilgisi doğru olan koordinatör.",
+      "texts": {
+        "neutral": "Benzer ekipler bu çizelgeyi kullanıyor. Boş vardiyalar incelemek için işaretleniyor. Birlikte bakmak ister misiniz?",
+        "baseline": "Bu çizelge uygulamada kullanıma sunuluyor. Boş vardiyalar incelemek için işaretleniyor. Birlikte bakmak ister misiniz?"
+      }
+    },
+    {
+      "id": "g-01",
+      "family": "g",
+      "language": "en",
+      "platform": "email",
+      "persona": "A librarian using Zotero exports; the tool imports existing files.",
+      "texts": {
+        "generic": "Our tool imports the existing files people already use. Would you review the import?",
+        "category": "Our tool imports the existing files research teams use. Would you review the import?",
+        "specific": "Our tool imports the existing Zotero exports you use. Would you review the import?"
+      }
+    },
+    {
+      "id": "g-02",
+      "family": "g",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator using Airtable exports; the tool imports existing files.",
+      "texts": {
+        "generic": "Our tool imports the existing files people already use. Would you review the import?",
+        "category": "Our tool imports the existing files operations teams use. Would you review the import?",
+        "specific": "Our tool imports the existing Airtable exports you use. Would you review the import?"
+      }
+    },
+    {
+      "id": "g-03",
+      "family": "g",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor using Notion exports; the tool imports existing files.",
+      "texts": {
+        "generic": "Our tool imports the existing files people already use. Would you review the import?",
+        "category": "Our tool imports the existing files editorial teams use. Would you review the import?",
+        "specific": "Our tool imports the existing Notion exports you use. Would you review the import?"
+      }
+    },
+    {
+      "id": "g-04",
+      "family": "g",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Zotero çıktıları kullanan kütüphaneci; araç mevcut dosyaları içeri alabiliyor.",
+      "texts": {
+        "generic": "Aracımız insanların kullandığı mevcut dosyaları içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?",
+        "category": "Aracımız kütüphane ekiplerinin mevcut dosyalarını içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?",
+        "specific": "Aracımız kullandığınız mevcut Zotero çıktılarını içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "g-05",
+      "family": "g",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Airtable çıktıları kullanan koordinatör; araç mevcut dosyaları içeri alabiliyor.",
+      "texts": {
+        "generic": "Aracımız insanların kullandığı mevcut dosyaları içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?",
+        "category": "Aracımız operasyon ekiplerinin mevcut dosyalarını içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?",
+        "specific": "Aracımız kullandığınız mevcut Airtable çıktılarını içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "g-06",
+      "family": "g",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Notion çıktıları kullanan editör; araç mevcut dosyaları içeri alabiliyor.",
+      "texts": {
+        "generic": "Aracımız insanların kullandığı mevcut dosyaları içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?",
+        "category": "Aracımız editör ekiplerinin mevcut dosyalarını içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?",
+        "specific": "Aracımız kullandığınız mevcut Notion çıktılarını içeri alabiliyor. Aktarımı birlikte gözden geçirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "h-01",
+      "family": "h",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator evaluating a rota view that highlights unfilled shifts. They explicitly prefer feelings-first appeals.",
+      "texts": {
+        "source": "The rota highlights unfilled shifts and lists the associated shift assignments clearly. Would you review it?"
+      },
+      "orientation": "affective"
+    },
+    {
+      "id": "h-02",
+      "family": "h",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor evaluating a glossary that marks disputed terms. They explicitly prefer facts-first appeals.",
+      "texts": {
+        "source": "The glossary marks disputed terms and lists their associated dictionary entries clearly. Would you review it?"
+      },
+      "orientation": "cognitive"
+    },
+    {
+      "id": "h-03",
+      "family": "h",
+      "language": "en",
+      "platform": "email",
+      "persona": "A researcher evaluating an export that retains source identifiers. They explicitly prefer feelings-first appeals.",
+      "texts": {
+        "source": "The export retains source identifiers and lists the associated original rows clearly. Would you review it?"
+      },
+      "orientation": "affective"
+    },
+    {
+      "id": "h-04",
+      "family": "h",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Boş vardiyaları gösteren çizelgeyi değerlendiren koordinatör. Olgu odaklı anlatımları tercih ettiğini açıkça belirtiyor.",
+      "texts": {
+        "source": "Çizelge boş vardiyaları gösteriyor ve ilgili görevlendirme kayıtlarını açık biçimde listeliyor. Bu görünümü birlikte incelemek ister misiniz?"
+      },
+      "orientation": "cognitive"
+    },
+    {
+      "id": "h-05",
+      "family": "h",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Tartışmalı maddeleri işaretleyen sözlüğü değerlendiren editör. Duygu odaklı anlatımları tercih ettiğini açıkça belirtiyor.",
+      "texts": {
+        "source": "Sözlük tartışmalı maddeleri işaretliyor ve ilgili kaynak sözlük kayıtlarını açık biçimde listeliyor. Bu görünümü birlikte incelemek ister misiniz?"
+      },
+      "orientation": "affective"
+    },
+    {
+      "id": "h-06",
+      "family": "h",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Kaynak kimliklerini koruyan dışa aktarımı değerlendiren araştırmacı. Olgu odaklı anlatımları tercih ettiğini açıkça belirtiyor.",
+      "texts": {
+        "source": "Çıktı kaynak kimliklerini koruyor ve ilgili özgün veri satırlarını açık biçimde listeliyor. Bu görünümü birlikte incelemek ister misiniz?"
+      },
+      "orientation": "cognitive"
+    },
+    {
+      "id": "h-07",
+      "family": "h",
+      "language": "en",
+      "platform": "email",
+      "persona": "A coordinator evaluating a rota view that highlights unfilled shifts.",
+      "texts": {
+        "affective": "The rota highlights unfilled shifts so you can picture a calmer handover. Would you review it?",
+        "cognitive": "The rota highlights unfilled shifts and lists the associated shift assignments clearly. Would you review it?"
+      },
+      "orientation": "unknown"
+    },
+    {
+      "id": "h-08",
+      "family": "h",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor evaluating a glossary that marks disputed terms.",
+      "texts": {
+        "affective": "The glossary marks disputed terms so you can picture a calmer review. Would you review it?",
+        "cognitive": "The glossary marks disputed terms and lists their associated dictionary entries clearly. Would you review it?"
+      },
+      "orientation": "unknown"
+    },
+    {
+      "id": "h-09",
+      "family": "h",
+      "language": "en",
+      "platform": "email",
+      "persona": "A researcher evaluating an export that retains source identifiers.",
+      "texts": {
+        "affective": "The export retains source identifiers so you can picture a calmer review. Would you review it?",
+        "cognitive": "The export retains source identifiers and lists the associated original rows clearly. Would you review it?"
+      },
+      "orientation": "unknown"
+    },
+    {
+      "id": "h-10",
+      "family": "h",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Boş vardiyaları gösteren çizelgeyi değerlendiren koordinatör.",
+      "texts": {
+        "affective": "Çizelge boş vardiyaları göstererek daha huzurlu bir devir süreci hayal etmenizi sağlıyor. Birlikte incelemek ister misiniz?",
+        "cognitive": "Çizelge boş vardiyaları gösteriyor ve ilgili görevlendirme kayıtlarını açık biçimde listeliyor. Bu görünümü birlikte incelemek ister misiniz?"
+      },
+      "orientation": "unknown"
+    },
+    {
+      "id": "h-11",
+      "family": "h",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Tartışmalı maddeleri işaretleyen sözlüğü değerlendiren editör.",
+      "texts": {
+        "affective": "Sözlük tartışmalı maddeleri işaretleyerek daha huzurlu bir inceleme süreci hayal etmenizi sağlıyor. Birlikte incelemek ister misiniz?",
+        "cognitive": "Sözlük tartışmalı maddeleri işaretliyor ve ilgili sözlük kayıtlarını açık biçimde listeliyor. Bu görünümü birlikte incelemek ister misiniz?"
+      },
+      "orientation": "unknown"
+    },
+    {
+      "id": "h-12",
+      "family": "h",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Kaynak kimliklerini koruyan dışa aktarımı değerlendiren araştırmacı.",
+      "texts": {
+        "affective": "Çıktı kaynak kimliklerini koruyarak daha huzurlu bir inceleme süreci hayal etmenizi sağlıyor. Birlikte incelemek ister misiniz?",
+        "cognitive": "Çıktı kaynak kimliklerini koruyor ve ilgili veri satırlarını açık biçimde listeliyor. Bu görünümü birlikte incelemek ister misiniz?"
+      },
+      "orientation": "unknown"
+    },
+    {
+      "id": "u-01",
+      "family": "u",
+      "language": "en",
+      "platform": "email",
+      "persona": "Chief Financial Officer",
+      "texts": {
+        "source": "Would you review our proposal?"
+      }
+    },
+    {
+      "id": "u-02",
+      "family": "u",
+      "language": "en",
+      "platform": "email",
+      "persona": "Software Engineer",
+      "texts": {
+        "source": "Would you review our proposal?"
+      }
+    },
+    {
+      "id": "u-03",
+      "family": "u",
+      "language": "en",
+      "platform": "email",
+      "persona": "Marketing Director",
+      "texts": {
+        "source": "Would you review our proposal?"
+      }
+    },
+    {
+      "id": "u-04",
+      "family": "u",
+      "language": "en",
+      "platform": "email",
+      "persona": "Librarian",
+      "texts": {
+        "source": "Would you review our proposal?"
+      }
+    },
+    {
+      "id": "u-05",
+      "family": "u",
+      "language": "en",
+      "platform": "email",
+      "persona": "Operations Manager",
+      "texts": {
+        "source": "Would you review our proposal?"
+      }
+    },
+    {
+      "id": "u-06",
+      "family": "u",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Finans Müdürü",
+      "texts": {
+        "source": "Teklifimizi birlikte incelemek ister misiniz?"
+      }
+    },
+    {
+      "id": "u-07",
+      "family": "u",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Yazılım Mühendisi",
+      "texts": {
+        "source": "Teklifimizi birlikte incelemek ister misiniz?"
+      }
+    },
+    {
+      "id": "u-08",
+      "family": "u",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Pazarlama Direktörü",
+      "texts": {
+        "source": "Teklifimizi birlikte incelemek ister misiniz?"
+      }
+    },
+    {
+      "id": "r-01",
+      "family": "r",
+      "language": "en",
+      "platform": "email",
+      "persona": "An editor checking disputed terms.",
+      "texts": {
+        "source": "The glossary marks disputed terms and keeps their source entries available for comparison. I would like your view on the wording. Would you review the marked entries?"
+      }
+    },
+    {
+      "id": "r-02",
+      "family": "r",
+      "language": "en",
+      "platform": "linkedin",
+      "persona": "A security engineer reviewing a published threat model.",
+      "texts": {
+        "source": "Our published threat model explains the trust boundaries and how credential revocation works. Those are the details you asked to compare. Would you review the design?"
+      }
+    },
+    {
+      "id": "r-03",
+      "family": "r",
+      "language": "en",
+      "platform": "ad-copy",
+      "persona": "A visitor comparing subscription prices.",
+      "texts": {
+        "source": "Compare the monthly plans and choose the scope that fits your team. The plan page lists the included features beside each price. See pricing."
+      }
+    },
+    {
+      "id": "r-04",
+      "family": "r",
+      "language": "en",
+      "platform": "landing-page",
+      "persona": "A visitor evaluating an import preview.",
+      "texts": {
+        "source": "Import your existing class list and preview the changes before saving. The preview helps you check that each row lands in the intended place. Start free trial."
+      }
+    },
+    {
+      "id": "r-05",
+      "family": "r",
+      "language": "en",
+      "platform": "ad-copy",
+      "persona": "A visitor reviewing a glossary tool.",
+      "texts": {
+        "source": "The glossary marks disputed entries so you can compare the original wording. Keep each source definition beside the proposed change during review. View the demo."
+      }
+    },
+    {
+      "id": "r-06",
+      "family": "r",
+      "language": "en",
+      "platform": "landing-page",
+      "persona": "A visitor reviewing an export tool.",
+      "texts": {
+        "source": "Keep the source row identifiers in your export. Follow a correction back to the original entry when you need to check what changed. Explore the examples."
+      }
+    },
+    {
+      "id": "r-07",
+      "family": "r",
+      "language": "tr",
+      "platform": "email",
+      "persona": "Stok kayıtlarını yeniden girmek istemeyen operasyon sorumlusu; araç CSV içeri alabiliyor.",
+      "texts": {
+        "source": "Stok kayıtlarını yeniden girmek istemediğinizi belirtmiştiniz. Aracımız mevcut CSV dosyanızı içeri alabiliyor. Değerlendirmeye elinizdeki kayıtlarla başlayabilirsiniz. Aktarımı birlikte gözden geçirmek ister misiniz?"
+      }
+    },
+    {
+      "id": "r-08",
+      "family": "r",
+      "language": "tr",
+      "platform": "linkedin",
+      "persona": "Mevcut aracı değiştirmeden sürüm notlarını karşılaştırmak isteyen yönetici.",
+      "texts": {
+        "source": "Sürüm notlarını yan yana gösteren bir görünüm hazırladık. Mevcut aracınızı değiştirmeden bu görünüm üzerinden farkları karşılaştırabilirsiniz. Kullandığınız iş akışına uyup uymadığını birlikte incelemek ister misiniz?"
+      }
+    },
+    {
+      "id": "r-09",
+      "family": "r",
+      "language": "tr",
+      "platform": "general",
+      "persona": "Gönderenin Çilekeş grubunu sevmeyen flörtü; bilet veya tarih verilmemiş.",
+      "texts": {
+        "source": "Çilekeş konserine benimle gelmelisin, harika bir grup ve çok eğleneceğiz. Bu müziği canlı dinlemeyi gerçekten istiyorum. Senin de yanımda olman benim için güzel olur. Birlikte gidelim mi?"
+      }
+    },
+    {
+      "id": "r-10",
+      "family": "r",
+      "language": "tr",
+      "platform": "general",
+      "persona": "Kalabalık mekanları sevmeyen ve sessiz yürüyüşleri seven arkadaş.",
+      "texts": {
+        "source": "Birlikte biraz yürüyüp sohbet etmeyi özledim. Kalabalık bir yer yerine sessiz bir yürüyüşün sana daha uygun olduğunu biliyorum. Benimle yürüyüşe çıkıp biraz sohbet etmek ister misin?"
+      }
+    },
+    {
+      "id": "r-11",
+      "family": "r",
+      "language": "tr",
+      "platform": "ad-copy",
+      "persona": "Aylık plan fiyatlarını karşılaştıran ziyaretçi.",
+      "texts": {
+        "source": "Ekibinize uygun aylık planı karşılaştırarak seçebilirsiniz. Plan sayfasında her fiyatın yanında dahil edilen özellikler de yer alıyor. İhtiyacınız olan kapsamı incelemek için fiyatları görün."
+      }
+    },
+    {
+      "id": "r-12",
+      "family": "r",
+      "language": "tr",
+      "platform": "landing-page",
+      "persona": "Sınıf listesini aktarmadan önce değişiklikleri görmek isteyen okul görevlisi.",
+      "texts": {
+        "source": "Mevcut sınıf listenizi içeri aktarın ve kaydetmeden önce değişiklikleri önizlemede kontrol edin. Her satırın doğru yere aktarıldığını bu görünümden inceleyebilirsiniz. Görünümü değerlendirmek için ücretsiz denemeyi başlatın."
+      }
+    }
+  ]
+}

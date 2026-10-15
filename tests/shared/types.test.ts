@@ -106,6 +106,7 @@ describe("shared/types", () => {
         })),
       },
       robustness: {
+        context_fit_rubric_version: "v2",
         final_score: 70,
         neuro_axes: { self_value: { label: "Self/value response proxy", score: 60, source_keys: sourceKeys } },
         scientific_caveats: Array.from({ length: 8 }, (_, index) => `caveat ${index}`),
@@ -117,6 +118,7 @@ describe("shared/types", () => {
     expect(report?.persuasion_evidence?.research_sources).toHaveLength(37);
     expect(report?.persuasion_evidence?.research_sources?.[36].modality).toBe("fMRI");
     expect(report?.robustness?.neuro_axes?.self_value.source_keys).toEqual(sourceKeys);
+    expect(report?.robustness?.context_fit_rubric_version).toBe("v2");
     expect(report?.robustness?.scientific_caveats).toHaveLength(8);
     expect(report?.robustness?.guardrails_applied).toHaveLength(10);
     expect(report?.robustness?.breakdown_anchor).toEqual({ basis: "persona_read_facets_v1" });

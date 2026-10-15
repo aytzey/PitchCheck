@@ -745,73 +745,7 @@ async fn refine_pitch(
                         .to_string(),
                 )
             })?;
-        let suggestions = format_refine_suggestions(&request.suggestions);
-        let clarification_answers = format_refine_clarification_answers(&request.clarification_answers);
-        let clarification_round = request.clarification_round.min(MAX_CLARIFICATION_ROUNDS);
-        let allow_clarification =
-            !request.force_rewrite && clarification_round < MAX_CLARIFICATION_ROUNDS;
-        let question_limit = if clarification_round == 0 { 3 } else { 5 };
-        let clarification_instruction = if allow_clarification {
-            format!(
-                "You may ask up to {question_limit} short questions in this response only if a safe rewrite would otherwise require invented proof, fake urgency, or fake context."
-            )
-        } else {
-            "Do not ask any more questions. Return the best safe rewrite now.".to_string()
-        };
-        let prompt = format!(
-            concat!(
-                "Platform: {platform}\n",
-                "Recipient persona:\n{persona}\n\n",
-                "Current message:\n{message}\n\n",
-                "Clarification answers already provided:\n{clarification_answers}\n\n",
-                "Score-lift repair brief:\n{suggestions}\n\n",
-                "Rewrite objective:\n",
-                "- Optimize for a materially higher next PitchCheck persuasion score, not a light paraphrase.\n",
-                "- First repair the weakest persuasion facets and neural signals in the brief.\n",
-                "- Make the opener persona-specific, the value claim concrete, the proof more credible, ",
-                "and the CTA lower-friction.\n",
-                "- Prefer specific, verifiable detail already present in the draft. Do not invent fake customers, ",
-                "metrics, dates, or credentials; if proof is missing, create a credible proof path such as a pilot, ",
-                "benchmark, example, or screen-share.\n",
-                "- Do not invent talk/post topics, service names, before/after baselines, customer names, customer counts, ",
-                "or source-specific observations. If a detail is only generic, keep it generic.\n",
-                "- If the draft has a one-sided metric, preserve it as one-sided; do not add a \"from X to Y\" baseline unless X is explicitly provided.\n",
-                "- Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.\n",
-                "- Preserve the sender intent, platform fit, and the input language exactly.\n\n",
-                "{doctrine}\n\n",
-                "Rewrite process - do this internally before answering:\n",
-                "1. Build the persona's decision model: what they optimize for, their default objection, and the proof threshold they need before acting.\n",
-                "2. Draft THREE candidate rewrites with genuinely different strategies (outcome-led, problem/insight-led, proof-led). Do not output the drafts.\n",
-                "3. Score each candidate against: persona-stated specifics instead of category claims; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel fit; fluency; zero invented facts.\n",
-                "4. Take the highest-scoring candidate, fix its single weakest item, and output only that final version.\n\n",
-                "Final self-check before answering:\n",
-                "- No invented facts, names, metrics, dates, or baselines anywhere.\n",
-                "- Same language as the draft. Every sentence earns its place. Exactly one CTA, answerable with minimal effort.\n",
-                "- The weakest items in the repair brief are visibly repaired and the strongest part of the draft is preserved.\n\n",
-                "Clarification behavior:\n",
-                "- Clarification round already shown to the user: {clarification_round} of 2.\n",
-                "- Force rewrite now: {force_rewrite}.\n",
-                "- {clarification_instruction}\n",
-                "- If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.\n",
-                "- Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.\n",
-                "- Blank or skipped answers mean the fact is unavailable; proceed without inventing it and do not ask again.\n",
-                "- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask short questions instead of inventing, but only when clarification is allowed above.\n",
-                "- Ask questions especially when proof, target outcome, decision criterion, likely objection, relationship level, or CTA constraints are missing.\n",
-                "- If proof is missing but a proof path is enough, rewrite using a pilot, demo, benchmark, screen-share, or sample-output path.\n",
-                "- If clarification is not allowed, produce the safest low-claim rewrite.\n\n",
-                "Return only JSON with this shape:\n",
-                "{{\"needs_clarification\":false,\"questions\":[],\"refined_message\":\"rewritten pitch or null\",\"safety_notes\":[\"No unverified claims added\"],\"persuasion_profile\":{{\"target_values\":[],\"likely_objections\":[],\"proof_threshold\":\"unknown\",\"route\":\"central|peripheral|mixed\",\"cta_style\":\"low-friction proof-first\"}}}}"
-            ),
-            doctrine = FALLBACK_DOCTRINE.trim(),
-            platform = request.platform.trim(),
-            persona = request.persona.trim(),
-            message = request.message.trim(),
-            clarification_answers = clarification_answers,
-            suggestions = suggestions,
-            clarification_round = clarification_round,
-            force_rewrite = request.force_rewrite,
-            clarification_instruction = clarification_instruction,
-        );
+        let prompt = build_fallback_refine_prompt(&request);
         let response = state
             .client
             .post("https://openrouter.ai/api/v1/chat/completions")
@@ -1147,6 +1081,77 @@ fn parse_bool(value: &str) -> Option<bool> {
         "0" | "false" | "no" | "off" => Some(false),
         _ => None,
     }
+}
+
+fn build_fallback_refine_prompt(request: &RefineRequest) -> String {
+    let suggestions = format_refine_suggestions(&request.suggestions);
+    let clarification_answers = format_refine_clarification_answers(&request.clarification_answers);
+    let clarification_round = request.clarification_round.min(MAX_CLARIFICATION_ROUNDS);
+    let allow_clarification =
+        !request.force_rewrite && clarification_round < MAX_CLARIFICATION_ROUNDS;
+    let question_limit = if clarification_round == 0 { 3 } else { 5 };
+    let clarification_instruction = if allow_clarification {
+        format!(
+            "You may ask up to {question_limit} short questions in this response only if a safe rewrite would otherwise require invented proof, fake urgency, or fake context."
+        )
+    } else {
+        "Do not ask any more questions. Return the best safe rewrite now.".to_string()
+    };
+    format!(
+        concat!(
+            "Platform: {platform}\n",
+            "Recipient persona:\n{persona}\n\n",
+            "Current message:\n{message}\n\n",
+            "Clarification answers already provided:\n{clarification_answers}\n\n",
+            "Score-lift repair brief:\n{suggestions}\n\n",
+            "Rewrite objective:\n",
+            "- Optimize for a materially higher next PitchCheck persuasion score, not a light paraphrase.\n",
+            "- When the persona states a specific, true fact about the recipient, prefer it over a category-level paraphrase ('teams like yours', 'a lot of'); one or two such references are enough; never invent one.\n",
+            "- First repair the weakest persuasion facets and neural signals in the brief.\n",
+            "- Make the opener persona-specific, the value claim concrete, the proof more credible, ",
+            "and the CTA lower-friction.\n",
+            "- Prefer specific, verifiable detail already present in the draft. Do not invent fake customers, ",
+            "metrics, dates, or credentials; if proof is missing, create a credible proof path such as a pilot, ",
+            "benchmark, example, or screen-share.\n",
+            "- Do not invent talk/post topics, service names, before/after baselines, customer names, customer counts, ",
+            "or source-specific observations. If a detail is only generic, keep it generic.\n",
+            "- If the draft has a one-sided metric, preserve it as one-sided; do not add a \"from X to Y\" baseline unless X is explicitly provided.\n",
+            "- Remove generic hype, vague adjectives, and extra setup. Every sentence should earn its place.\n",
+            "- Preserve the sender intent, platform fit, and the input language exactly.\n\n",
+            "{doctrine}\n\n",
+            "Rewrite process - do this internally before answering:\n",
+            "1. Build the persona's decision model: what they optimize for, their default objection, and the proof threshold they need before acting.\n",
+            "2. Draft THREE candidate rewrites with genuinely different strategies (outcome-led, insight-led, proof-led; each ends on what happens after yes, from supplied facts only). Do not output the drafts.\n",
+            "3. Score each candidate against: persona-stated specifics instead of category claims; concrete believable value claim; credible proof or proof path; exactly one low-friction CTA; channel fit; fluency; zero invented facts.\n",
+            "4. Take the highest-scoring candidate, fix its single weakest item, and output only that final version.\n\n",
+            "Final self-check before answering:\n",
+            "- No invented facts, names, metrics, dates, or baselines anywhere.\n",
+            "- Same language as the draft. Every sentence earns its place. Exactly one CTA, answerable with minimal effort.\n",
+            "- The weakest items in the repair brief are visibly repaired and the strongest part of the draft is preserved.\n\n",
+            "Clarification behavior:\n",
+            "- Clarification round already shown to the user: {clarification_round} of 2.\n",
+            "- Force rewrite now: {force_rewrite}.\n",
+            "- {clarification_instruction}\n",
+            "- If clarification answers are provided above, treat them as authoritative context and do not ask the same or equivalent question again.\n",
+            "- Use answered constraints directly in the rewrite. If an answer says a proof claim is not permitted or unknown, use a safe proof path instead of asking again.\n",
+            "- Blank or skipped answers mean the fact is unavailable; proceed without inventing it and do not ask again.\n",
+            "- If a safe, useful rewrite requires missing facts that cannot be inferred from the draft, ask short questions instead of inventing, but only when clarification is allowed above.\n",
+            "- Ask questions especially when proof, target outcome, decision criterion, likely objection, relationship level, or CTA constraints are missing.\n",
+            "- If proof is missing but a proof path is enough, rewrite using a pilot, demo, benchmark, screen-share, or sample-output path.\n",
+            "- If clarification is not allowed, produce the safest low-claim rewrite.\n\n",
+            "Return only JSON with this shape:\n",
+            "{{\"needs_clarification\":false,\"questions\":[],\"refined_message\":\"rewritten pitch or null\",\"safety_notes\":[\"No unverified claims added\"],\"persuasion_profile\":{{\"target_values\":[],\"likely_objections\":[],\"proof_threshold\":\"unknown\",\"route\":\"central|peripheral|mixed\",\"cta_style\":\"low-friction proof-first\"}}}}"
+        ),
+        doctrine = FALLBACK_DOCTRINE.trim(),
+        platform = request.platform.trim(),
+        persona = request.persona.trim(),
+        message = request.message.trim(),
+        clarification_answers = clarification_answers,
+        suggestions = suggestions,
+        clarification_round = clarification_round,
+        force_rewrite = request.force_rewrite,
+        clarification_instruction = clarification_instruction,
+    )
 }
 
 fn format_refine_suggestions(suggestions: &[String]) -> String {
@@ -2861,6 +2866,25 @@ mod tests {
     #[test]
     fn fallback_uses_shared_doctrine() {
         assert!(FALLBACK_DOCTRINE.contains("Cut words, not reasons"));
+    }
+
+    #[test]
+    fn fallback_writer_uses_recipient_facts_and_concrete_next_steps() {
+        let request: RefineRequest = serde_json::from_value(json!({
+            "message": "Review the proposal?", "persona": "A colleague", "platform": "email",
+            "suggestions": [], "clarificationAnswers": [{"id": "proof", "question": "Known fact?", "answer": "CSV import"}]
+        })).unwrap();
+        let prompt = build_fallback_refine_prompt(&request);
+        assert!(prompt.contains("When the persona states a specific, true fact about the recipient, prefer it over a category-level paraphrase ('teams like yours', 'a lot of'); one or two such references are enough; never invent one."));
+        assert!(prompt.contains("(outcome-led, insight-led, proof-led; each ends on what happens after yes, from supplied facts only)"));
+        assert!(prompt.contains(FALLBACK_DOCTRINE.trim()));
+        assert!(prompt.contains("Answer: CSV import"));
+        assert!(prompt.contains("You may ask up to 3 short questions"));
+        let forced = build_fallback_refine_prompt(&RefineRequest {
+            force_rewrite: true,
+            ..request
+        });
+        assert!(forced.contains("Do not ask any more questions"));
     }
 
     #[test]

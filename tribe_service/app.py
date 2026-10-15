@@ -53,8 +53,10 @@ from tribe_service.llm_layer import (
     _openrouter_enabled,
     plan_tribe_refinement,
     OPENROUTER_ENABLED,
+    SEMANTIC_BLEND_WEIGHT,
+    _semantic_score_from_context_fit,
 )
-from tribe_service.persuasion_features import calibration_quality_weight, evidence_score_from_analysis, neuro_axes_from_analysis
+from tribe_service.persuasion_features import calibration_confidence, calibration_quality_weight, evidence_score_from_analysis, neuro_axes_from_analysis
 from tribe_service.auth import (
     AUTH_STORE,
     AuthConfigurationError,
@@ -399,10 +401,11 @@ def auth_logout(
     return {"ok": True}
 
 
-def _score_log_record(request, report, raw_features, fmri_data, neural_signals) -> dict:
+def _score_log_record(request, report, raw_features, fmri_data, neural_signals, *, blend_inputs=None) -> dict:
     """Numbers-only whitelist for the opt-in score log; never message, persona or LLM prose."""
     message = request.message
     robustness = report.robustness or {}
+    evidence = evidence_score_from_analysis(neural_signals, report.persuasion_evidence)
     return {
         "source": "score",
         "scored_at": report.scored_at,
@@ -433,6 +436,16 @@ def _score_log_record(request, report, raw_features, fmri_data, neural_signals) 
         )},
         "facets": {key: facet.get("score") for key, facet in (report.context_fit or {}).items() if isinstance(facet, dict)},
         "b1_tribe_informed": True,
+        # Rounded response fields cannot guarantee the offline .05-point parity check.
+        "blend_inputs": blend_inputs or {
+            "evidence": evidence,
+            "raw_llm": robustness.get("raw_llm_score"),
+            "facet": _semantic_score_from_context_fit(report.context_fit) if robustness.get("raw_llm_score") is not None else None,
+            "confidence": calibration_confidence(evidence, 50.0, report.persuasion_evidence),
+            "quality_weight": calibration_quality_weight(report.persuasion_evidence),
+            "blend": SEMANTIC_BLEND_WEIGHT,
+        },
+        **score_log.monitoring_fields(robustness, fmri_data, report.context_fit),
     }
 
 
@@ -528,7 +541,8 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
             try:
                 if report.robustness is not None:
                     report.robustness["score_log_id"] = score_log.pitch_id(request.message)
-                score_log.append(_score_log_record(request, report, raw_features, fmri_data, neural_signals))
+                score_log.append(_score_log_record(request, report, raw_features, fmri_data, neural_signals,
+                                                   blend_inputs=llm_result.get("_score_log_blend_inputs")))
             except Exception as exc:  # the log must never fail /score
                 LOGGER.warning("Score log skipped (%s)", type(exc).__name__)
 
@@ -598,9 +612,12 @@ def _log_refine_candidates(message: str, guidance: dict, *, jev: bool) -> None:
             "parent_pitch_id": parent, "pitch_id": score_log.pitch_id(row.get("message", "")),
             "id": row.get("id"), "selected": row.get("id") == guidance.get("selected_id"),
             "selected_id_semantic_only": guidance.get("selected_id_semantic_only"),
+            "selected_id": guidance.get("selected_id"),
             **{key: row.get(key) for key in (
                 "eligible", "semantic_score", "selection_score", "neural_score", "quality_weight",
                 "neural_signals", "response_features", "text_feature_model", "mode",
+                "selection_score_without_roi", "roi_selection_term", "roi_prior_points",
+                "roi_selection_unit",
             )},
             "axes": {key: axis.get("score") for key, axis in (row.get("neuro_axes") or {}).items() if isinstance(axis, dict)},
             "score_adjustment": (row.get("empirical_effect") or {}).get("score_adjustment"),

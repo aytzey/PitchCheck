@@ -822,3 +822,35 @@ class TestScoreLog:
         assert record["pitch_id"] == report["robustness"]["score_log_id"] and len(record["pitch_id"]) == 64
         assert record["final_score"] == report["robustness"]["final_score"]
         assert record["word_count"] == 16 and record["b1_tribe_informed"] is True
+        from scripts.validate_incremental import replay
+        assert abs(replay(record)[0] - record["final_score"]) <= .05 + 1e-12
+        assert len(record["raw_features"]) == 10
+        for text in (self.MESSAGE, self.PERSONA):
+            assert all(text[i:i+12] not in line for i in range(len(text) - 11))
+        assert "_score_log_blend_inputs" not in report
+
+    def test_score_log_disabled_by_default(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("PITCHCHECK_SCORE_LOG_PATH", raising=False)
+        monkeypatch.delenv("PITCHCHECK_SCORE_LOG_KEY", raising=False)
+        report = self._score()
+        assert "score_log_id" not in report["robustness"]
+
+    def test_score_log_unwritable_path_keeps_200(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(tmp_path))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+        self._score()
+
+    def test_refine_log_strips_message(self, monkeypatch, tmp_path):
+        import json
+        from tribe_service.app import _log_refine_candidates
+        log = tmp_path / "refine.jsonl"
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+        monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+        _log_refine_candidates(self.MESSAGE, {"selected_id": "c1", "selected_id_semantic_only": "original",
+            "evaluations": [{"id": "c1", "message": self.MESSAGE, "issues": [self.PERSONA],
+                             "semantic_score": 75, "roi_selection_unit": .2}]}, jev=True)
+        text = log.read_text()
+        record = json.loads(text)
+        assert self.MESSAGE not in text and self.PERSONA not in text
+        assert "message" not in record and "issues" not in record
+        assert record["selected_id"] == "c1" and record["selected_id_semantic_only"] == "original"

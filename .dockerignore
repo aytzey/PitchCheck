@@ -6,6 +6,7 @@ __pycache__
 .env
 .secrets/
 data/
+validation_data/
 .venv
 out
 src-tauri/target

@@ -1,0 +1,10 @@
+clickability_test_id,headline,eyecatcher_id,impressions,clicks,problem,created_at,winner
+clean,A tiny garden brings a street together,image-a,200,20,false,2015-03-01,false
+clean,A tiny garden brings a street together,image-a,100,10,false,2015-03-01,false
+clean,See what neighbors grew in one empty lot,image-a,300,45,false,2015-03-01,true
+flagged,An invented risky title,image-b,100,10,true,2015-03-01,false
+flagged,Another invented risky title,image-b,100,12,true,2015-03-01,false
+date-risk,An old synthetic title,image-c,100,10,false,2013-07-01,false
+date-risk,Another old synthetic title,image-c,100,12,false,2013-07-01,false
+image-confound,A changed picture title,image-d,100,10,false,2015-03-01,false
+image-confound,Another changed picture title,image-e,100,12,false,2015-03-01,false

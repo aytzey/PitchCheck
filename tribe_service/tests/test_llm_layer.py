@@ -106,6 +106,55 @@ def _mock_openrouter_response(content: str, status_code: int = 200) -> httpx.Res
     return resp
 
 
+@pytest.mark.parametrize("llm_used", [False, True])
+@pytest.mark.parametrize("quality", [1., .55])
+def test_blend_final_parity(monkeypatch, llm_used, quality):
+    from tribe_service import llm_layer as llm
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", "unused-in-pure-calibration")
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+    evidence = {"warnings": [] if quality == 1 else ["single_segment_prediction"]}
+    context = {k: {"score": 71.273} for k in llm.CONTEXT_FIT_KEYS}
+    result = llm._calibrate_result({"persuasion_score": 78.376, "context_fit": context},
+                                 neural_signals=SAMPLE_NEURAL_SIGNALS, persuasion_evidence=evidence, llm_used=llm_used)
+    inputs = result["_score_log_blend_inputs"]
+    final, semantic, weight, guards, prior_report = llm._blend_final(**inputs)
+    assert result["robustness"]["final_score"] == round(final, 1)
+    assert abs(final - result["robustness"]["final_score"]) <= .05 + 1e-12
+    assert inputs["raw_llm"] == (78.376 if llm_used else None)
+    assert result["robustness"]["guardrails_applied"] == guards
+    assert prior_report == {}
+
+
+@pytest.mark.parametrize("direction", [-1, 1])
+@pytest.mark.parametrize("raw", [None, 90.])
+def test_literature_prior_budget(monkeypatch, direction, raw):
+    from tribe_service import llm_layer as llm
+    priors = {"evidence_without_roi": 50., "facet_without_boost": 50.,
+              "tailoring_points": direction * 6., "specificity_points": direction * 3.,
+              "terms": {name: {"weight": .15, "provenance": "literature_prior_unvalidated"}
+                        for name in ("roi_prior", "persona_read_prior", "specificity_prior")}}
+    inputs = (50 + direction * 25., raw, 50 + direction * 40., .7, 1.)
+    final, _, _, guards, report = llm._blend_final(*inputs, priors=priors)
+    without = report["final_score_without_literature_priors"]
+    assert abs(final - without) <= 6. + 1e-12
+    assert "literature_prior_budget_clamped" in guards
+    assert set(report["score_terms"]) == set(priors["terms"])
+    assert all(t["provenance"] == "literature_prior_unvalidated" for t in report["score_terms"].values())
+    monkeypatch.setattr(llm, "LITERATURE_PRIOR_BUDGET", 0.)
+    assert llm._blend_final(*inputs, priors=priors)[0] == without
+    # The budget switch has no effect without explicit prior inputs.
+    assert llm._blend_final(66.3, 78, 80, .7, 1., priors=None)[4] == {}
+
+
+def test_openrouter_payload_default_unchanged():
+    from tribe_service.llm_layer import SYSTEM_PROMPT
+    kwargs = dict(model="google/gemini-3.8-flash", temperature=.2, json_mode=True)
+    default = _openrouter_payload("Synthetic prompt", **kwargs)
+    assert default == _openrouter_payload("Synthetic prompt", system_prompt=SYSTEM_PROMPT, **kwargs)
+    assert default["messages"][0]["content"] == SYSTEM_PROMPT
+    assert _openrouter_payload("Synthetic prompt", system_prompt="Blind", **kwargs)["messages"][0]["content"] == "Blind"
+
+
 # ── Tests ──
 
 

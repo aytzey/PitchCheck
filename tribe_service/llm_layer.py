@@ -17,7 +17,7 @@ from typing import Any
 
 import httpx
 
-from tribe_service import native_core
+from tribe_service import native_core, score_log
 from tribe_service.schemas import MAX_MESSAGE_CHARS
 from tribe_service.research_synthesis import _segment_excerpts, build_tribe_synthesis, localize_pitch_segments
 from tribe_service.persuasion_features import (
@@ -76,6 +76,7 @@ OPENROUTER_SELF_CONSISTENCY_SAMPLES = _env_int("OPENROUTER_SELF_CONSISTENCY_SAMP
 # weak neural evidence makes the semantic read the best signal available.
 # 0 reproduces the old neural-only behavior.
 SEMANTIC_BLEND_WEIGHT = min(1.0, _env_float("PITCHCHECK_SEMANTIC_BLEND_WEIGHT", 0.55, 0.0))
+LITERATURE_PRIOR_BUDGET = _env_float("PITCHCHECK_LITERATURE_PRIOR_BUDGET", 6.0, 0.0)
 # TRIBE never receives the persona (app.py scores request.message only), so the two
 # recipient-specific breakdown items are anchored to the LLM persona-read facets.
 # Both weights = 0 restores the old neural-anchored breakdown.
@@ -583,11 +584,12 @@ def _openrouter_payload(
     model: str | None = None,
     temperature: float,
     json_mode: bool,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": _resolve_openrouter_model(model),
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": temperature,
@@ -608,6 +610,7 @@ def _call_openrouter_once(
     *,
     model: str | None = None,
     temperature: float = 0.2,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict[str, Any] | None:
     if not _openrouter_enabled(model):
         return None
@@ -627,6 +630,7 @@ def _call_openrouter_once(
                     model=model,
                     temperature=temperature,
                     json_mode=json_mode,
+                    system_prompt=system_prompt,
                 )
                 response = httpx.post(
                     f"{OPENROUTER_API_BASE_URL}/chat/completions",
@@ -2337,6 +2341,85 @@ def _allowed_breakdown_delta(confidence: float) -> float:
     return max(6.0, 14.0 - confidence * 6.0)
 
 
+def _blend_final(evidence, raw_llm, facet, confidence, quality_weight, *,
+                 blend=SEMANTIC_BLEND_WEIGHT, priors=None, budget=None):
+    """Shared runtime/offline blend; absent priors preserve the existing formula."""
+    def calculate(evidence, facet, tailoring=0.0, specificity=0.0):
+        guardrails = []
+        if quality_weight < 0.99:
+            guardrails.append("score_shrunk_for_prediction_quality")
+        semantic_weight = 0.0
+        if raw_llm is None:
+            llm_score = None
+            final = evidence
+            guardrails.append("neural_only_report_generated")
+        else:
+            semantic = raw_llm
+            if facet is not None:
+                semantic = facet * 0.65 + raw_llm * 0.35
+                guardrails.append("semantic_score_derived_from_context_fit_facets")
+            semantic += tailoring
+            allowed = _allowed_llm_delta(confidence)
+            delta = semantic - evidence
+            if abs(delta) > allowed:
+                llm_score = evidence + (allowed if delta > 0 else -allowed)
+                guardrails.append("llm_score_clamped_to_neural_band")
+            else:
+                llm_score = semantic
+                guardrails.append("llm_semantic_score_within_neural_band")
+            guardrails.append("breakdown_scores_clamped_to_neural_axes")
+            semantic_weight = clamp(blend + (1.0 - quality_weight) * 0.30, 0.0, 0.85)
+            final = evidence + (llm_score - evidence) * semantic_weight
+            guardrails.append("final_score_neural_anchored_semantic_blend")
+        final = final + specificity
+        return final, llm_score, semantic_weight, guardrails
+
+    final, llm_score, semantic_weight, guardrails = calculate(
+        evidence, facet, (priors or {}).get("tailoring_points", 0.0),
+        (priors or {}).get("specificity_points", 0.0),
+    )
+    prior_report = {}
+    if priors is not None:
+        without_evidence = priors["evidence_without_roi"]
+        without_facet = priors.get("facet_without_boost", facet)
+        without = clamp(calculate(without_evidence, without_facet)[0])
+        limit = LITERATURE_PRIOR_BUDGET if budget is None else budget
+        if not math.isfinite(limit) or limit < 0:
+            raise ValueError("Literature prior budget must be finite and nonnegative")
+        delta = final - without
+        scale = min(1.0, limit / abs(delta)) if delta else 1.0
+        terms = {}
+        for name in ("roi_prior", "persona_read_prior", "specificity_prior"):
+            single_off = dict(priors)
+            single_evidence, single_facet = evidence, facet
+            if name == "roi_prior":
+                single_evidence = without_evidence
+            elif name == "persona_read_prior":
+                single_facet = without_facet
+                single_off["tailoring_points"] = 0.0
+            else:
+                single_off["specificity_points"] = 0.0
+            base = calculate(single_evidence, single_facet,
+                             single_off.get("tailoring_points", 0.0),
+                             single_off.get("specificity_points", 0.0))[0]
+            info = priors.get("terms", {}).get(name, {})
+            terms[name] = {
+                "value": (final - base) * scale,
+                "weight": info.get("weight", 0.0),
+                "provenance": info.get("provenance", "literature_prior_unvalidated"),
+                "budget_scale": scale,
+            }
+        final = without + delta * scale
+        if scale < 1.0:
+            guardrails.append("literature_prior_budget_clamped")
+        prior_report = {
+            "score_terms": terms,
+            "final_score_without_literature_priors": without,
+            "literature_prior_budget": {"budget": limit, "delta": final - without, "budget_scale": scale},
+        }
+    return clamp(final), llm_score, semantic_weight, guardrails, prior_report
+
+
 def _calibrate_result(
     result: dict[str, Any],
     *,
@@ -2358,47 +2441,17 @@ def _calibrate_result(
     confidence = calibration_confidence(evidence_score, 50.0, persuasion_evidence)
     raw_llm_score = _to_score(result.get("persuasion_score"), evidence_score) if llm_used else None
     facet_score = _semantic_score_from_context_fit(result.get("context_fit")) if llm_used else None
-    guardrails: list[str] = []
-    semantic_weight = 0.0
-    llm_score = raw_llm_score
-    if quality_weight < 0.99:
-        guardrails.append("score_shrunk_for_prediction_quality")
-
-    if raw_llm_score is None:
-        final_score = evidence_score
-        guardrails.append("neural_only_report_generated")
-    else:
-        # The semantic estimate is derived primarily from the rubric-scored
-        # context-fit facets; the LLM's holistic number is a secondary input.
-        if facet_score is not None:
-            semantic_estimate = facet_score * 0.65 + raw_llm_score * 0.35
-            guardrails.append("semantic_score_derived_from_context_fit_facets")
-        else:
-            semantic_estimate = raw_llm_score
-        allowed_delta = _allowed_llm_delta(confidence)
-        delta = semantic_estimate - evidence_score
-        if abs(delta) > allowed_delta:
-            llm_score = evidence_score + (allowed_delta if delta > 0 else -allowed_delta)
-            guardrails.append("llm_score_clamped_to_neural_band")
-        else:
-            llm_score = semantic_estimate
-            guardrails.append("llm_semantic_score_within_neural_band")
-        guardrails.append("breakdown_scores_clamped_to_neural_axes")
-        if breakdown_anchor:
-            guardrails.append("persona_breakdown_items_anchored_to_context_fit")
-        # Blend the band-clamped semantic score into the neural prior so persona
-        # and channel fit genuinely move the score. When TRIBE evidence is weak
-        # the quality-adjusted prior is already shrunk toward neutral, so the
-        # semantic read carries MORE of the final score, not less.
-        semantic_weight = clamp(
-            SEMANTIC_BLEND_WEIGHT + (1.0 - quality_weight) * 0.30,
-            0.0,
-            0.85,
-        )
-        final_score = evidence_score + (llm_score - evidence_score) * semantic_weight
-        guardrails.append("final_score_neural_anchored_semantic_blend")
-
-    final_score = clamp(final_score)
+    final_score, llm_score, semantic_weight, guardrails, _ = _blend_final(
+        evidence_score, raw_llm_score, facet_score, confidence, quality_weight,
+        blend=SEMANTIC_BLEND_WEIGHT,
+    )
+    if score_log.enabled():
+        result["_score_log_blend_inputs"] = {
+            "evidence": evidence_score, "raw_llm": raw_llm_score, "facet": facet_score,
+            "confidence": confidence, "quality_weight": quality_weight, "blend": SEMANTIC_BLEND_WEIGHT,
+        }
+    if raw_llm_score is not None and breakdown_anchor:
+        guardrails.insert(-1, "persona_breakdown_items_anchored_to_context_fit")
     result["persuasion_score"] = int(round(final_score))
     result["persuasion_evidence"] = persuasion_evidence
     result["robustness"] = {

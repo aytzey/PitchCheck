@@ -374,3 +374,12 @@ TRIBE v2 is a foundation model for in-silico neuroscience developed by Meta FAIR
 PitchCheck source code is [MIT](LICENSE).
 
 TRIBE v2 model weights (`facebook/tribev2`) are [CC-BY-NC-4.0](https://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only. See [TRIBE v2 Model — License and Attribution](#tribe-v2-model--license-and-attribution) above.
+
+## WS10 monitoring
+
+The offline [WS10 harness](docs/ws10-monitoring.md) compares shadow formulas,
+tests incremental predictive association and reports tuning/rollback advice.
+It never changes a product score or gates a feature. The
+[validation protocol](docs/validation-protocol.md) must be committed before real
+outcome collection or inspection. Outcome files and consented corpora stay
+outside Git; `validation_data/` is ignored.

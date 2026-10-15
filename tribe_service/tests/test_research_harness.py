@@ -198,24 +198,30 @@ def test_gpu_score_mocked_io_excludes_fallback_and_retry(monkeypatch, tmp_path):
     assert all(np.load(tmp_path / "run" / r["prediction_file"]).dtype == np.float16 for r in result)
 
 
-def test_cpu_analysis_exports_reference_consumable_by_product(monkeypatch, tmp_path):
-    from tribe_service import engine
+@pytest.mark.parametrize("with_atlas", [False, True])
+def test_cpu_analysis_exports_reference_consumable_by_product(monkeypatch, tmp_path, with_atlas):
+    from tribe_service import engine, roi_features
+    assets = roi_features.load_roi_assets() if with_atlas else None
     rng = np.random.default_rng(2)
     rows = []
     run = tmp_path / "run"; run.mkdir()
     pred = run / "pred.npy"; np.save(pred, np.zeros((2, 20484), np.float16))
     for i in range(5):
         for j in range(5):
+            if with_atlas:
+                pred = run / f"pred-{i}-{j}.npy"
+                np.save(pred, rng.normal(size=(2, 20484)).astype(np.float16))
             rows.append({"pair_id": str(i), "condition": f"p{j}", "role": "paraphrase", "text": "one two three",
                          "quantities": {"evidence_score": 50 + i + rng.normal(0, .1)},
                          "lexical": {"words": 3, "sentences": 1, "mean_word_length": 3, "global_mean_abs": 1},
-                         "excluded": False, "prediction_file": "pred.npy", "prediction_sha256": harness.sha256(pred)})
+                         "excluded": False, "prediction_file": pred.name, "prediction_sha256": harness.sha256(pred)})
     prov = {"encoder": "meta-llama/Llama-3.2-3B", "event_version": "direct_v1", "text_input_mode": "direct",
-            "atlas_sha256": None, "git_sha": "synthetic", "tribev2_commit": "synthetic", "hf_snapshot": "synthetic"}
+            "atlas_sha256": assets[4] if assets else None, "text_feature_compatible": True,
+            "git_sha": "synthetic", "tribev2_commit": "synthetic", "hf_snapshot": "synthetic"}
     harness.write_json(run / "metrics.json", {"complete": True, "family": "stage0", "date": "2026-10-16",
                                               "provenance": prov, "excluded_rows": 0})
     (run / "rows.jsonl").write_text(''.join(json.dumps(row)+'\n' for row in rows))
-    monkeypatch.setattr(harness, "load_assets", lambda: None)
+    monkeypatch.setattr(harness, "load_assets", lambda: assets)
     monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
     destination = tmp_path / "roi_assets/roi_reference_meta-llama__Llama-3.2-3B.json"
     harness.analyze(SimpleNamespace(run=run, output=None, reference_out=destination))
@@ -225,7 +231,12 @@ def test_cpu_analysis_exports_reference_consumable_by_product(monkeypatch, tmp_p
         data = engine.roi_reference(prov["encoder"])
         assert data == report["reference"]
         assert data["quantities"]["evidence_score"]["noise"]["min_detectable_delta"] > 0
-        assert report["shadow_comparison"]["status"] == "not_run"
+        if with_atlas:
+            calibration = data["unit_calibration"]
+            assert calibration["basis"] == "length_model_z" and calibration["n_cases"] == 25
+            assert calibration["provenance"].startswith("unit_calibration:stage0:")
+        else:
+            assert report["shadow_comparison"]["status"] == "not_run"
     finally:
         engine.roi_reference.cache_clear()
     pred.write_bytes(b'changed')

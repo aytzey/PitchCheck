@@ -103,6 +103,9 @@ def score_corpus(rows, *, scrambled=False):
         if second_fmri.get("text_feature_compatible") is not True:
             raise ValueError("Retest encoder compatibility changed")
         second_evidence = llm._augment_persuasion_evidence(request.message, request.persona, request.platform, second_raw, second_fmri)
+        calibrated = llm._calibrate_result({}, neural_signals=signals, persuasion_evidence=evidence,
+            llm_used=False, fmri_summary=fmri, raw_features=raw, message=request.message, platform=request.platform)
+        robustness = calibrated["robustness"]
         output = {key: row[key] for key in ("group_id", "channel", "language", "data_source", "calibration_basis", "synthetic") if key in row}
         output.update(source="score", pitch_id=identifier, persona_id=score_log.pitch_id(request.persona),
                       scored_at=datetime.now(timezone.utc).isoformat(), mode="model", model_id=engine.TRIBE_MODEL_ID,
@@ -112,13 +115,13 @@ def score_corpus(rows, *, scrambled=False):
                       digit_count=sum(c.isdigit() for c in request.message),
                       raw_features=raw, neural_signals=signals,
                       axes={k: v["score"] for k, v in pf.neuro_axes_from_analysis(signals, evidence).items()},
-                      evidence_score=e, quality_weight=q, confidence=confidence, final_score=e,
+                      evidence_score=e, quality_weight=q, confidence=confidence, final_score=robustness["final_score"],
                       blend_inputs={"evidence": e, "raw_llm": None, "facet": None, "confidence": confidence, "quality_weight": q, "blend": llm.SEMANTIC_BLEND_WEIGHT},
                       b1_tribe_informed=False, tribe_retest_features=[raw, second_raw],
                       tribe_retest_evidence=[e, pf.evidence_score_from_analysis(second_signals, second_evidence)],
                       tribe_retest_relative_L2=float(np.linalg.norm(prediction - second) / max(np.linalg.norm(prediction), 1e-12)),
                       **{k: fmri.get(k) for k in ("voxel_count", "segments", "text_feature_model", "text_feature_compatible")},
-                      **score_log.monitoring_fields({}, fmri),
+                      **score_log.monitoring_fields(robustness, fmri),
                       **blind_scores(request.message, request.persona, request.platform))
         if scrambled:
             twin = scrambled_text(request.message, identifier)

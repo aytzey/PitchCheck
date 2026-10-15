@@ -19,9 +19,8 @@ These rows are a dated work ledger, not measured null results. Actual runs add
 `<date>-<family>-<encoder-slug>.json` reports here and update this table, including
 nulls and exclusions. No synthetic test output is installed as a product reference.
 
-The implementation leaves all changes **uncommitted**, as required by the job
-brief. The owner/supervisor must commit the fixtures and pre-registrations before
-the first run. §9.3's measured Stage 0 reference files and S2 results remain pending
+The fixtures and pre-registrations are committed on `research/integrated`.
+Blind classification and owner review remain pending before the first GPU run. §9.3's measured Stage 0 reference files and S2 results remain pending
 GPU execution; neither acceptance item is claimed complete.
 
 ## Frozen inputs and review
@@ -197,3 +196,15 @@ fixture hashes/lengths, missing atlas, committed-pre-registration preflight,
 mocked scoring/exclusion and CPU analysis. No GPU, paid API, real research data,
 server, or deployment is used. `scripts/smoke-runtime.py` contains the four-field
 refine assertion for the owner's later live check; it was not executed here.
+
+## Integrated reference units
+
+Stage-0 CPU analysis exports `unit_calibration` beside `quantities` and `checks`
+when the signed ROI reference is nondegenerate. Its `basis=length_model_z` uses
+`clip((minus_cortex - a - b*log(words))/resid_sd, -3, 3)`. The shared calibration
+reducer takes each ROI's median and the fixed-denominator composite SD, tagged
+`unit_calibration:stage0:<date>:<revision>`. Runtime scoring and synthesis pass the
+engine token count and consume the same units. Missing length data or a missing
+reference falls back to the committed WS07 encoder unit artifact; WS09 retains
+its separate `default_prior` noise floors. No measured Stage-0 file is supplied
+by this integration, and no synthetic test reference is installed for runtime.

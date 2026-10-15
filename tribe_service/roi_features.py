@@ -151,8 +151,40 @@ def roi_multipliers(encoder):
             for key in (*assets[2], *assets[3])}
 
 
+def unit_calibration(rows, encoder, run_id):
+    """Unit adjustment, not validation; repeated warm-cache cases get no extra weight."""
+    from tribe_service.persuasion_features import ROI_PRIOR
+    unique = {row["case"]: row["roi_summary"] for row in rows}
+    if len(unique) < 2 or len({summary["asset_sha256"] for summary in unique.values()}) != 1:
+        raise ValueError("ROI unit calibration needs distinct cases from the same atlas")
+    centers = {key: float(np.median([summary["rois"][key]["z"] for summary in unique.values()])) for key in ROI_PRIOR}
+    raw = [sum(sign * weight * (summary["rois"][key]["z"] - centers[key])
+               for key, (sign, weight, _, _) in ROI_PRIOR.items()) / sum(row[1] for row in ROI_PRIOR.values())
+           for summary in unique.values()]
+    scale = float(np.std(raw))
+    if not np.isfinite(scale) or scale <= 1e-12:
+        raise ValueError("ROI unit calibration needs distinct, non-degenerate predictions")
+    return {"schema_version": 1, "encoder": encoder, "centers": centers, "ROI_Z_SCALE": scale,
+            "atlas_sha256": next(iter(unique.values()))["asset_sha256"], "n_cases": len(unique),
+            "provenance": f"unit_calibration:{run_id}", "validated": False}
+
+def reference_z(summary, reference, word_count):
+    """WS08 signed length residuals, clipped to the plan's ±3 z range."""
+    if not isinstance(word_count, int) or isinstance(word_count, bool) or word_count <= 0:
+        return {}
+    result = {}
+    for key, row in summary.get("rois", {}).items():
+        quantity = reference.get("quantities", {}).get(f"roi:{key}", {})
+        model, sd = quantity.get("length_model", {}), quantity.get("resid_sd")
+        values = (row.get("minus_cortex"), model.get("a"), model.get("b_log_words"), sd)
+        if (all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values)
+                and sd > 1e-12):
+            result[key] = min(3.0, max(-3.0, (values[0] - model["a"] - model["b_log_words"] * math.log(word_count)) / sd))
+    return result
+
+
 @lru_cache(maxsize=4)
-def roi_calibration(encoder):
+def roi_calibration(encoder, *, default_only=False):
     """Stage-0 reference wins; otherwise use the encoder's benchmark unit artifact."""
     def valid(data):
         if not isinstance(data, dict) or not isinstance(data.get("centers"), dict):
@@ -162,7 +194,7 @@ def roi_calibration(encoder):
                 and ROI_KEYS - {"r_tpj", "lateral_temporal", "l_ifg"} <= data["centers"].keys()
                 and all(k in ROI_KEYS and isinstance(v, (int, float)) and math.isfinite(v) for k, v in data["centers"].items())
                 and str(data.get("provenance", "")).startswith("unit_calibration:"))
-    reference = _reference(encoder)
+    reference = _reference(encoder) if not default_only else {}
     if valid(reference.get("unit_calibration")):
         return reference["unit_calibration"]
     try:

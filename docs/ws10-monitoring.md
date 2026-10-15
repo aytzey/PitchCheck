@@ -3,8 +3,8 @@
 Implementation of plan 10B steps 6–9 and 10C steps 10–13. Read
 [the pre-registration](validation-protocol.md) before opening real outcomes.
 This track never applies a recommendation or gates shipment. The registration
-is written before real-data access and is left uncommitted under the job brief;
-the supervisor must commit it before collection/analysis.
+was written before real-data access and is committed with the fixtures on
+`research/integrated`; real collection/analysis remains pending.
 
 ## Inputs and privacy
 
@@ -185,3 +185,22 @@ No production logs/outcomes, public corpus download, paid request, GPU run,
 server deployment, sending-tool integration or panel collection was performed
 by this implementation. Operational acceptance on the first 200 real records,
 manual text-leak review and any owner flag change remain future operator work.
+
+## Integration with literature priors
+
+The sole K5 owner is `_blend_final(evidence, raw_llm, facet, confidence,
+quality_weight, *, blend=..., priors=None)`, returning final score, semantic score,
+semantic weight, guardrails and the prior report. Runtime and corpus scoring use
+the same function through `_calibrate_result`. `prior_inputs` records the
+ROI-free evidence, unboosted facet, tailoring and specificity points at full
+precision. Logs also retain the three numeric score terms, single-prior shadows,
+specificity scalars and active flags; replaced spans and control text are excluded.
+Replay carries an archived budget through `priors["budget"]` so changing the
+current service budget does not change historical parity. Display scores remain
+rounded; the comparison tolerance is below 0.05 points.
+
+The blind system prompt preserves the doctrine and annex verbatim. Their generic
+claim-hygiene references to TRIBE contain no pitch-specific neural data; all
+model-output instructions and pitch-specific neural payloads are removed from
+the blind read. Tests cover both encoder paths, LLM and fallback scoring, and
+zero/default budgets. No outcome-validation claim follows from these checks.

@@ -118,3 +118,14 @@ The benchmark retains its original timing cases when `--corpus` is omitted. `--s
 Audit directory: `$GPU_RUNTIME/ws07-unit-20261016/`. Each encoder folder contains `run.log`, sampled `vram.csv`, `metrics.json`, the numeric asset, and `score-distributions.json` (all per-case counterfactuals and full descriptive statistics). `analyze.py` and `write_docs.py` are retained at the audit root. The analysis explicitly uses provisional 0/1 defaults for its before state even if assets are already installed; a future benchmark itself reports whichever unit asset it loads.
 
 Verification: `$S/venv/bin/python -m pytest tribe_service/tests -q -rs` finished with **265 passed, 4 skipped, 0 failed**, plus one existing FastAPI/Starlette deprecation warning. The four skips are optional `exca.cachedict` and Torch checks in the CPU test venv; the separate GPU venv ran all 128 real predictions. `npm run lint` and `npx tsc --noEmit -p .` passed; `npx vitest run` finished with **52 passed, 0 failed across 9 files**; `scripts/benchmark-runtime.py --selftest` passed. Logs are retained at the audit root. The deterministic no-ROI pin remains 66.30 / 73. No Rust source was changed. Authenticated API smoke, baseline prediction `--compare`, WS08/WS11 datasets and human/outcome validation were not run; no production host or paid API was contacted. Task GPU processes and VRAM monitors exited after both runs.
+
+## Integration contract
+
+WS06, WS07 and WS12 now share WS10's tuple-returning `_blend_final`; it alone
+owns K5. `roi_prior_points` records the final-score difference with only ROI
+disabled. The anchor shadows in the historical unit-run tables above retain
+their original meaning. Persona and specificity keep their own single-prior
+shadows; `final_score_without_literature_priors` removes all three together.
+Full-precision `prior_inputs` and blend inputs drive WS10 replay, while response
+scores keep their existing display precision. Methodology remains
+`neural_only_v2.3`. All numeric ROI values and contrasts stay out of LLM payloads.

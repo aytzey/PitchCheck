@@ -134,7 +134,7 @@ Refine reports measured candidates and signed location differences separately fr
 
 `PITCHCHECK_SPECIFICITY_CONTRAST=1` enables an internal category-worded control for English drafts of 12–250 engine tokens. The LLM proposes at most four verbatim spans; deterministic replacements preserve second-person count, certainty and length. A single additional TRIBE pass measures a signed **average-reader** contrast using WS07's Chua locations. The model does not see the persona and cannot establish whether details are true or relevant. The desktop shows an `SPC` / `exp` row and a folded “Compared with” control. This is an **unvalidated literature prior**, not recipient-level outcome evidence.
 
-Only persona-traceable details can affect scoring: `PITCHCHECK_SPECIFICITY_SCORE_WEIGHT=1.5` and `PITCHCHECK_SPECIFICITY_Z_MIN=1.0` set the slope and dead zone, capped at ±3 points before K4/K8 scaling and the shared K5 ±6 total budget. The response includes `robustness.specificity_contrast` (available or an explicit skip reason), `prior_points`, `score_terms.specificity_prior`, and `score_without_specificity_prior`. WS06's `personalization_level`, when supplied, additionally requires `recipient_specific`. The evaluator sees only the explicitly allowed derived contrast summary and span/category pairs, never raw six-ROI values or the control text, and is told to leave its own scores unchanged by that block.
+Only persona-traceable details can affect scoring: `PITCHCHECK_SPECIFICITY_SCORE_WEIGHT=1.5` and `PITCHCHECK_SPECIFICITY_Z_MIN=1.0` set the slope and dead zone, capped at ±3 points before K4/K8 scaling and the shared K5 ±6 total budget. The response includes `robustness.specificity_contrast` (available or an explicit skip reason), `prior_points`, `score_terms.specificity_prior`, and `score_without_specificity_prior`. WS06's `personalization_level`, when supplied, additionally requires `recipient_specific`. The evaluator sees only categorical direction/grounding and span/category pairs, with every numeric ROI readout and delta retained in the report, and is told to leave its own scores unchanged by that block.
 
 `PITCHCHECK_SPECIFICITY_REFINE_PENALTY=2.0` subtracts up to two selection points when a candidate drops grounded details carrying a positive contrast; `specificity_retention` records the dropped spans. The twin stays outside candidate measurements and critic/Jev payloads. Set the penalty to `0` to skip refine's extra calls, the score weight to `0` for score shadow mode, or the contrast flag to `0` to restore the previous path with zero extra calls. Mock mode also makes zero extra calls. Incompatible encoders use the shared default 0.5 factor; setting that factor to `0` skips both twin calls with `encoder_mismatch_disabled`. Busy GPU queues skip optional measurement with `skipped_busy` rather than delaying queued primary scores.
 
@@ -333,11 +333,21 @@ The first command uses a paid API (roughly 1100 calls); it has not been run for 
 | `PITCHCHECK_PERSONA_READ_PRIORS` | `1` | WS06 unvalidated literature priors for score, skeptic prompt/synthesis and non-Jev selection; `0` + service restart restores pre-prior behavior |
 | `PITCHCHECK_SKEPTIC_FACET_BOOST` | `0.4` | Additional proof/objection facet weight for stated skeptical recipients; `0` disables this score/selection term |
 | `PITCHCHECK_TAILORING_PRIOR_POINTS` | `3` | Semantic points for recipient-specific tailoring only; `0` disables this score/selection term |
+| `PITCHCHECK_ROI_PRIOR_WEIGHT` | `0.15` | WS07 score prior weight; `0` restores the ROI-free anchor and disables its synthesis/evaluator block |
+| `PITCHCHECK_ROI_PRIOR_POINTS` | `0.5` | WS09 maximum Jev selection points; `0` removes this ranking term; legacy remains a shadow |
+| `PITCHCHECK_ROI_HYPOTHESES` | `1` | `0` disables the separate Falk JoCN synthesis hypothesis |
+| `PITCHCHECK_ROI_ENCODER_MISMATCH_FACTOR` | `0.5` | K8 scaling for WS07/09/12 on incompatible encoders; `0` also skips specificity twin calls |
+| `PITCHCHECK_ROI_INSILICO_TUNING` | `1` | `0` ignores WS08 multipliers while preserving reference units and noise floors |
+| `PITCHCHECK_SPECIFICITY_CONTRAST` | `1` | `0` disables the category twin and its additional calls |
+| `PITCHCHECK_SPECIFICITY_SCORE_WEIGHT` | `1.5` | Signed grounded specificity slope; `0` keeps its score contribution in shadow |
+| `PITCHCHECK_SPECIFICITY_Z_MIN` | `1.0` | Specificity dead zone before the capped score contribution |
+| `PITCHCHECK_SPECIFICITY_REFINE_PENALTY` | `2.0` | Maximum detail-retention selection penalty; `0` skips refine twin calls |
 | `PITCHCHECK_LITERATURE_PRIOR_BUDGET` | `6` | K5 maximum absolute final-score difference from the no-priors shadow; `0` disables final-score prior effects |
 | `PITCHCHECK_CONTEXT_FIT_RUBRIC` | `v2` | WS05 unvalidated literature prior for shared rubric and Python writers; `v1` + service restart restores the old wording. Version recorded in score/refine responses |
 | `PITCHCHECK_LOCALIZATION_CONTEXT_SEGMENTS` | `1` | Neighbouring 1-s segments shown around each located span (HRF-dispersion prior, 0–3) |
 | `PITCHCHECK_NEURAL_TIE_DELTA` | reference / `1.0` | Legacy refine treats neural differences below the encoder-specific paraphrase noise floor as ties. `0` restores the previous ranking. See [WS08](docs/insilico/README.md) |
-| `PITCHCHECK_SCORE_LOG_PATH` / `PITCHCHECK_SCORE_LOG_KEY` | unset | Opt-in numbers-only JSONL log of `/score` and `/refine` for later outcome joins. Needs both; the key (≥32 chars) HMACs message/persona ids. Text is never written |
+| `PITCHCHECK_SCORE_LOG_PATH` | unset | Opt-in numbers-only JSONL log of `/score` and `/refine`; requires the key below; text is never written |
+| `PITCHCHECK_SCORE_LOG_KEY` | unset | At least 32 characters; HMACs message/persona ids; logging stays off unless both settings are present |
 | `OPENROUTER_TIMEOUT_SECONDS` | `60` | LLM request timeout |
 | `TRIBE_DEVICE` | `cuda` | `cuda`, `cpu`, or `auto` |
 | `TRIBE_TEXT_DEVICE` | `auto` | Device for the 3B text feature model |

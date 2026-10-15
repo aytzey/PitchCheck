@@ -170,3 +170,50 @@ def test_committed_gpu_unit_calibration_loads_for_matching_encoder(encoder, weig
     assert prior["score"] == 50 and prior["weight"] == weight
     assert prior["unit_calibration_provenance"] == data["provenance"]
     assert prior["provenance"].startswith("literature_prior_unvalidated")
+
+
+def test_stage0_length_units_floors_and_multipliers_share_loader(monkeypatch, tmp_path):
+    import copy
+    import math
+    from tribe_service import persuasion_features as pf
+    from tribe_service.tests.fixtures.ws08_synthetic import reference
+    encoder = "meta-llama/Llama-3.2-3B"
+    fallback = roi.roi_calibration(encoder)
+    folder = tmp_path / "roi_assets"
+    folder.mkdir()
+    monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
+    monkeypatch.setattr(roi, "ROI_ASSET_DIR", folder)
+    (folder / "roi_unit_calibration_meta-llama__Llama-3.2-3B.json").write_text(json.dumps(fallback))
+    data = reference(encoder)
+    data["atlas_sha256"] = roi.load_roi_assets()[4]
+    template = data["quantities"]["evidence_score"]
+    for key in (*pf.ROI_PRIOR, "mpfc_falk2010", "ipl_ifg_how_gt_why_vezich2017_l"):
+        data["quantities"][f"roi:{key}"] = {**copy.deepcopy(template),
+            "length_model": {"a": 0.2, "b_log_words": 0.01}, "resid_sd": 0.1}
+    data["unit_calibration"] = {**fallback, "centers": dict.fromkeys(pf.ROI_PRIOR, 0.0),
+        "ROI_Z_SCALE": 2.0, "basis": "length_model_z", "provenance": "unit_calibration:stage0:test"}
+    data["checks"] = {"insula": {"status": "reversed", "weight_multiplier": 0.0},
+                      "mpfc_falk2010": {"status": "null", "weight_multiplier": 0.5}}
+    item = folder / "roi_reference_meta-llama__Llama-3.2-3B.json"
+    item.write_text(json.dumps(data))
+    engine.roi_reference.cache_clear()
+    roi.roi_calibration.cache_clear()
+    try:
+        assert roi._reference(encoder) == data
+        assert roi.roi_noise_floors(encoder)["floor_source"] == "paraphrase_noise_floor"
+        assert roi.roi_multipliers(encoder)["mpfc_falk2010"] == 0.5
+        assert roi.roi_multipliers(encoder)["insula"] == 0.0
+        # Reference units use signed minus-cortex values, not the cortical z sentinel.
+        summary = {"rois": {key: {"z": 99.0, "minus_cortex": 0.2 + 0.01 * math.log(100) + 0.5}
+                            for key in pf.ROI_PRIOR}}
+        prior = pf.roi_prior_from_summary(summary, encoder=encoder, word_count=100)
+        assert prior["unit_calibration_provenance"] == "unit_calibration:stage0:test"
+        assert prior["ROI_Z_SCALE"] == 2.0
+        expected = sum(s * w * 3 for s, w, _, _ in pf.ROI_PRIOR.values()) / sum(w for _, w, _, _ in pf.ROI_PRIOR.values())
+        assert prior["raw"] == pytest.approx(round(expected, 4))
+        assert pf.roi_prior_from_summary(summary, encoder=encoder)["unit_calibration_provenance"] == fallback["provenance"]
+        monkeypatch.setenv("PITCHCHECK_ROI_INSILICO_TUNING", "0")
+        assert all(value == 1.0 for value in roi.roi_multipliers(encoder).values())
+    finally:
+        engine.roi_reference.cache_clear()
+        roi.roi_calibration.cache_clear()

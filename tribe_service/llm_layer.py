@@ -37,7 +37,6 @@ from tribe_service.persuasion_features import (
     roi_prior_from_summary,
     scientific_caveats,
     specificity_prior_points,
-    SPECIFICITY_SCORE_WEIGHT,
     SPECIFICITY_Z_MIN,
     SPECIFICITY_REFINE_PENALTY,
 )
@@ -963,7 +962,7 @@ def _augment_persuasion_evidence(
     fmri = fmri_summary if isinstance(fmri_summary, dict) else {}
     if roi := roi_prior_from_summary(fmri.get("roi_summary"), fmri.get("text_feature_compatible"),
                                     roi_features.roi_multipliers(fmri.get("text_feature_model")),
-                                    encoder=fmri.get("text_feature_model")):
+                                    encoder=fmri.get("text_feature_model"), word_count=len(_WORD_RE.findall(message))):
         evidence["roi_prior"] = roi
     return evidence
 
@@ -2798,7 +2797,7 @@ def _calibrate_result(
         if cf.get("personalization_level") not in (None, "recipient_specific"):
             points = 0.0
         priors["specificity_points"] = points
-        priors["terms"]["specificity_prior"] = {"weight": SPECIFICITY_SCORE_WEIGHT,
+        priors["terms"]["specificity_prior"] = {"weight": persuasion_features.SPECIFICITY_SCORE_WEIGHT * roi_mult * (ROI_ENCODER_MISMATCH_FACTOR if mismatch else 1.0),
             "provenance": "literature_prior_unvalidated" + (";encoder_mismatch" if mismatch else "")}
     final_score, llm_score, semantic_weight, guardrails, prior_report = _blend_final(
         evidence_score, raw_llm_score, facet_score, confidence, quality_weight, priors=priors)

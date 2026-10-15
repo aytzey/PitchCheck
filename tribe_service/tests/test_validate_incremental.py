@@ -353,3 +353,20 @@ def test_no_outcome_variation_keeps_parity_but_reports_undefined_metric():
     for row in rows:
         row["scored_at"] = "2026-01-01T00:00:00+00:00"
     assert v.sweep(rows, B=199)["decision"] == "underpowered"
+
+
+def test_corpus_score_uses_shared_roi_budget_and_replays(monkeypatch):
+    from tribe_service import engine, llm_layer as llm
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+    monkeypatch.setattr(engine, "TRIBE_ALLOW_MOCK", False)
+    monkeypatch.setattr(engine, "_model", object())
+    monkeypatch.setattr(engine, "_loaded_runtime_config", {"text_model": engine.TRIBE_CHECKPOINT_TEXT_MODEL})
+    monkeypatch.setattr(engine, "score_text", lambda text: np.random.default_rng(5).normal(size=(6, 20484)))
+    monkeypatch.setattr(s, "blind_scores", lambda *a: {"context_fit_missing": [], "raw_llm_score_blind": 60., "context_fit_score_blind": 60.})
+    monkeypatch.setattr(llm, "LITERATURE_PRIOR_BUDGET", 0.0)
+    rows = s.score_corpus([{"text": "Our deployment workflow helps managers inspect and restore failed releases.",
+                           "persona": "An engineering manager", "channel": "email", "group_id": "owned", "language": "en", "consent_text": True}])
+    assert rows[0]["prior_inputs"] is not None
+    assert rows[0]["final_score"] == rows[0]["final_score_without_literature_priors"]
+    assert rows[0]["literature_prior_budget"]["budget"] == 0.0
+    assert v.compare(rows, outcomes=False)["parity"] == "pass"

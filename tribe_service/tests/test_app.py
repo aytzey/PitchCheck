@@ -1072,3 +1072,55 @@ def test_specificity_refine_penalty_zero_skips_twin_calls(monkeypatch):
     response = client.post("/refine", json={"message": "Our platform reduces deployment time for teams handling frequent releases.",
                                            "persona": "An engineering manager"})
     assert response.status_code == 200 and response.json()["needs_clarification"]
+
+
+@pytest.mark.parametrize("budget", [0.0, 6.0])
+@pytest.mark.parametrize("compatible", [True, False])
+@pytest.mark.parametrize("llm_used", [True, False])
+def test_integrated_prior_log_compare_parity(monkeypatch, tmp_path, budget, compatible, llm_used):
+    import copy
+    import json
+    import numpy as np
+    from scripts.validate_incremental import compare, replay
+    from tribe_service import engine, llm_layer as llm
+    from tribe_service.tests.test_llm_layer import VALID_LLM_RESPONSE
+    from tribe_service.tests.test_specificity import contrast
+
+    encoder = engine.TRIBE_CHECKPOINT_TEXT_MODEL if compatible else "NousResearch/Hermes-3-Llama-3.2-3B"
+    monkeypatch.setattr(engine, "_model", object())
+    monkeypatch.setattr(engine, "_loaded_runtime_config", {"text_model": encoder})
+    monkeypatch.setattr(service_app, "TRIBE_ALLOW_MOCK", False)
+    monkeypatch.setattr(service_app, "_start_specificity_twin", lambda *a: None)
+    async def specificity(*a):
+        return contrast(encoder=encoder, text_feature_compatible=compatible)
+    monkeypatch.setattr(service_app, "_specificity", specificity)
+    monkeypatch.setattr(service_app, "score_text", lambda text: np.random.default_rng(5).normal(size=(6, 20484)))
+    llm_response = copy.deepcopy(VALID_LLM_RESPONSE)
+    llm_response["context_fit"] = {**{key: {"score": 70} for key in llm.CONTEXT_FIT_KEYS},
+        "proof_credibility": {"score": 40}, "recipient_stance": "skeptical", "personalization_level": "recipient_specific"}
+    monkeypatch.setattr(llm, "_call_openrouter", lambda *a, **k: llm_response if llm_used else None)
+    monkeypatch.setattr(llm, "LITERATURE_PRIOR_BUDGET", budget)
+    log = tmp_path / "priors.jsonl"
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_PATH", str(log))
+    monkeypatch.setenv("PITCHCHECK_SCORE_LOG_KEY", "k" * 32)
+    response = client.post("/score", json={"message": TestScoreLog.MESSAGE, "persona": TestScoreLog.PERSONA})
+    assert response.status_code == 200
+    rb = response.json()["report"]["robustness"]
+    record = json.loads(log.read_text())
+    assert record["prior_inputs"] is not None
+    assert record["prior_inputs"]["specificity_points"] > 0
+    assert (record["prior_inputs"]["tailoring_points"] > 0) == llm_used
+    assert record["active_flags"]["PITCHCHECK_LITERATURE_PRIOR_BUDGET"] == budget
+    assert record["roi_prior_points"] == rb["roi_prior_points"]
+    assert record["score_without_specificity_prior"] == rb["score_without_specificity_prior"]
+    assert record["specificity_contrast"]["medial_z"] == rb["specificity_contrast"]["medial_z"]
+    assert record["specificity_contrast"]["prior_points"] == rb["specificity_contrast"]["prior_points"]
+    assert set(record["score_terms"]) == {"roi_prior", "persona_read_prior", "specificity_prior"}
+    if llm_used:
+        assert record["persona_read_prior"]["final_score_without_prior"] == rb["persona_read_prior"]["final_score_without_prior"]
+    assert abs(replay(record)[0] - record["final_score"]) < 0.05
+    assert abs(record["final_score"] - record["final_score_without_literature_priors"]) <= budget + 1e-12
+    assert compare([record], outcomes=False)["parity"] == "pass"
+    # Historical logs replay their own budget even after the service setting changes.
+    monkeypatch.setattr(llm, "LITERATURE_PRIOR_BUDGET", 1.0 if budget == 0 else 0.0)
+    assert abs(replay(record)[0] - record["final_score"]) < 0.05

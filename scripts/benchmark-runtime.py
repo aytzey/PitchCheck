@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path.cwd()))
 from tribe_service import engine, roi_features
 from tribe_service.persuasion_features import ROI_PRIOR, roi_prior_from_summary
+from tribe_service.roi_features import unit_calibration
 
 
 def load_corpus(path):
@@ -31,22 +32,6 @@ def load_corpus(path):
         raise ValueError("Corpus must be a JSON list of at least two distinct, non-empty texts")
     return messages
 
-
-def unit_calibration(rows, encoder, run_id):
-    """Unit adjustment, not validation; repeated warm-cache cases get no extra weight."""
-    unique = {row["case"]: row["roi_summary"] for row in rows}
-    if len(unique) < 2 or len({summary["asset_sha256"] for summary in unique.values()}) != 1:
-        raise ValueError("ROI unit calibration needs distinct cases from the same atlas")
-    centers = {key: float(np.median([summary["rois"][key]["z"] for summary in unique.values()])) for key in ROI_PRIOR}
-    raw = [sum(sign * weight * (summary["rois"][key]["z"] - centers[key])
-               for key, (sign, weight, _, _) in ROI_PRIOR.items()) / sum(row[1] for row in ROI_PRIOR.values())
-           for summary in unique.values()]
-    scale = float(np.std(raw))
-    if not np.isfinite(scale) or scale <= 1e-12:
-        raise ValueError("ROI unit calibration needs distinct, non-degenerate predictions")
-    return {"schema_version": 1, "encoder": encoder, "centers": centers, "ROI_Z_SCALE": scale,
-            "atlas_sha256": next(iter(unique.values()))["asset_sha256"], "n_cases": len(unique),
-            "provenance": f"unit_calibration:{run_id}", "validated": False}
 
 
 def default_floors(rows, encoder, run_id):
@@ -163,7 +148,7 @@ def main():
         assert isinstance(row["roi_summary"], dict), "ROI asset unavailable or degenerate prediction"
         row["roi_prior"] = roi_prior_from_summary(row["roi_summary"],
                                                 engine.TRIBE_TEXT_MODEL == engine.TRIBE_CHECKPOINT_TEXT_MODEL,
-                                                encoder=engine.TRIBE_TEXT_MODEL)
+                                                encoder=engine.TRIBE_TEXT_MODEL, word_count=row["words"])
         if args.compare:
             assert row["feature_cache_entries"] == 0
             reference = np.load(args.compare / f"case-{index}.npy")

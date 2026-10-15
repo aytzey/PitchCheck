@@ -190,7 +190,7 @@ def measure(text, pred, channel, assets, compatible=None):
         from tribe_service import roi_features
         prior = persuasion_features.roi_prior_from_summary(
             roi_features.roi_summary(pred), measured["text_feature_compatible"] if compatible is None else compatible,
-            roi_features.roi_multipliers(measured["text_feature_model"]), encoder=measured["text_feature_model"])
+            roi_features.roi_multipliers(measured["text_feature_model"]), encoder=measured["text_feature_model"], word_count=len(engine._WORD_RE.findall(text)))
         if prior:
             q["evidence_score_with_roi"] = round(persuasion_features.evidence_score_from_analysis(signals, {**evidence, "roi_prior": prior}), 3)
     words = engine._WORD_RE.findall(text)
@@ -505,6 +505,8 @@ def analyze(args):
         if assets is not None:
             pred = np.load(item, allow_pickle=False)
             check_prediction(row["text"], pred)
+            from tribe_service import roi_features
+            row["roi_summary"] = roi_features.roi_summary(pred)
             measured = measure(row["text"], pred, row.get("channel", "general"), assets,
                                metrics["provenance"]["text_feature_compatible"])
             row["quantities"].update({k: v for k, v in measured["quantities"].items()
@@ -526,6 +528,22 @@ def analyze(args):
                      "tribev2_commit": prov["tribev2_commit"], "hf_snapshot": prov["hf_snapshot"],
                      "label": LABEL, "quantities": quantities, "checks": {}, "policy": POLICY.copy()}
         if assets:
+            from tribe_service import roi_features
+            from tribe_service.persuasion_features import ROI_PRIOR
+            calibration_rows = []
+            for i, row in enumerate(rows):
+                if row.get("role") not in {"paraphrase", "independent"}:
+                    continue
+                z = roi_features.reference_z(row["roi_summary"], reference, row["lexical"]["words"])
+                if ROI_PRIOR.keys() <= z.keys():
+                    calibration_rows.append({"case": i, "roi_summary": {"asset_sha256": assets[4],
+                        "rois": {key: {"z": value} for key, value in z.items()}}})
+            try:
+                reference["unit_calibration"] = {**roi_features.unit_calibration(
+                    calibration_rows, prov["encoder"], f"stage0:{metrics['date']}:{prov['git_sha']}"),
+                    "basis": "length_model_z"}
+            except ValueError:
+                report["unit_calibration_reason"] = "insufficient_or_degenerate_reference"
             reference["checks"] = {k: {"family": None, "status": "not_run", "d_z": None, "p_holm": None,
                                       "parcel_rank": None, "date": None, "weight_basis": "literature_prior",
                                       "weight_multiplier": multiplier("not_run", quantities.get(f"roi:{k}", {}).get("flags", []))}

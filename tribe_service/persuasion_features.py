@@ -669,7 +669,7 @@ ROI_PRIOR = {
 }
 
 
-def roi_prior_from_summary(summary, text_feature_compatible=None, multipliers=None, encoder=None):
+def roi_prior_from_summary(summary, text_feature_compatible=None, multipliers=None, encoder=None, word_count=None):
     """K4: multipliers shrink only the numerator; a neutral prior leaves the anchor unchanged."""
     rois = summary.get("rois") if isinstance(summary, dict) else None
     if ROI_PRIOR_WEIGHT <= 0 or not isinstance(rois, dict):
@@ -679,19 +679,26 @@ def roi_prior_from_summary(summary, text_feature_compatible=None, multipliers=No
     if not avail:
         return None
     calibration = roi_features.roi_calibration(encoder)
+    z = {k: rois[k]["z"] for k in avail}
+    if calibration.get("basis") == "length_model_z":
+        measured = roi_features.reference_z(summary, roi_features._reference(encoder), word_count)
+        if set(avail) <= measured.keys():
+            z = measured
+        else:
+            calibration = roi_features.roi_calibration(encoder, default_only=True)
     centers = {k: _safe_float(calibration.get("centers", {}).get(k), ROI_PRIOR[k][2]) for k in avail}
     scale = _safe_float(calibration.get("ROI_Z_SCALE"), ROI_Z_SCALE)
     if scale <= 1e-12:
         scale = ROI_Z_SCALE
     m = {k: clamp(_safe_float((multipliers or {}).get(k), 1.0), 0.0, 1.0) for k in avail}
-    terms = {k: ROI_PRIOR[k][0] * ROI_PRIOR[k][1] * m[k] * (rois[k]["z"] - centers[k]) for k in avail}
+    terms = {k: ROI_PRIOR[k][0] * ROI_PRIOR[k][1] * m[k] * (z[k] - centers[k]) for k in avail}
     raw = sum(terms.values()) / sum(ROI_PRIOR[k][1] for k in avail)
     mismatch = text_feature_compatible is False
     weight = ROI_PRIOR_WEIGHT * (ROI_ENCODER_MISMATCH_FACTOR if mismatch else 1.0)
     return {"score": round(50 + 50 * math.tanh(raw / scale), 1), "raw": round(raw, 4),
             "weight": round(weight, 4), "applied": weight > 0, "multipliers": m,
             "terms": {k: round(v, 4) for k, v in terms.items()}, "version": "roi_prior_v1",
-            "centers": centers, "ROI_Z_SCALE": scale, "encoder": encoder,
+            "centers": centers, "ROI_Z_SCALE": scale, "encoder": encoder, "z": z,
             "unit_calibration_provenance": calibration.get("provenance", ROI_UNIT_PROVENANCE),
             "provenance": "literature_prior_unvalidated" + (";encoder_mismatch" if mismatch else "")}
 

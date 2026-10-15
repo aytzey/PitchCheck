@@ -51,6 +51,12 @@ def monitoring_fields(robustness: dict, fmri: dict, context_fit=None) -> dict:
               "final_score_without_literature_priors": robustness.get("final_score_without_literature_priors")}
     if not isinstance(result["final_score_without_literature_priors"], (int, float)) or not math.isfinite(result["final_score_without_literature_priors"]):
         result["final_score_without_literature_priors"] = None
+    result.update(numbers(robustness, ("roi_prior_points", "score_without_specificity_prior")))
+    contrast = robustness.get("specificity_contrast") or {}
+    if contrast:
+        result["specificity_contrast"] = numbers(contrast, ("medial_z", "z_min", "relative_change", "prior_points", "roi_multiplier"))
+        result["specificity_contrast"].update({key: contrast[key] for key in ("available", "grounded")
+                                                if isinstance(contrast.get(key), bool)})
     inputs = robustness.get("prior_inputs") or {}
     result["prior_inputs"] = numbers(inputs, ("evidence_without_roi", "facet_without_boost", "tailoring_points", "specificity_points")) or None
     if result["prior_inputs"] is not None:

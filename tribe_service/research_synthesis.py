@@ -46,12 +46,12 @@ def _specificity_findings(contrast):
              "source_keys": ["chua_2009_tailoring", "chua_2011_tailored_self_related"]}]
 
 
-def _roi_findings(fmri):
+def _roi_findings(fmri, word_count=None):
     fmri = fmri or {}
     summary = fmri.get("roi_summary")
     prior = roi_prior_from_summary(summary, fmri.get("text_feature_compatible"),
                                    roi_features.roi_multipliers(fmri.get("text_feature_model")),
-                                   encoder=fmri.get("text_feature_model"))
+                                   encoder=fmri.get("text_feature_model"), word_count=word_count)
     if not prior or not prior["applied"]:
         return []
     items = []
@@ -59,7 +59,7 @@ def _roi_findings(fmri):
         row = summary["rois"].get(key)
         if not isinstance(row, dict) or key not in prior["centers"]:
             continue
-        z = row["z"] - prior["centers"][key]
+        z = prior["z"][key] - prior["centers"][key]
         high = z >= ROI_SYNTH_Z
         if key == "vmpfc_frontopolar" and (high or z <= -ROI_SYNTH_Z):
             item = {"key": "roi_vmpfc_high" if high else "roi_vmpfc_low", "kind": "strength" if high else "gap",
@@ -387,6 +387,7 @@ def synthesize_research_findings(
     context_fit: dict[str, Any] | None = None,
     *, hypotheses: list[dict[str, Any]] | None = None,
     specificity_contrast: dict | None = None,
+    word_count: int | None = None,
 ) -> dict[str, Any]:
     """Map this pitch's TRIBE axis geometry, raw features, and trace shape onto
     published findings.
@@ -402,7 +403,7 @@ def synthesize_research_findings(
 
     gaps: list[dict[str, Any]] = []
     strengths: list[dict[str, Any]] = []
-    for item in [*_roi_findings(fmri_summary), *_specificity_findings(specificity_contrast)]:
+    for item in [*_roi_findings(fmri_summary, word_count), *_specificity_findings(specificity_contrast)]:
         (gaps if item["kind"] == "gap" else strengths).append(item)
 
     # Raw-feature grounding: sustain_ratio is the fraction of segments above the
@@ -573,6 +574,6 @@ def build_tribe_synthesis(
     """
     synthesis = synthesize_research_findings(neuro_axes, fmri_summary, raw_features, context_fit,
                                             hypotheses=_roi_hypotheses(message, fmri_summary, platform),
-                                            specificity_contrast=specificity_contrast)
+                                            specificity_contrast=specificity_contrast, word_count=len(_WORD_RE.findall(message)))
     synthesis["localization"] = localize_pitch_segments(message, fmri_summary)
     return synthesis

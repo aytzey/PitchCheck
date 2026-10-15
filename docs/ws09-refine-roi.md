@@ -35,4 +35,4 @@ No raw ROI value, delta, z, floor, prior score or numeric ROI sort score is sent
 
 GPU/image smoke testing, live Jev requests, WS08/WS11 measurements and reply-outcome validation remain unrun; no production host or paid API was contacted. The one-time retained-retest benchmark is the remaining data action for the complete provisional-floor formula.
 
-Local verification: Python **285 passed, 4 skipped, 0 failed**; Vitest **57 passed, 0 failed** across 9 files; ESLint and TypeScript passed; benchmark `--selftest` passed; `git diff --check` passed. The skipped Python cases are existing dependency-dependent checks. The 66.30 / 73 pin and LLM payload leak tests pass. Changes remain uncommitted.
+Local verification: Python **285 passed, 4 skipped, 0 failed**; Vitest **57 passed, 0 failed** across 9 files; ESLint and TypeScript passed; benchmark `--selftest` passed; `git diff --check` passed. The skipped Python cases are existing dependency-dependent checks. The 66.30 / 73 pin and LLM payload leak tests pass. Those results describe the independent WS09 implementation; the work is now committed on `research/integrated`.

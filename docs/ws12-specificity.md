@@ -1,8 +1,10 @@
 # WS12: category-twin specificity contrast
 
-The runtime comparison is a signed, predicted average-reader response to the draft versus a category-level twin. It measures lexical specificity. TRIBE never sees the persona; deterministic traceability supplies `grounded`, and a future WS06 `personalization_level` supplies an additional soft score gate. Neither specificity nor a cortical location establishes a recipient's mental state, truth, relevance, or persuasion probability.
+The runtime comparison is a signed, predicted average-reader response to the draft versus a category-level twin. It measures lexical specificity. TRIBE never sees the persona; deterministic traceability supplies `grounded`, and WS06 `personalization_level` supplies an additional soft score gate. Neither specificity nor a cortical location establishes a recipient's mental state, truth, relevance, or persuasion probability.
 
 The implementation uses WS07's single `load_roi_assets()` loader and six `loc_*` sets. Only the dorsomedial prefrontal and precuneus Chua 2011 locations enter the specificity average. The contrast uses signed differences, relative to all cortical parcels; a positive result can represent less deactivation. It is an unvalidated literature prior on synthetic text timing, with no rest baseline. `top_parcels` also reports where the contrast actually concentrates.
+
+The evaluator receives only categorical direction/grounding and span/category pairs. Numeric ROI values, numeric contrasts, parcel scores and the control text remain report-only.
 
 The feature is default-on and independently reversible:
 

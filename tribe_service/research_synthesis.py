@@ -36,21 +36,21 @@ def _roi_findings(fmri):
         high = z >= ROI_SYNTH_Z
         if key == "vmpfc_frontopolar" and (high or z <= -ROI_SYNTH_Z):
             item = {"key": "roi_vmpfc_high" if high else "roi_vmpfc_low", "kind": "strength" if high else "gap",
-                    "observation": f"Predicted medial prefrontal (frontopolar) response analogue is {'above' if high else 'below'} this pitch's cortical average (z={z:.2f}, average-reader model).",
+                    "observation": f"Predicted average-reader response at the medial prefrontal (frontopolar) location is {'above' if high else 'below'} this pitch's cortical average.",
                     "finding": "Why/gain-framed text+audio ads raised MPFC vs factual ones (within-subject); MPFC response to persuasive messages predicted later behaviour change across people.",
                     "citation": "Vezich et al. 2017; Falk et al. 2010",
                     "source_keys": ["vezich_2017_framing_action", "falk_2010_persuasion_change"],
                     "lever": "Keep the why/gain framing in any rewrite." if high else "Say why the outcome matters to this reader (their goal or gain) before listing features."}
         elif key == "dmpfc" and z <= -ROI_SYNTH_Z:
             item = {"key": "roi_dmpfc_low", "kind": "gap",
-                    "observation": f"Predicted dorsomedial prefrontal response analogue is below this pitch's cortical average (z={z:.2f}, average-reader model; a property of the text, not a read on this recipient).",
+                    "observation": "Predicted average-reader response at the dorsomedial prefrontal location is below this pitch's cortical average; a property of the text, not a read on this recipient.",
                     "finding": "Text arguments that each reader later rated persuasive drew more DMPFC activity than ones rated unpersuasive, in US and Korean samples (within-subject, uncorrected). The region also responds to social content in text without persuasive intent.",
                     "citation": "Falk, Rameson et al. 2010 (JoCN); Yomogida et al. 2017 (Suppl.)",
                     "source_keys": ["falk_2010_jocn_mentalizing_network", "yomogida_2017_norm_persuasion"],
                     "lever": "State the claim and your reason in the reader's terms; add a true persona fact only if one exists."}
         elif key == "r_ifg_ai" and high:
             item = {"key": "roi_r_ifg_ai_high", "kind": "gap",
-                    "observation": f"Predicted right inferior frontal / anterior insula response analogue is above this pitch's cortical average (z={z:.2f}, average-reader model).",
+                    "observation": "Predicted average-reader response at the right inferior frontal / anterior insula location is above this pitch's cortical average.",
                     "finding": "Dogmatic health messages engaged right IFG/anterior insula more than suggestive ones and were rated less persuasive (text, within-subject, self-report).",
                     "citation": "Hernández-Vergara et al. 2025",
                     "source_keys": ["hernandez_vergara_2025_dogmatic_tone"],
@@ -60,6 +60,34 @@ def _roi_findings(fmri):
         items.append({**item, "axis": "cortical_roi", "roi": key,
                       "sort_score": 50 + 50 * math.tanh(-z if key == "r_ifg_ai" else z)})
     return items
+
+
+def _roi_hypotheses(message, fmri, platform):
+    if os.getenv("PITCHCHECK_ROI_HYPOTHESES", "1").lower() in {"0", "false", "off", "no"}:
+        return []
+    fmri = fmri or {}
+    locations = (fmri.get("roi_summary") or {}).get("locations") or {}
+    values = [(locations.get(key) or {}).get("minus_cortex") for key in ("falk2010jocn_core", "tp_l", "tp_r")]
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values):
+        return []
+    value, left, right = values
+    if (left > 0) - (left < 0) != (right > 0) - (right < 0):
+        return []
+    p25 = roi_features.roi_reference_p25(fmri.get("text_feature_model"), len(_WORD_RE.findall(message)), platform)
+    z = locations["falk2010jocn_core"].get("z")
+    provisional = p25 is None
+    if provisional:
+        if not isinstance(z, (int, float)) or isinstance(z, bool) or not math.isfinite(z) or z > -0.67:
+            return []
+    elif value >= p25:
+        return []
+    return [{"key": "falk2010jocn_core_low_relative", "kind": "hypothesis", "axis": None, "experimental": True,
+             "reference": "default_prior_within_draft" if provisional else "length_matched_reference",
+             "observation": "Predicted average-reader response at the dorsomedial prefrontal/anterior temporal locations from Falk et al. 2010 (J Cogn Neurosci) is in the lowest quarter of "
+                            + ("this draft's own predicted cortical response (provisional reference)." if provisional else "PitchCheck's reference texts for this length."),
+             "finding": "In that study (text arguments on low-involvement topics; 15 US + 14 Korean students; self-rated persuasion; uncorrected thresholds) these locations were more active for arguments later rated persuasive; the authors speculated this reflects considering a point of view. These regions also respond to social content in text without persuasive intent (Yomogida et al. 2017, Suppl.). Not tested as a writing technique; not this recipient.",
+             "lever": "If you ask the reader to change something, state the claim and your reason in the reader's own terms. Do not assert what the reader currently believes unless the persona says so.",
+             "citation": "Falk, Rameson et al. 2010 (JoCN)", "source_keys": ["falk_2010_jocn_mentalizing_network"]}]
 
 
 def _safe_score(axes: dict[str, dict[str, Any]], key: str, default: float = 50.0) -> float:
@@ -307,6 +335,7 @@ def synthesize_research_findings(
     neuro_axes: dict[str, dict[str, Any]],
     fmri_summary: dict[str, Any] | None = None,
     raw_features: dict[str, Any] | None = None,
+    *, hypotheses: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Map this pitch's TRIBE axis geometry, raw features, and trace shape onto
     published findings.
@@ -467,7 +496,7 @@ def synthesize_research_findings(
 
     # Severity order: biggest gaps first, then patterns/strengths.
     gaps.sort(key=lambda item: item.get("sort_score", _safe_score(neuro_axes, str(item.get("axis", "")), 50.0)))
-    items = [*gaps, *strengths][:5]
+    items = [*gaps, *(hypotheses or []), *strengths][:5]
 
     return {
         "items": items,
@@ -482,6 +511,7 @@ def build_tribe_synthesis(
     neuro_axes: dict[str, dict[str, Any]],
     fmri_summary: dict[str, Any] | None = None,
     raw_features: dict[str, Any] | None = None,
+    *, platform: str = "general",
 ) -> dict[str, Any]:
     """Full deterministic TRIBE read: research findings + segment localization.
 
@@ -489,6 +519,7 @@ def build_tribe_synthesis(
     same TRIBE-grounded analysis appears in the prompt, the report, and the
     refine brief.
     """
-    synthesis = synthesize_research_findings(neuro_axes, fmri_summary, raw_features)
+    synthesis = synthesize_research_findings(neuro_axes, fmri_summary, raw_features,
+                                            hypotheses=_roi_hypotheses(message, fmri_summary, platform))
     synthesis["localization"] = localize_pitch_segments(message, fmri_summary)
     return synthesis

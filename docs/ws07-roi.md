@@ -1,6 +1,6 @@
 # WS07: signed cortical literature priors
 
-Implemented plan steps 1–10, K2/K3/K5/K8 and C.WS07. Step 11 has a working benchmark/artifact path; its GPU run is intentionally deferred. WS09 09-A/B/C1, WS12 scoring/contrasts and WS08/WS11 research jobs are separate work. No Rust scoring changes or release packaging are included.
+Implemented plan steps 1–10, K2/K3/K5/K8 and C.WS07. Step 11 has a working benchmark/artifact path; its GPU run is intentionally deferred. WS09 09-A/B/C1 is documented in [ws09-refine-roi.md](ws09-refine-roi.md); WS12 scoring/contrasts and WS08/WS11 research jobs remain separate. No Rust scoring changes or release packaging are included.
 
 The single builder consumes `scripts/roi_peaks.csv`, transcribed from the authoritative plan's PDF-image curation and prototype. It fetches the four CBIG annotations and MIT license at commit `634f676630929a71297852d01dd92a287103e861`, uses nibabel 5.4.2 / nilearn 0.14.1, and records their hashes, versions, coordinate transforms and every peak decision. Meshes are not redistributed. Runtime uses only numpy and stdlib, with no downloads or provenance-JSON reads.
 
@@ -26,7 +26,7 @@ The authoritative build records these geometry caveats:
 
 `load_roi_assets()` is the single loader. It validates index types, bounds, hemisphere layout, medial wall, parcel count and non-overlap; missing/corrupt assets log a warning and disable overlays. Signed time means are referenced to labelled cortex, excluding the medial wall. ROI z is invariant to positive scaling and constant offsets. The reducer feeds Python and native analysis paths identically.
 
-The six signed priors use the fixed K4 denominator. Compatible Llama gets weight 0.15; incompatible encoders get 0.075 by default. Robustness publishes the term, provenance, anchor-point shadow, total-prior counterfactual and K5 budget diagnostics. Legacy refine automatically uses the adjusted anchor and publishes `roi_prior_score`. Jev's whitelist and selection policy remain unchanged; neither Jev nor the legacy critic receives raw ROI fields. Only the evaluator's explicitly allowed WS07 block and deterministic synthesis contain ROI values. Desktop refine advice carries the ROI lever/citation without numeric observations.
+The six signed priors use the fixed K4 denominator. Compatible Llama gets weight 0.15; incompatible encoders get 0.075 by default. Robustness publishes the term, provenance, anchor-point shadow, total-prior counterfactual and K5 budget diagnostics. Legacy refine automatically uses the adjusted anchor and publishes `roi_prior_score`. WS09 preserves the Jev whitelist and legacy ranking, adds a bounded Jev selection term and reports signed location deltas. All numeric ROI fields stay in the API/report; the evaluator receives categorical synthesis and its report-only ROI instruction block. Desktop refine advice carries the ROI lever/citation without numeric observations.
 
 Desktop normalizers preserve signed `rois`/`locations` and optional WS08/WS11 badges. The ROI row appears when summary/prior/points fields exist. Brain points use the builder's actual parcel-union centroids projected onto the existing top-down schematic; with absent fields, neutral whole-cortex codes remain. Both robustness and variant ranking share “About these signals”. Mobile UI is unchanged.
 

@@ -1937,7 +1937,7 @@ function ResearchSynthesisPanel({ synthesis }: { synthesis: ResearchSynthesis })
         )}
         {items.map((item) => (
           <div key={item.key}>
-            <span className="mono">{item.kind === "gap" ? "FIX" : item.kind === "strength" ? "KEEP" : "USE"}</span>
+            <span className="mono">{item.kind === "gap" ? "FIX" : item.kind === "strength" ? "KEEP" : item.kind === "hypothesis" ? "HYP" : "USE"}</span>
             <p>
               <strong>{item.observation} </strong>
               {item.lever}
@@ -1996,6 +1996,11 @@ function VariantRankPanel({ score, refinedPitch }: { score: number; refinedPitch
           <p className="pc-muted" title="Unvalidated; not the persuasion score.">
             {`Neural prior = hand-tuned average-reader analogue.${evidence.jev ? " Neural prior not used for ranking." : ""}`}
           </p>
+          {evidence.roi && (
+            <p className="pc-muted" title="Predicted average-reader response at the location used by Falk et al. 2010, relative to the rest of cortex.">
+              {`Medial-prefrontal response vs your draft: ${evidence.roi.direction.replaceAll("_", " ")} (experimental${evidence.roi.direction === "no_reliable_difference" ? "" : evidence.jev ? ", ≤0.5 pt nudge" : ", not used for ranking"})`}
+            </p>
+          )}
         </>
       )}
     </div>

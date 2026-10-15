@@ -538,6 +538,7 @@ _prediction_cache_bytes = 0
 _prediction_cache_lock = threading.Lock()
 
 DIRECT_TEXT_TIMING_BASIS = "synthetic_word_order"
+DIRECT_TEXT_EVENT_VERSION = "direct_v1"
 REAL_TIME_TIMING_BASIS = "real_time_seconds"
 TRIBE_PREDICTION_SUBJECT_BASIS = "average_subject"
 TRIBE_CORTICAL_MESH = "fsaverage5"

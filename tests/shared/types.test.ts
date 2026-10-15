@@ -158,6 +158,11 @@ describe("shared/types", () => {
     expect(evidence?.rows[1]).toMatchObject({ semantic: 70, neural: 100, selection: 66 });
     expect(normalizeRefineEvidence({ mode: "model", evaluations: [] })).toBeNull();
     expect(normalizeRefineEvidence("nope")).toBeNull();
+    const base = { evaluations: [{ id: "original" }], roi_readout: { direction: "higher", delta: 123, used_in_selection: true } };
+    expect(normalizeRefineEvidence(base)?.roi).toEqual({ direction: "higher", usedInSelection: true });
+    expect(normalizeRefineEvidence({ ...base, roi_readout: { direction: "<script>" } })?.roi).toBeNull();
+    expect(normalizeRefineEvidence({ evaluations: {} })).toBeNull();
+    expect(normalizeRefineEvidence({ evaluations: Array.from({ length: 6 }, (_, i) => ({ id: `c${i + 1}` })) })?.rows).toHaveLength(4);
   });
 });
 

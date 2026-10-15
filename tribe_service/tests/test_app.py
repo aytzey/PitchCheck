@@ -359,7 +359,8 @@ class TestScore:
             signals["cognitive_friction"] = 100 - value
             return ({"mean_abs": .25, "peak_abs": .6, "temporal_std": .08,
                      "spatial_spread": .07, "focus_ratio": .35, "sustain_ratio": .6},
-                    {"segments": 4, "voxel_count": 20484, "temporal_trace": [.12, .31, .28, .18]}, signals)
+                    {"segments": 4, "voxel_count": 20484, "temporal_trace": [.12, .31, .28, .18],
+                     "roi_summary": {"locations": {"mpfc_falk2010": {"minus_cortex": -value / 100}}}}, signals)
 
         def fake_refine_pitch_message(**kwargs):
             assert kwargs["suggestions"] == ["Make the CTA easier"]
@@ -373,6 +374,7 @@ class TestScore:
         def fake_chat(system, prompt, model, temperature):
             import json
             assert "Actual TRIBE measurements" in prompt
+            assert 'roi_' not in prompt
             assert "Çilekeş" in prompt
             return json.dumps({"evaluations": [
                 {"id": key, "supported": key != "c3", "intent_preserved": True,
@@ -408,6 +410,8 @@ class TestScore:
         assert measured == [original, *candidates]
         assert data["tribe_guidance"]["candidate_count"] == 3
         assert data["tribe_guidance"]["selected_id"] == "c2"
+        assert data["tribe_guidance"]["roi_shadow_selected_id"] == "c2"
+        assert data["tribe_guidance"]["evaluations"][1]["roi_deltas"]["mpfc_falk2010"] == -0.1
         assert data["tribe_guidance"]["evaluations"][3]["eligible"] is False
         # Context fit alone ties c1/c2; the measured TRIBE prior is what picked c2.
         assert data["tribe_guidance"]["selected_id_semantic_only"] == "c1"

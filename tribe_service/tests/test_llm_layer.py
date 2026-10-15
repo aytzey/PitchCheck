@@ -1301,6 +1301,7 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
          'neural_signals': {'personal_relevance': 99}, 'voxel_count': 20484, 'segments': 4,
          'text_feature_model': 'NousResearch/Hermes-3-Llama-3.2-3B',
          'text_feature_compatible': False, 'temporal_trace_basis': 'synthetic_word_order',
+         'roi_features': {'mpfc_falk2010': -0.123456}, 'roi_prior_score': 83.123456,
          'temporal_trace': [.3, .45, .4, .35] if name == 'c1' else [.3, .5, .1, .3]}
         for name, text in zip(['original', 'c1', 'c2', 'c3'], [original, *drafts])
     ]
@@ -1355,6 +1356,8 @@ def test_jev_first_pass_uses_grounded_brief_and_bounded_trace_preference(monkeyp
     def post(url, **kwargs):
         calls.append('writer')
         payload = kwargs['json']
+        assert 'roi_' not in json.dumps(payload)
+        assert '-0.123456' not in json.dumps(payload)
         assert payload['model'] == 'z-ai/glm-5.3-flash'
         assert payload['provider'] == {'order': ['baseten/fp8', 'fireworks', 'coreweave/nvfp4'],
                                        'allow_fallbacks': True, 'require_parameters': True}
@@ -1545,7 +1548,9 @@ def test_roi_evaluator_block_is_applied_only_and_refine_payloads_are_clean(enabl
     fmri = {'roi_summary': summary, 'text_feature_compatible': True}
     prompt = _build_user_prompt(SAMPLE_MESSAGE, SAMPLE_PERSONA, 'email', SAMPLE_NEURAL_SIGNALS, fmri, evidence)
     assert ('## Cortical ROI Response Analogues' in prompt) == enabled
-    assert ('"roi_prior_weight"' in prompt) == enabled
+    assert '"roi_prior_weight"' not in prompt
+    assert '"roi_prior_score"' not in prompt
+    assert '"z"' not in prompt and 'z=' not in prompt and '"sort_score"' not in prompt
     if enabled:
         assert 'only when quoting a listed synthesis item' in prompt
         assert 'never infer emotion, trust or intent' in prompt

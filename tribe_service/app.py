@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import asyncio
@@ -561,6 +562,20 @@ async def score_pitch(request: PitchScoreRequest, _: str = Depends(require_auth)
         )
 
 
+_REFINE_ROI_KEYS = ("mpfc_falk2010", "falk2010jocn_core", "ipl_ifg_how_gt_why_vezich2017_l")
+
+
+def _roi_features(fmri: dict) -> dict:
+    summary = fmri.get("roi_summary")
+    locations = summary.get("locations") if isinstance(summary, dict) else None
+    if not isinstance(locations, dict):
+        return {}
+    values = {key: row.get("minus_cortex") for key in _REFINE_ROI_KEYS
+              if isinstance(row := locations.get(key), dict)}
+    return {key: round(float(value), 6) for key, value in values.items()
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)}
+
+
 def _measure_refine_candidates(message: str, candidates: list[str], persona: str, platform: str,
                                baseline: dict | None = None) -> list[dict]:
     measurements = [baseline] if baseline is not None else []
@@ -574,6 +589,7 @@ def _measure_refine_candidates(message: str, candidates: list[str], persona: str
             "model_id": TRIBE_MODEL_ID, "mode": "mock" if TRIBE_ALLOW_MOCK else "model",
             "neural_score": round(evidence_score_from_analysis(signals, evidence), 3),
             "roi_prior_score": (evidence.get("roi_prior") or {}).get("score"),
+            "roi_features": _roi_features(fmri),
             "quality_weight": calibration_quality_weight(evidence),
             "neural_signals": signals, "neuro_axes": neuro_axes_from_analysis(signals),
             "voxel_count": fmri["voxel_count"], "segments": fmri["segments"],

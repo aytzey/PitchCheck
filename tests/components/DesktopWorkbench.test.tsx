@@ -341,4 +341,38 @@ describe("WS07 desktop ROI fields", () => {
     expect(suggestions).not.toContain("z=-0.5");
     expect(suggestions).not.toContain("medial prefrontal");
   });
+
+  it("labels an experimental research hypothesis HYP", async () => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report, robustness: { ...report.robustness, research_synthesis: {
+      items: [{ key: "falk2010jocn_core_low_relative", kind: "hypothesis", axis: null, experimental: true,
+        reference: "default_prior_within_draft", observation: "Predicted average-reader response is relatively low.",
+        finding: "Unvalidated literature prior; not this recipient.", citation: "Falk, Rameson et al. 2010 (JoCN)",
+        lever: "State the claim and your reason in the reader's own terms." }],
+    } } });
+    expect(screen.getByText("HYP")).toBeDefined();
+  });
+
+  it.each([
+    ["higher", true, "≤0.5 pt nudge"],
+    ["higher", false, "not used for ranking"],
+    ["lower", false, "not used for ranking"],
+    ["no_reliable_difference", true, "experimental"],
+  ])("shows the concise ROI readout %s (Jev=%s)", async (direction, jev, label) => {
+    await renderReport(fullReport(78, true));
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({
+      refined_message: "A concrete rewrite with a clear ask.", model: "test", tribe_guidance: {
+        mode: "model", selected_id: "c1", improved: true,
+        evaluations: [{ id: "original", eligible: true }, { id: "c1", eligible: true }],
+        ...(jev ? { selection_policy: {} } : {}), roi_readout: { direction, used_in_selection: jev },
+      },
+    }) });
+    fireEvent.click(screen.getByRole("button", { name: /Refine draft/ }));
+    const line = await screen.findByText(/Medial-prefrontal response vs your draft:/);
+    expect(line.textContent).toContain(label);
+    expect(line.textContent!.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(line.getAttribute("title")).toContain("Predicted average-reader response");
+    expect(screen.getAllByText(/not a mental state/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/vmPFC/)).toBeNull();
+  });
 });

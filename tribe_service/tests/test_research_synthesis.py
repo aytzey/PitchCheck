@@ -197,7 +197,7 @@ def test_roi_rules_citations_and_rollback(monkeypatch):
     assert {item['key'] for item in items} == {'roi_vmpfc_low', 'roi_dmpfc_low', 'roi_r_ifg_ai_high'}
     for item, source in zip(items, ['Vezich', 'Falk, Rameson', 'Hernández-Vergara']):
         assert source in item['citation'] and item['axis'] == 'cortical_roi'
-        assert 'average-reader model' in item['observation']
+        assert 'Predicted average-reader response' in item['observation']
         assert item['source_keys'] and item['lever']
     summary['rois']['vmpfc_frontopolar']['z'] = 1
     assert any(i['key'] == 'roi_vmpfc_high' for i in synthesize_research_findings(_axes(), fmri)['items'])

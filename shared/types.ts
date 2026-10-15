@@ -77,8 +77,10 @@ export interface NeuroAxisReport {
 // One citation-anchored link between TRIBE geometry and a published finding
 export interface ResearchSynthesisItem {
   key: string;
-  kind: "gap" | "strength" | "pattern";
-  axis?: string;
+  kind: "gap" | "strength" | "pattern" | "hypothesis";
+  axis?: string | null;
+  experimental?: boolean;
+  reference?: string;
   observation: string;
   finding: string;
   citation: string;
@@ -800,6 +802,7 @@ export interface RefineEvidence {
   improved: boolean;
   jev: boolean;
   rows: RefineEvaluation[];
+  roi: { direction: "higher" | "lower" | "no_reliable_difference"; usedInSelection: boolean } | null;
 }
 
 const REFINE_CANDIDATE_ID = /^(original|c[1-9])$/;
@@ -824,11 +827,16 @@ export function normalizeRefineEvidence(value: unknown): RefineEvidence | null {
         : [];
     });
   if (!rows.length) return null;
+  const roi = isRecord(value.roi_readout) ? value.roi_readout : null;
+  const direction = roi?.direction;
   return {
     mode: value.mode === "model" || value.mode === "mock" ? value.mode : "unknown",
     selectedId: candidateId(value.selected_id),
     improved: value.improved === true,
     jev: isRecord(value.selection_policy),
     rows,
+    roi: direction === "higher" || direction === "lower" || direction === "no_reliable_difference"
+      ? { direction, usedInSelection: roi?.used_in_selection === true }
+      : null,
   };
 }

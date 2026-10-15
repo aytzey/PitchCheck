@@ -32,7 +32,6 @@ from tribe_service.persuasion_features import (
     neural_score_from_signals,
     QUALITY_WARNING_CAPS,
     quality_adjusted_score,
-    ROI_PRIOR,
     roi_prior_from_summary,
     scientific_caveats,
 )
@@ -79,6 +78,11 @@ OPENROUTER_SELF_CONSISTENCY_SAMPLES = _env_int("OPENROUTER_SELF_CONSISTENCY_SAMP
 # 0 reproduces the old neural-only behavior.
 SEMANTIC_BLEND_WEIGHT = min(1.0, _env_float("PITCHCHECK_SEMANTIC_BLEND_WEIGHT", 0.55, 0.0))
 LITERATURE_PRIOR_BUDGET = min(100.0, _env_float("PITCHCHECK_LITERATURE_PRIOR_BUDGET", 6.0, 0.0))
+ROI_PRIOR_KEY = "mpfc_falk2010"
+ROI_ROUTE_GUARD_KEY = "ipl_ifg_how_gt_why_vezich2017_l"
+# ponytail: between-person literature prior; replace with an outcome-fitted weight when paired outcomes exist.
+ROI_PRIOR_POINTS = min(1.0, _env_float("PITCHCHECK_ROI_PRIOR_POINTS", 0.5, 0.0))
+ROI_ENCODER_MISMATCH_FACTOR = min(1.0, _env_float("PITCHCHECK_ROI_ENCODER_MISMATCH_FACTOR", 0.5, 0.0))
 # TRIBE never receives the persona (app.py scores request.message only), so the two
 # recipient-specific breakdown items are anchored to the LLM persona-read facets.
 # Both weights = 0 restores the old neural-anchored breakdown.
@@ -393,21 +397,17 @@ Global mean: {fmri_summary.get('global_mean_abs', 0):.4f}, Global peak: {fmri_su
 {trace_instruction}
 Early segments = opener, middle = body, late = close/CTA.{segment_map}"""
 
-    _prompt_synthesis = build_tribe_synthesis(message, neuro_axes, fmri_summary, raw_features)
+    _prompt_synthesis = build_tribe_synthesis(message, neuro_axes, fmri_summary, raw_features, platform=platform)
+    # ROI magnitudes and ranking scores stay in the report; only categorical levers reach an LLM.
+    _prompt_synthesis["items"] = [{k: v for k, v in item.items() if k != "sort_score"}
+                                  for item in _prompt_synthesis["items"]]
     roi = persuasion_evidence.get("roi_prior") or {}
     roi_section = ""
-    roi_calibration = {}
     if roi.get("applied"):
-        roi_calibration = {"roi_prior_score": roi["score"], "roi_prior_weight": roi["weight"]}
-        roi_payload = {"roi_prior_score": roi["score"], "weight": roi["weight"], "rois": {
-            k: {"z": row["z"], "prior_direction": "+" if ROI_PRIOR[k][0] > 0 else "-"}
-            for k, row in ((fmri_summary or {}).get("roi_summary") or {}).get("rois", {}).items() if k in ROI_PRIOR
-        }}
         roi_section = f"""
 ## Cortical ROI Response Analogues (literature prior, unvalidated)
-{_json_dumps(roi_payload)}
-Average-subject predicted responses on fsaverage5, each relative to labelled cortex; a small literature-prior
-term already included in quality_adjusted_neural_prior_score. Use them only to rank levers the synthesis lists.
+The neural prior includes a small cortical literature prior. Numeric ROI readouts are report-only.
+Use only the categorical levers the synthesis lists.
 Name a cortical location in user-facing strings only when quoting a listed synthesis item, as a predicted
 average-reader response; never say the reader's brain did anything, never infer emotion, trust or intent from them.
 """
@@ -439,7 +439,6 @@ Read this synthesis as pre-digested evidence linking THIS pitch's TRIBE geometry
     "confidence": round(confidence, 2),
     "text_heuristics": "disabled",
     "scientific_caveats": scientific_caveats(),
-    **roi_calibration,
 })}
 
 ## Calibration Diagnostics
@@ -1806,6 +1805,45 @@ def _compact_refine_measurement(measurement: dict) -> dict:
     return {key: value for key, value in measurement.items() if key != "neuro_axes" and not key.startswith("roi_")}
 
 
+def _runtime_signature(measurement: dict) -> tuple:
+    return (measurement["model_id"], measurement.get("text_feature_model"), measurement["mode"],
+            measurement.get("temporal_trace_basis"), measurement["voxel_count"])
+
+
+def _roi_prior_term(row: dict, baseline: dict, floors: dict | None) -> dict:
+    off = lambda reason: {"roi_term": 0.0, "roi_reason": reason}
+    if ROI_PRIOR_POINTS <= 0:
+        return off("disabled")
+    if row["id"] == baseline["id"]:
+        return off("baseline")
+    if row["roi_status"] != "ok":
+        return off(row["roi_status"])
+    mismatch = baseline.get("text_feature_compatible") is not True
+    floors = floors or {}
+    non_english = floors.get("non_english", False)
+    enc = ROI_ENCODER_MISMATCH_FACTOR if mismatch or non_english else 1.0
+    if enc <= 0:
+        return off("encoder_mismatch_disabled" if mismatch else "non_english_disabled")
+    multiplier = roi_features.roi_multipliers(baseline.get("text_feature_model")).get(ROI_PRIOR_KEY, 1.0)
+    if multiplier <= 0:
+        return off("insilico_reversed")
+    floor, delta = floors.get(ROI_PRIOR_KEY), row["roi_deltas"].get(ROI_PRIOR_KEY)
+    if not floor or delta is None:
+        return off("no_noise_floor_for_runtime")
+    z = delta / floor
+    if abs(z) <= 1:
+        return off("below_noise_floor")
+    guard, guard_floor = row["roi_deltas"].get(ROI_ROUTE_GUARD_KEY), floors.get(ROI_ROUTE_GUARD_KEY)
+    if guard is not None and guard_floor and abs(guard) > guard_floor and (guard > 0) != (z > 0):
+        return off("why_how_route_trade")
+    quality = clamp(min(row["quality_weight"], baseline["quality_weight"]), 0, 1)
+    provenance = "literature_prior_unvalidated" + (";encoder_mismatch" if mismatch else "")
+    suffix = ";non_english_default_floor" if non_english else ""
+    return {"roi_term": round(math.copysign(min(1.0, abs(z) - 1), z) * quality * enc * multiplier * ROI_PRIOR_POINTS, 6),
+            "roi_multiplier": round(multiplier, 3), "roi_provenance": provenance + suffix,
+            "roi_reason": ("applied_encoder_mismatch" if mismatch else "applied") + suffix}
+
+
 def _refine_response_shape(measurement: dict) -> dict:
     """Observed, mean-normalized response geometry; no calibrated physiology claim."""
     trace = measurement.get("temporal_trace")
@@ -1997,9 +2035,7 @@ def _jev_refinement_reviews(message, persona, platform, measurements, strategy, 
 
 def _refine_response_effect(row: dict, baseline: dict, hypothesis: dict) -> dict:
     shape, base_shape = row["response_shape"], baseline["response_shape"]
-    signature = lambda item: (item["model_id"], item.get("text_feature_model"), item["mode"],
-                              item.get("temporal_trace_basis"), item["voxel_count"])
-    if not shape["usable"] or not base_shape["usable"] or signature(row) != signature(baseline):
+    if not shape["usable"] or not base_shape["usable"] or _runtime_signature(row) != _runtime_signature(baseline):
         return {"available": False, "score_adjustment": 0.0, "weight": 0.0,
                 "reason": shape["reason"] if not shape["usable"] else "baseline_or_runtime_not_comparable"}
     goal = hypothesis["objective"]
@@ -2128,17 +2164,39 @@ def select_tribe_refinement(
                             **({"response_shape": _refine_response_shape(measured)} if strategy else {}),
                             "issues": issues})
     baseline = evaluations[0]
+    non_english = _looks_turkish(message + persona)
+    floors = roi_features.roi_noise_floors(baseline.get("text_feature_model"), default_only=non_english)
+    if non_english:
+        floors = {**floors, "non_english": True}
+    for row in evaluations:
+        a, b = row.get("roi_features") or {}, baseline.get("roi_features") or {}
+        row["roi_status"] = ("roi_unavailable" if not a or not b else
+                             "runtime_not_comparable" if _runtime_signature(row) != _runtime_signature(baseline) else "ok")
+        row["roi_deltas"] = {key: round(a[key] - b[key], 6) for key in a.keys() & b.keys()} if row["roi_status"] == "ok" else {}
+        if not strategy:
+            row.update(_roi_prior_term(row, baseline, floors))
     if strategy:
         hypothesis = strategy.get("structural_hypothesis") or _refine_structural_hypothesis(baseline)
         for row in evaluations:
             effect = _refine_response_effect(row, baseline, hypothesis)
+            effect.update(_roi_prior_term(row, baseline, floors), roi_name=ROI_PRIOR_KEY, roi_prior_status="unvalidated_prior")
             row.update(empirical_effect=effect,
-                       selection_score=round(clamp(row["semantic_score"] + effect["score_adjustment"]), 3))
+                       selection_score_without_roi=round(clamp(row["semantic_score"] + effect["score_adjustment"]), 3),
+                       selection_score=round(clamp(row["semantic_score"] + clamp(effect["score_adjustment"] + effect["roi_term"], -3, 3)), 3))
     acceptable = [item for item in evaluations if item["eligible"] and (
         not baseline["eligible"] or item["semantic_score"] >= baseline["semantic_score"])]
     selected = max(acceptable, key=lambda item: item["selection_score"]) if acceptable else baseline
     if decision:
         selected, policy = _select_jev_refinement(acceptable, baseline, decision, hypothesis)
+        counterfactual, _ = _select_jev_refinement(
+            [{**row, "selection_score": row["selection_score_without_roi"]} for row in acceptable], baseline, decision, hypothesis)
+        policy.update(roi_counterfactual_id=counterfactual["id"], roi_changed_selection=counterfactual["id"] != selected["id"])
+        policy["roi_prior"] = {"key": ROI_PRIOR_KEY, "points": ROI_PRIOR_POINTS, "status": "unvalidated_prior",
+                               "source_keys": ["falk_2010_persuasion_change"], "floor_source": floors.get("floor_source"),
+                               "floor_provenance": floors.get("provenance"),
+                               "provenance": "literature_prior_unvalidated" + (";encoder_mismatch" if baseline.get("text_feature_compatible") is not True else "")
+                                             + (";non_english_default_floor" if non_english else ""),
+                               "evidence": "construct reproduction only; no message-level outcome validation"}
     # Counterfactual for monitoring: what a context-fit-only ranking would have picked.
     semantic_only = max(acceptable, key=lambda item: item["semantic_score"]) if acceptable else baseline
     improved = dict(result)
@@ -2154,6 +2212,19 @@ def select_tribe_refinement(
         **({"quality_model": quality_model, "writer_passes": 1, "decision": decision,
             "selection_policy": policy, "writer_call": result.get("writer_call", {})} if strategy else {}),
     }
+    if not strategy:
+        improved["tribe_guidance"]["roi_shadow_selected_id"] = (
+            max(acceptable, key=lambda row: row["selection_score"] + row["roi_term"])["id"] if acceptable else "original")
+    delta, floor = selected["roi_deltas"].get(ROI_PRIOR_KEY), floors.get(ROI_PRIOR_KEY)
+    if selected["roi_status"] == "ok" and floor and delta is not None:
+        term = (selected.get("empirical_effect") or {}).get("roi_term", 0)
+        improved["tribe_guidance"]["roi_readout"] = {
+            "key": ROI_PRIOR_KEY, "delta": delta, "noise_floor": floor, "floor_source": floors["floor_source"],
+            "floor_provenance": floors.get("provenance"),
+            "direction": ("higher" if delta > 0 else "lower") if abs(delta) > floor else "no_reliable_difference",
+            "used_in_selection": bool(strategy and term),
+            "provenance": "literature prior (Falk et al. 2010 J Neurosci MPFC location)",
+        }
     return improved
 
 
@@ -2422,6 +2493,7 @@ def _calibrate_result(
     fmri_summary: dict | None = None,
     raw_features: dict[str, float] | None = None,
     message: str = "",
+    platform: str = "general",
 ) -> dict[str, Any]:
     breakdown_anchor = result.pop("breakdown_anchor", None) or {}
     neural_prior_score = neural_score_from_signals(neural_signals)
@@ -2479,7 +2551,7 @@ def _calibrate_result(
         "guardrails_applied": guardrails,
         "warnings": persuasion_evidence.get("warnings", []),
         "neuro_axes": neuro_axes,
-        "research_synthesis": build_tribe_synthesis(message, neuro_axes, fmri_summary, raw_features),
+        "research_synthesis": build_tribe_synthesis(message, neuro_axes, fmri_summary, raw_features, platform=platform),
         "confidence_reasons": confidence_reasons(neural_score, 50.0, persuasion_evidence, neuro_axes),
         "scientific_caveats": scientific_caveats(),
         "breakdown_anchor": (
@@ -2555,6 +2627,7 @@ def interpret_persuasion(
                 fmri_summary=fmri_summary,
                 raw_features=raw_features,
                 message=message,
+                platform=platform,
             )
         except Exception as exc:  # Defensive: never let LLM shape errors fail scoring.
             LOGGER.warning("LLM result validation failed: %s — using neural-only report", exc)
@@ -2568,4 +2641,5 @@ def interpret_persuasion(
         fmri_summary=fmri_summary,
         raw_features=raw_features,
         message=message,
+        platform=platform,
     )

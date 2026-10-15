@@ -86,8 +86,66 @@ def _reference(encoder):
     from tribe_service import engine  # The engine imports this overlay.
     reader = getattr(engine, "roi_reference", None)  # WS08 supplies the reader.
     data = reader(encoder) if reader else None
+    if reader is None:
+        try:
+            slug = (encoder or "").replace("/", "__")
+            data = json.loads((ROI_ASSET_DIR / f"roi_reference_{slug}.json").read_text())
+            if not (isinstance(data, dict) and data.get("schema_version") == 1 and data.get("encoder") == encoder
+                    and data.get("event_version") == engine.DIRECT_TEXT_EVENT_VERSION
+                    and data.get("text_input_mode") == engine.TRIBE_TEXT_INPUT_MODE):
+                return {}
+        except (OSError, ValueError, TypeError):
+            return {}
     assets = load_roi_assets()
     return data if isinstance(data, dict) and assets and str(data.get("atlas_sha256", ""))[:16] == assets[4] else {}
+
+
+def roi_noise_floors(encoder, *, default_only=False):
+    """Signed minus-cortex units; Stage 0 wins over the provisional benchmark artifact."""
+    keys = ("mpfc_falk2010", "ipl_ifg_how_gt_why_vezich2017_l")
+    def positive(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
+    try:
+        quantities = _reference(encoder).get("quantities", {}) if not default_only else {}
+        floors = {key: quantities.get(f"roi:{key}", {}).get("noise", {}).get("min_detectable_delta") for key in keys}
+    except (AttributeError, TypeError):
+        floors = {}
+    if floors and all(positive(value) for value in floors.values()):
+        return {**floors, "floor_source": "paraphrase_noise_floor"}
+    try:
+        from tribe_service import engine
+        data = json.loads((ROI_ASSET_DIR / "roi_default_floors.json").read_text())
+        assets = load_roi_assets()
+        row = data["encoders"][encoder]
+        floors = row["floors"]
+        if (data.get("schema_version") == 1 and assets and str(data.get("atlas_sha256", ""))[:16] == assets[4]
+                and data.get("event_version") == engine.DIRECT_TEXT_EVENT_VERSION
+                and data.get("text_input_mode") == engine.TRIBE_TEXT_INPUT_MODE
+                and all(positive(floors.get(key)) for key in keys)):
+            return {**{key: floors[key] for key in keys}, "floor_source": "default_prior",
+                    "provenance": row["provenance"]}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    return {}
+
+
+def roi_reference_p25(encoder, words, platform):
+    """Pool channels below n=50; consume Stage-0 signed location quantities only."""
+    try:
+        quantity = _reference(encoder).get("quantities", {}).get("roi:falk2010jocn_core", {})
+        channel = quantity.get("channels", {}).get(platform, {})
+        if channel.get("n", 0) >= 50:
+            quantity = channel
+        bucket = "le60" if words <= 60 else "61_150" if words <= 150 else "151_240"
+        value = quantity.get("length_buckets", {}).get(bucket, {}).get("p25") if words <= 240 else None
+        if value is None and "length_model" in quantity:
+            model, residual = quantity["length_model"], quantity.get("resid_q", {}).get("p25")
+            if all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                   for v in (model.get("a"), model.get("b_log_words"), residual)):
+                value = model["a"] + model["b_log_words"] * math.log(max(1, words)) + residual
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else None
 
 
 def roi_multipliers(encoder):

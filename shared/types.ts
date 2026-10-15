@@ -128,10 +128,34 @@ export interface ResearchSynthesis {
   basis?: string;
 }
 
+export interface SpecificityContrast {
+  available: boolean;
+  grounded: boolean;
+  medial_z?: number;
+  z_min?: number;
+  relative_change?: number;
+  prior_points?: number;
+  roi_multiplier?: number;
+  rois?: Record<string, { z: number; pct: number; role?: string }>;
+  top_parcels?: Array<{ name: string; z: number }>;
+  replaced?: Array<{ span: string; category: string; persona_fact: string; grounded: boolean }>;
+  control_text?: string;
+  n_words?: [number, number];
+  encoder?: string;
+  text_feature_compatible?: boolean;
+  direction?: string;
+  basis?: string;
+  caveat?: string;
+  reason?: string;
+  provenance?: string;
+}
+
 // Robustness/calibration metadata for the final persuasion score
 export interface RobustnessReport {
   roi_prior?: RoiPrior | null;
   roi_prior_points?: number;
+  specificity_contrast?: SpecificityContrast | null;
+  score_without_specificity_prior?: number | null;
   neural_prior_score?: number;
   neural_score: number;
   quality_adjusted_neural_score?: number;
@@ -703,6 +727,58 @@ function normalizeNeuroAxes(value: unknown) {
   return Object.keys(axes).length ? axes : undefined;
 }
 
+function normalizeSpecificityContrast(value: unknown): SpecificityContrast | null {
+  if (!isRecord(value) || typeof value.available !== "boolean") return null;
+  const rois: Array<[string, { z: number; pct: number; role?: string }]> = [];
+  if (isRecord(value.rois)) {
+    for (const [key, row] of Object.entries(value.rois).slice(0, 8)) {
+      if (!/^[a-z][a-z0-9_]{0,79}$/.test(key) || !isRecord(row)) continue;
+      const z = parseFiniteNumber(row.z);
+      const pct = parseFiniteNumber(row.pct);
+      if (z !== null && pct !== null) rois.push([key, {
+        z, pct, role: normalizeOptionalText(row.role, MAX_SHORT_TEXT_CHARS) || undefined,
+      }]);
+    }
+  }
+  const contrast: SpecificityContrast = {
+    available: value.available,
+    grounded: value.grounded === true,
+    medial_z: parseFiniteNumber(value.medial_z) ?? undefined,
+    z_min: parseFiniteNumber(value.z_min) ?? undefined,
+    relative_change: parseFiniteNumber(value.relative_change) ?? undefined,
+    prior_points: parseFiniteNumber(value.prior_points) ?? undefined,
+    roi_multiplier: parseFiniteNumber(value.roi_multiplier) ?? undefined,
+    rois: Object.fromEntries(rois),
+    top_parcels: normalizeItems(value.top_parcels, 3, (row) => {
+      if (!isRecord(row)) return null;
+      const name = normalizeOptionalText(row.name, MAX_SHORT_TEXT_CHARS);
+      const z = parseFiniteNumber(row.z);
+      return name && z !== null ? { name, z } : null;
+    }),
+    replaced: normalizeItems(value.replaced, 4, (row) => {
+      if (!isRecord(row)) return null;
+      const span = normalizeText(row.span, "", MAX_SHORT_TEXT_CHARS);
+      const category = normalizeText(row.category, "", MAX_SHORT_TEXT_CHARS);
+      return span && category ? { span, category,
+        persona_fact: normalizeText(row.persona_fact, "", MAX_SHORT_TEXT_CHARS), grounded: row.grounded === true,
+      } : null;
+    }),
+    control_text: normalizeText(value.control_text, "", MAX_REPORT_TEXT_CHARS),
+    encoder: normalizeOptionalText(value.encoder, MAX_SHORT_TEXT_CHARS) || undefined,
+    text_feature_compatible: typeof value.text_feature_compatible === "boolean" ? value.text_feature_compatible : undefined,
+    direction: normalizeOptionalText(value.direction, MAX_SHORT_TEXT_CHARS) || undefined,
+    basis: normalizeOptionalText(value.basis, MAX_SHORT_TEXT_CHARS) || undefined,
+    caveat: normalizeOptionalText(value.caveat, MAX_REPORT_TEXT_CHARS) || undefined,
+    reason: normalizeOptionalText(value.reason, MAX_SHORT_TEXT_CHARS) || undefined,
+    provenance: normalizeOptionalText(value.provenance, MAX_SHORT_TEXT_CHARS) || undefined,
+  };
+  if (Array.isArray(value.n_words) && value.n_words.length === 2) {
+    const words = value.n_words.map(parseFiniteNumber);
+    if (words.every((n) => n !== null && Number.isInteger(n) && n >= 0)) contrast.n_words = words as [number, number];
+  }
+  return contrast;
+}
+
 function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
   if (!isRecord(value)) return null;
   const neuralScore = normalizeScore(value.neural_score) ?? normalizeScore(value.final_score) ?? 0;
@@ -745,6 +821,8 @@ function normalizeRobustnessReport(value: unknown): RobustnessReport | null {
     : null;
   report.roi_prior = normalizeRoiPrior(value.roi_prior);
   report.roi_prior_points = parseFiniteNumber(value.roi_prior_points) ?? undefined;
+  report.specificity_contrast = normalizeSpecificityContrast(value.specificity_contrast);
+  report.score_without_specificity_prior = parseFiniteNumber(value.score_without_specificity_prior);
   return report;
 }
 

@@ -194,8 +194,8 @@ RESEARCH_SOURCES = [
         "title": "Self-related neural response to tailored smoking-cessation messages predicts quitting",
         "url": "https://doi.org/10.1038/nn.2761",
         "evidence_level": "individual_differences_in_sample",
-        "modality": "fMRI; audio-visual statements tailored from each smoker's survey (N=87)",
-        "finding": "dmPFC response to tailored vs neutral statements predicted quitting at 4 months (OR=1.31); tailored statements were remembered better, but memory did not predict quitting; no self-report comparison.",
+        "modality": "fMRI; audio-visual statements tailored from motivated smokers' surveys (N=91 scanned, 87 follow-up)",
+        "finding": "dmPFC response to tailored vs neutral statements predicted quitting at 4 months (in-sample individual-level OR=1.31); the combined three-region OR=1.36 included angular cortex, precuneus alone p=.078. Memory did not predict quitting; no self-report comparison. Small single-laboratory health sample; disclosed commercial tailoring interests; not a validated message-level effect.",
     },
     {
         "key": "klucharev_2008_expert_power",
@@ -312,7 +312,7 @@ RESEARCH_SOURCES = [
         "url": "https://doi.org/10.1016/j.biopsych.2008.08.030",
         "evidence_level": "within_subject_condition_contrast",
         "modality": "fMRI; audio + on-screen smoking messages (N=24)",
-        "finding": "High-tailored messages engaged rMPFC and precuneus/PCC (partly as less deactivation) versus low-tailored; behavior was not tested.",
+        "finding": "High-tailored messages engaged rMPFC and precuneus/PCC (partly as less deactivation) versus low-tailored (N=24 motivated smokers, uncorrected thresholds); behavior was not tested. Small single-laboratory health sample with disclosed commercial tailoring interests.",
     },
     {
         "key": "cascio_2015_peer_recommendations",
@@ -642,6 +642,20 @@ def neuro_axis_score_from_axes(axes: dict[str, dict[str, Any]]) -> float:
 # Literature prior, UNVALIDATED: direction of the closest message-level finding.
 ROI_PRIOR_WEIGHT = clamp(_safe_float(os.getenv("PITCHCHECK_ROI_PRIOR_WEIGHT"), 0.15), 0.0, 0.5)
 ROI_ENCODER_MISMATCH_FACTOR = clamp(_safe_float(os.getenv("PITCHCHECK_ROI_ENCODER_MISMATCH_FACTOR"), 0.5), 0.0, 1.0)
+SPECIFICITY_SCORE_WEIGHT = max(0.0, _safe_float(os.getenv("PITCHCHECK_SPECIFICITY_SCORE_WEIGHT"), 1.5))
+SPECIFICITY_Z_MIN = max(0.0, _safe_float(os.getenv("PITCHCHECK_SPECIFICITY_Z_MIN"), 1.0))
+SPECIFICITY_REFINE_PENALTY = clamp(_safe_float(os.getenv("PITCHCHECK_SPECIFICITY_REFINE_PENALTY"), 2.0), 0.0, 2.0)
+
+
+def specificity_prior_points(contrast: dict | None) -> float:
+    """Unvalidated literature prior: persona grounding, z dead zone, then a signed ±3 ceiling."""
+    if not contrast or contrast.get("available") is not True or contrast.get("grounded") is not True:
+        return 0.0
+    z = _safe_float(contrast.get("medial_z"), 0.0)
+    excess = max(0.0, min(abs(z), SPECIFICITY_Z_MIN + 2.0) - SPECIFICITY_Z_MIN)
+    return round(clamp(math.copysign(excess, z) * SPECIFICITY_SCORE_WEIGHT, -3.0, 3.0), 2)
+
+
 # shortcut: provisional unit defaults; replace with per-encoder benchmark/Stage-0 artifacts after a GPU run.
 ROI_Z_SCALE = 1.0
 ROI_UNIT_PROVENANCE = "provisional_unit_defaults:ws07;gpu_not_run"

@@ -2373,7 +2373,8 @@ function AboutTheseSignals() {
     <details>
       <summary className="pc-muted">About these signals</summary>
       <p className="pc-muted">Predictions describe an average reader and do not see the persona. There is no resting baseline.
-        A cortical location is not a mental state. Weights are unvalidated literature priors, without outcome validation.</p>
+        A cortical location is not a mental state. Weights are unvalidated literature priors, without outcome validation.
+        The model cannot tell whether these details are true or relevant for this recipient.</p>
     </details>
   );
 }
@@ -2382,6 +2383,14 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
   const robustness = report.robustness;
   const evidence = report.persuasion_evidence;
   const neuroAxes = robustness?.neuro_axes ? Object.entries(robustness.neuro_axes) : [];
+  const specificity = robustness?.specificity_contrast;
+  const specificityPoints = specificity?.prior_points ?? 0;
+  const specificityAction = !specificity?.grounded ? "No score effect: details not in persona"
+    : specificityPoints > 0 ? `Specific details: +${specificityPoints.toFixed(1)} pts (literature prior) — keep these true details`
+    : specificityPoints < 0 ? `Specific details: ${specificityPoints.toFixed(1)} pts (literature prior) — tie details to this reader`
+    : typeof specificity.medial_z === "number" && Math.abs(specificity.medial_z) <= (specificity.z_min ?? 1)
+      ? "No score effect: details barely change the predicted response"
+      : "No score effect: specificity literature prior not applied";
   const warnings = [...(robustness?.warnings ?? []), ...(evidence?.warnings ?? [])]
     .filter((item, index, all) => all.indexOf(item) === index)
     .slice(0, 3);
@@ -2428,6 +2437,25 @@ function RobustnessPanel({ report }: { report: PitchScoreReport }) {
                 <b className={`mono score-${toneFromScore(axis.score)}`}>{Math.round(axis.score)}</b>
               </div>
             ))}
+            {specificity?.available === true && (
+              <div className="pc-rank-row" title={
+                `Specific details change the predicted average-reader medial prefrontal / posterior-medial response by ${
+                  typeof specificity.medial_z === "number"
+                    ? `${specificity.medial_z >= 0 ? "+" : ""}${specificity.medial_z.toFixed(1)} SD`
+                    : "unavailable"
+                } versus category wording, relative to all cortical parcels.`
+              }>
+                <span className="mono">SPC</span>
+                <strong>{specificityAction}</strong>
+                {specificity.control_text && (
+                  <details className="pc-muted" style={{ gridColumn: 2 }}>
+                    <summary>Compared with</summary>
+                    <small>{specificity.control_text}</small>
+                  </details>
+                )}
+                <b className="mono score-warn">exp</b>
+              </div>
+            )}
             {typeof robustness.context_fit_score === "number" && (
               <div className="pc-rank-row">
                 <span className="mono">FIT</span>

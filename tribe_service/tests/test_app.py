@@ -855,3 +855,145 @@ def test_full_width_roi_http_score(monkeypatch, weight, compatible, expected):
         r = report['robustness']
         assert abs(r['final_score'] - r['final_score_without_literature_priors']) <= 6.05
         assert r['score_terms']['roi_prior']['provenance'] == prior['provenance']
+
+
+@pytest.mark.parametrize("enabled,mock", [(False, False), (True, True)])
+def test_specificity_disabled_and_mock_make_no_extra_calls(monkeypatch, enabled, mock):
+    from tribe_service import engine, llm_layer
+    calls = []
+    def score(text):
+        calls.append(text)
+        return engine.np.ones((5, 20))
+    monkeypatch.setattr(service_app, "SPECIFICITY_ENABLED", enabled)
+    monkeypatch.setattr(service_app, "TRIBE_ALLOW_MOCK", mock)
+    monkeypatch.setattr(service_app, "score_text", score)
+    monkeypatch.setattr(service_app, "make_specificity_twin", lambda *a: pytest.fail("Twin must not run"))
+    monkeypatch.setattr(service_app, "measure_specificity", lambda *a: pytest.fail("Contrast must not run"))
+    monkeypatch.setattr(llm_layer, "_call_openrouter", lambda *a, **k: None)
+    response = client.post("/score", json={"message": "Our platform reduces deployment time for teams handling frequent releases.", "persona": "An engineering manager"})
+    assert response.status_code == 200 and len(calls) == 1
+    assert "specificity_contrast" not in response.json()["report"]["robustness"]
+
+
+@pytest.mark.parametrize("compatible,factor,expected", [(True, .5, 3), (False, .5, 1.5), (False, 0, 0)])
+def test_specificity_http_signed_prior_encoder_and_explicit_reason(monkeypatch, compatible, factor, expected):
+    import numpy as np
+    from tribe_service import engine, llm_layer, persuasion_features as pf, roi_features, specificity as sp
+    from tribe_service.tests.test_specificity import MESSAGE, PERSONA, SPANS
+    calls, twin_calls = [], []
+    assets = roi_features.load_roi_assets()
+    a = np.random.default_rng(17).normal(-1, .1, size=(5, 20484))
+    b = a.copy()
+    for key in sp.SPECIFICITY_ROI_KEYS[:2]:
+        b[:, assets[3][key]] -= .2
+    def score(text):
+        calls.append(text)
+        return a if text == MESSAGE else b
+    def twin(*args):
+        twin_calls.append(True)
+        return sp.build_specificity_twin(MESSAGE, PERSONA, SPANS)
+    monkeypatch.setattr(service_app, "SPECIFICITY_ENABLED", True)
+    monkeypatch.setattr(service_app, "TRIBE_ALLOW_MOCK", False)
+    monkeypatch.setattr(service_app, "ROI_ENCODER_MISMATCH_FACTOR", factor)
+    monkeypatch.setattr(llm_layer, "ROI_ENCODER_MISMATCH_FACTOR", factor)
+    monkeypatch.setattr(pf, "ROI_PRIOR_WEIGHT", 0)
+    monkeypatch.setattr(service_app, "score_text", score)
+    monkeypatch.setattr(sp, "score_text", score)
+    monkeypatch.setattr(service_app, "make_specificity_twin", twin)
+    monkeypatch.setattr(engine, "_text_feature_metadata", lambda: {
+        "text_feature_model": "llama" if compatible else "hermes", "text_feature_compatible": compatible})
+    monkeypatch.setattr(llm_layer, "_call_openrouter", lambda *a, **k: None)
+    response = client.post("/score", json={"message": MESSAGE, "persona": PERSONA})
+    assert response.status_code == 200
+    report = response.json()["report"]
+    r = report["robustness"]
+    c = r["specificity_contrast"]
+    assert c["prior_points"] == expected
+    if expected:
+        assert c["available"] and len(calls) == 2 and len(twin_calls) == 1
+        assert report["persuasion_score"] == round(r["score_without_specificity_prior"] + expected)
+        assert (";encoder_mismatch" in r["score_terms"]["specificity_prior"]["provenance"]) == (not compatible)
+    else:
+        assert c["reason"] == "encoder_mismatch_disabled" and len(calls) == 1 and not twin_calls
+
+
+def test_specificity_optional_timeout_is_http_200(monkeypatch):
+    from tribe_service import engine, llm_layer
+    from tribe_service.tests.test_specificity import MESSAGE, PERSONA, SPANS
+    from tribe_service.specificity import build_specificity_twin
+    monkeypatch.setattr(service_app, "SPECIFICITY_ENABLED", True)
+    monkeypatch.setattr(service_app, "TRIBE_ALLOW_MOCK", False)
+    monkeypatch.setattr(service_app, "score_text", lambda text: engine.np.ones((5, 20)))
+    monkeypatch.setattr(service_app, "make_specificity_twin", lambda *a: build_specificity_twin(MESSAGE, PERSONA, SPANS))
+    monkeypatch.setattr(llm_layer, "_call_openrouter", lambda *a, **k: None)
+    run = service_app._run_with_backpressure
+    async def timeout(function, *args, **kwargs):
+        if function is service_app.measure_specificity:
+            raise service_app.ScoreQueueTimeoutError
+        return await run(function, *args, **kwargs)
+    monkeypatch.setattr(service_app, "_run_with_backpressure", timeout)
+    response = client.post("/score", json={"message": MESSAGE, "persona": PERSONA})
+    assert response.status_code == 200
+    assert response.json()["report"]["robustness"]["specificity_contrast"]["reason"] == "skipped_ScoreQueueTimeoutError"
+
+
+def test_specificity_never_queues_ahead_of_primary_scores(monkeypatch):
+    """Two primary /score calls keep their slot; optional contrast yields under contention."""
+    from tribe_service import engine, llm_layer
+    from tribe_service.tests.test_specificity import MESSAGE, PERSONA, SPANS
+    from tribe_service.specificity import build_specificity_twin
+    entered, finish, finish_second = threading.Event(), threading.Event(), threading.Event()
+    calls = []
+    def score(text):
+        calls.append(text)
+        if len(calls) == 1:
+            entered.set()
+            assert finish.wait(2)
+        else:
+            assert finish_second.wait(2)
+        return engine.np.ones((5, 20))
+    def measure(*args):
+        assert finish_second.is_set(), "Optional work cannot run ahead of a primary score"
+        return {"available": False, "reason": "roi_unavailable"}
+    async def run_case():
+        monkeypatch.setattr(service_app, "_score_lock", asyncio.Semaphore(1))
+        monkeypatch.setattr(service_app, "_llm_lock", asyncio.Semaphore(2))
+        monkeypatch.setattr(service_app, "_pipeline_lock", asyncio.Lock())
+        monkeypatch.setattr(service_app, "SPECIFICITY_ENABLED", True)
+        monkeypatch.setattr(service_app, "TRIBE_ALLOW_MOCK", False)
+        monkeypatch.setattr(service_app, "TRIBE_SCORE_QUEUE_TIMEOUT_SECONDS", .5)
+        monkeypatch.setattr(service_app, "score_text", score)
+        monkeypatch.setattr(service_app, "make_specificity_twin", lambda *a: build_specificity_twin(MESSAGE, PERSONA, SPANS))
+        monkeypatch.setattr(service_app, "measure_specificity", measure)
+        monkeypatch.setattr(llm_layer, "_call_openrouter", lambda *a, **k: None)
+        request = service_app.PitchScoreRequest(message=MESSAGE, persona=PERSONA)
+        first = asyncio.create_task(service_app.score_pitch(request, _="test"))
+        assert await asyncio.to_thread(entered.wait, 1)
+        second = asyncio.create_task(service_app.score_pitch(request, _="test"))
+        # Wait until the second primary owns a queued acquisition, then release the first.
+        for _ in range(100):
+            if service_app._score_lock._waiters:
+                break
+            await asyncio.sleep(.001)
+        assert service_app._score_lock._waiters
+        finish.set()
+        # Keep the second primary busy until the first has skipped its optional contrast.
+        first_report = await first
+        assert first_report["report"]["robustness"]["specificity_contrast"]["reason"] == "skipped_busy"
+        finish_second.set()
+        second_report = await second
+        assert second_report["report"]["robustness"]["specificity_contrast"]["available"] is False
+        assert len(calls) == 2
+    asyncio.run(run_case())
+
+
+def test_specificity_refine_penalty_zero_skips_twin_calls(monkeypatch):
+    monkeypatch.setattr(service_app, "SPECIFICITY_ENABLED", True)
+    monkeypatch.setattr(service_app, "TRIBE_ALLOW_MOCK", False)
+    monkeypatch.setattr(service_app, "SPECIFICITY_REFINE_PENALTY", 0)
+    monkeypatch.setattr(service_app, "make_specificity_twin", lambda *a: pytest.fail("Refine twin must not run"))
+    monkeypatch.setattr(service_app, "refine_pitch_message", lambda **k: {
+        "model": "test", "needs_clarification": True, "questions": []})
+    response = client.post("/refine", json={"message": "Our platform reduces deployment time for teams handling frequent releases.",
+                                           "persona": "An engineering manager"})
+    assert response.status_code == 200 and response.json()["needs_clarification"]

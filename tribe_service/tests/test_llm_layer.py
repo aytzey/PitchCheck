@@ -1559,7 +1559,9 @@ def test_roi_evaluator_block_is_applied_only_and_refine_payloads_are_clean(enabl
     assert 'roi_' not in json.dumps(llm._compact_refine_measurement(measured))
 
 
-@pytest.mark.parametrize('raw_llm,facet,quality,sign', [(None, None, 1.0, 1), (100, 100, 1, 1), (0, 0, 0.35, -1)])
+@pytest.mark.parametrize('raw_llm,facet', [(None, None), (100, 100), (0, 0)])
+@pytest.mark.parametrize('quality', [1.0, 0.35])
+@pytest.mark.parametrize('sign', [-1, 1])
 def test_k5_total_prior_budget_and_zero_rollback(monkeypatch, raw_llm, facet, quality, sign):
     from tribe_service import llm_layer as llm
     terms = {k: {'weight': 0.15, 'provenance': 'literature_prior_unvalidated'}

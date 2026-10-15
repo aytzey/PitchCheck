@@ -24,6 +24,11 @@ services:
     env_file:
       - path: ${PITCHSERVER_ENV_FILE:-./service.env}
         format: raw
+    # WS12 runtime defaults; override in service.env without Compose environment masking them.
+    # PITCHCHECK_SPECIFICITY_CONTRAST=1
+    # PITCHCHECK_SPECIFICITY_SCORE_WEIGHT=1.5
+    # PITCHCHECK_SPECIFICITY_Z_MIN=1.0
+    # PITCHCHECK_SPECIFICITY_REFINE_PENALTY=2.0
     environment:
       NVIDIA_VISIBLE_DEVICES: "0"
       NVIDIA_DRIVER_CAPABILITIES: compute,utility

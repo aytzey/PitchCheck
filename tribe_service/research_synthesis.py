@@ -14,9 +14,36 @@ from typing import Any
 
 from tribe_service.engine import _WORD_RE, direct_text_segment_words
 from tribe_service import roi_features
-from tribe_service.persuasion_features import roi_prior_from_summary
+from tribe_service.persuasion_features import roi_prior_from_summary, SPECIFICITY_Z_MIN
 
 ROI_SYNTH_Z = 0.5  # Unvalidated literature-prior threshold.
+
+
+def _specificity_findings(contrast):
+    if not contrast or not contrast.get("available"):
+        return []
+    z = contrast.get("medial_z", 0.0)
+    if not isinstance(z, (int, float)) or not math.isfinite(z):
+        return []
+    if z >= SPECIFICITY_Z_MIN and contrast.get("grounded"):
+        key, kind = "specificity_strength", "strength"
+        observation = f"Recipient-traceable specific details raise the predicted average-reader medial prefrontal / posterior-medial response versus a category-level version (z={z:+.1f})."
+        lever = "Keep these true details verbatim in any rewrite; never round or generalize them."
+    elif z <= -SPECIFICITY_Z_MIN:
+        key, kind = "specificity_flat", "gap"
+        observation = f"Your specific details do not raise the predicted average-reader medial response versus category wording (z={z:+.1f})."
+        lever = "Tie the detail to the reader's own situation (their number, their tool, their stated goal), not to the product."
+    elif z >= SPECIFICITY_Z_MIN:
+        key, kind = "specificity_unverified", "gap"
+        observation = "Specific details shift the predicted average-reader response, but none trace to the persona."
+        lever = "Keep only specifics you can verify for this recipient; invented specificity backfires when discovered."
+    else:
+        return []
+    return [{"key": key, "kind": kind, "axis": "cortical_roi", "roi": "specificity_contrast",
+             "sort_score": 50 + 50 * math.tanh(z), "observation": observation, "lever": lever,
+             "finding": "High- vs low-tailored statements engaged rMPFC and precuneus/PCC more (Chua 2009, N=24 smokers, audio+text, uncorrected); dmPFC response to tailored messages predicted quitting at the individual level (Chua 2011).",
+             "citation": "Chua et al. 2009; Chua et al. 2011",
+             "source_keys": ["chua_2009_tailoring", "chua_2011_tailored_self_related"]}]
 
 
 def _roi_findings(fmri):
@@ -336,6 +363,7 @@ def synthesize_research_findings(
     fmri_summary: dict[str, Any] | None = None,
     raw_features: dict[str, Any] | None = None,
     *, hypotheses: list[dict[str, Any]] | None = None,
+    specificity_contrast: dict | None = None,
 ) -> dict[str, Any]:
     """Map this pitch's TRIBE axis geometry, raw features, and trace shape onto
     published findings.
@@ -351,7 +379,7 @@ def synthesize_research_findings(
 
     gaps: list[dict[str, Any]] = []
     strengths: list[dict[str, Any]] = []
-    for item in _roi_findings(fmri_summary):
+    for item in [*_roi_findings(fmri_summary), *_specificity_findings(specificity_contrast)]:
         (gaps if item["kind"] == "gap" else strengths).append(item)
 
     # Raw-feature grounding: sustain_ratio is the fraction of segments above the
@@ -511,7 +539,7 @@ def build_tribe_synthesis(
     neuro_axes: dict[str, dict[str, Any]],
     fmri_summary: dict[str, Any] | None = None,
     raw_features: dict[str, Any] | None = None,
-    *, platform: str = "general",
+    *, platform: str = "general", specificity_contrast: dict | None = None,
 ) -> dict[str, Any]:
     """Full deterministic TRIBE read: research findings + segment localization.
 
@@ -520,6 +548,7 @@ def build_tribe_synthesis(
     refine brief.
     """
     synthesis = synthesize_research_findings(neuro_axes, fmri_summary, raw_features,
-                                            hypotheses=_roi_hypotheses(message, fmri_summary, platform))
+                                            hypotheses=_roi_hypotheses(message, fmri_summary, platform),
+                                            specificity_contrast=specificity_contrast)
     synthesis["localization"] = localize_pitch_segments(message, fmri_summary)
     return synthesis

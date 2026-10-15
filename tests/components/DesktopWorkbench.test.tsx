@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import DesktopWorkbench from "@/components/DesktopWorkbench";
 import type { PitchScoreReport } from "@/shared/types";
 import { roiSummary, roiPrior } from "../fixtures/roi";
+import { specificityContrast } from "../fixtures/specificity";
 
 const mockFetch = vi.fn();
 const tauriMocks = vi.hoisted(() => ({
@@ -106,6 +107,50 @@ async function renderReport(report: unknown) {
   fireEvent.click(screen.getByRole("button", { name: /Score message/ }));
   await screen.findByText("Variant re-rank");
 }
+
+describe("WS12 desktop specificity contrast", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/");
+    mockFetch.mockReset();
+    tauriMocks.invoke.mockReset();
+    delete window.__TAURI_INTERNALS__;
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it.each([
+    [1.3, 1.84, true, "Specific details: +1.3 pts (literature prior) — keep these true details", 1],
+    [-0.8, -1.84, true, "Specific details: -0.8 pts (literature prior) — tie details to this reader", 1],
+    [0, 1.84, false, "No score effect: details not in persona", 1],
+    [0, 0.9, true, "No score effect: details barely change the predicted response", 1],
+    [0, 1.84, true, "No score effect: specificity literature prior not applied", 1],
+    [0, 1.5, true, "No score effect: details barely change the predicted response", 2],
+  ] as const)("shows the action for prior %s, z %s, grounded %s", async (points, z, grounded, action, zMin) => {
+    const report = fullReport(78, true);
+    await renderReport({ ...report, robustness: { ...report.robustness,
+      specificity_contrast: { ...specificityContrast, prior_points: points, medial_z: z, grounded, z_min: zMin },
+    } });
+    const row = screen.getByText("SPC").closest(".pc-rank-row")!;
+    expect(screen.getByText(action)).toBeDefined();
+    expect(action.split(/\s+/).length).toBeLessThanOrEqual(15);
+    expect(row.textContent).toContain("exp");
+    expect(row.getAttribute("title")).toContain("predicted average-reader medial prefrontal / posterior-medial response");
+    expect(row.getAttribute("title")).toContain(`${z >= 0 ? "+" : ""}${z.toFixed(1)} SD`);
+    expect(row.previousElementSibling?.textContent).toContain("processing_fluency");
+    const comparison = screen.getByText("Compared with").closest("details")!;
+    expect(comparison.open).toBe(false);
+    expect(comparison.textContent).toContain(specificityContrast.control_text);
+    expect(screen.getAllByText(/cannot tell whether these details are true or relevant for this recipient/)).toHaveLength(2);
+  });
+
+  it.each([undefined, null, { available: false, reason: "skipped_busy" }, { available: "true" }])(
+    "hides SPC for absent, skipped, or invalid contrast %#", async (contrast) => {
+      const report = fullReport(78, true);
+      await renderReport({ ...report, robustness: { ...report.robustness, specificity_contrast: contrast } });
+      expect(screen.queryByText("SPC")).toBeNull();
+      expect(screen.queryByText("Compared with")).toBeNull();
+    },
+  );
+});
 
 describe("DesktopWorkbench", () => {
   beforeEach(() => {

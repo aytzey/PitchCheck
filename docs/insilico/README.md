@@ -14,6 +14,21 @@ Measured locally on 2026-10-16 using the RTX 3070, one GPU process at a time. Ll
 
 The dated reports include every measured quantity, exclusions and nulls. Product references are `tribe_service/roi_assets/roi_reference_<encoder-slug>.json`; NPZ caches, audit matrices and raw logs stay outside git under the authorized scratchpad. See [local execution notes](2026-10-16-local-runs.md) for bookkeeping and runtime deviations.
 
+## Turkish 0b baseline — 2026-10-16
+
+Both encoders use 150 directly authored Turkish paraphrases (30 families ×5),
+with exactly the English 0b channel/length counts. This measured noise floor
+lifts only WS09-B's language reduction. K8 is unchanged; WS12 still skips
+Turkish. No independent 0c reference or outcome validation is claimed.
+
+| Encoder | ICC(1), evidence | sigma_w | MDD | Report |
+|---|---:|---:|---:|---|
+| NousResearch/Hermes-3-Llama-3.2-3B | 0.809923 | 3.533844 | 9.795315 | [Turkish 0b](2026-10-16-stage0-tr-NousResearch__Hermes-3-Llama-3.2-3B.md) |
+| meta-llama/Llama-3.2-3B | 0.764568 | 3.638614 | 10.085723 | [Turkish 0b](2026-10-16-stage0-tr-meta-llama__Llama-3.2-3B.md) |
+
+The reports compare every Turkish quantity with its English counterpart and
+record the author-only review limitation and exact rollback behavior.
+
 ## Frozen inputs and review
 
 `scripts/research/fixtures/{stage0,S2,S4,S1,S3}.json` are the dated pre-registration

@@ -56,7 +56,7 @@ def test_guards_quality_encoder_language_and_multipliers(monkeypatch):
     assert llm._roi_prior_term(row, base, FLOORS) == {"roi_term": 0, "roi_reason": "disabled"}
 
 
-def select(monkeypatch, *, jev=True, gap=0, trace=0, all_ineligible=False, turkish=False, mock=False):
+def select(monkeypatch, *, jev=True, gap=0, trace=0, all_ineligible=False, turkish=False, mock=False, floor_values=None):
     rows = [measurement(), measurement("c1", 0.2), measurement("c2", -0.2), measurement("c3", 20)]
     if mock:
         for row in rows:
@@ -67,7 +67,7 @@ def select(monkeypatch, *, jev=True, gap=0, trace=0, all_ineligible=False, turki
                for row in rows]
     # Smallest facet weight is .15: an 8 1/3-point facet change gives a 1.25-point semantic step.
     reviews[2]["context_fit"]["channel_fit"] += gap / 0.15
-    monkeypatch.setattr(roi, "roi_noise_floors", lambda encoder, **kwargs: dict(FLOORS))
+    monkeypatch.setattr(roi, "roi_noise_floors", lambda encoder, **kwargs: dict(FLOORS if floor_values is None else floor_values))
     monkeypatch.setattr(llm, "_jev_refinement_reviews", lambda *args: (reviews, "test", {"choice": "c2"}))
     monkeypatch.setattr(llm, "_post_refine_chat", lambda *args, **kwargs: json.dumps({"evaluations": reviews}))
     if trace:
@@ -113,6 +113,64 @@ def test_turkish_default_floor_and_mock_and_ineligible_paths(monkeypatch):
     assert empty["selected_id"] == empty["selection_policy"]["roi_counterfactual_id"] == "original"
     assert empty["roi_readout"]["direction"] == "no_reliable_difference"
     assert select(monkeypatch, jev=False, all_ineligible=True)["roi_shadow_selected_id"] == "original"
+
+
+def test_measured_turkish_floor_restores_language_weight_and_keeps_shadow(monkeypatch):
+    floors = {**FLOORS, "floor_source": "paraphrase_noise_floor_tr"}
+    guidance = select(monkeypatch, turkish=True, floor_values=floors)
+    assert guidance["selection_policy"]["roi_prior"]["provenance"].endswith(";measured_turkish_paraphrase_floor")
+    row = guidance["evaluations"][1]
+    assert row["empirical_effect"]["roi_term"] == 0.5
+    assert row["empirical_effect"]["roi_reason"] == "applied;measured_turkish_paraphrase_floor"
+    assert row["empirical_effect"]["roi_provenance"].endswith(";measured_turkish_paraphrase_floor")
+    assert row["selection_score_without_roi"] == 75
+    base = {**measurement(), "text_feature_compatible": False}
+    term = llm._roi_prior_term(measurement("c1", 0.2), base, {**floors, "non_english": True})
+    assert term["roi_term"] == 0.25  # K8 remains independent of the language baseline.
+    assert term["roi_provenance"].endswith(";encoder_mismatch;measured_turkish_paraphrase_floor")
+
+
+@pytest.mark.parametrize("fault", [None, "language", "encoder", "atlas", "noise", "missing", "rollback"])
+def test_turkish_reference_loader_and_default_fallback(monkeypatch, tmp_path, fault):
+    folder = tmp_path / "roi_assets"
+    folder.mkdir()
+    data = reference(quantities={f"roi:{k}": reference()["quantities"]["evidence_score"] for k in (KEY, GUARD)})
+    data["quantities"]["evidence_score"] = reference()["quantities"]["evidence_score"]
+    data["language"] = "tr"
+    default_bytes = (roi.ROI_ASSET_DIR / "roi_default_floors.json").read_bytes()
+    (folder / "roi_default_floors.json").write_bytes(default_bytes)
+    if fault in {"language", "encoder"}:
+        data[fault] = "wrong"
+    if fault == "atlas":
+        data["atlas_sha256"] = "wrong"
+    if fault == "noise":
+        data["quantities"][f"roi:{KEY}"]["noise"]["min_detectable_delta"] = -1
+    if fault != "missing":
+        (folder / f"roi_reference_{ENCODER.replace('/', '__')}_tr.json").write_text(json.dumps(data))
+    monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
+    monkeypatch.setattr(roi, "ROI_ASSET_DIR", folder)
+    monkeypatch.setenv("PITCHCHECK_ROI_INSILICO_TUNING", "0" if fault == "rollback" else "1")
+    floors = roi.roi_noise_floors(ENCODER, language="tr")
+    assert floors["floor_source"] == ("paraphrase_noise_floor_tr" if fault is None else "default_prior")
+    assert engine.roi_reference(ENCODER, "../tr") is None
+    assert roi.roi_noise_floors(ENCODER, language="tr", default_only=True)["floor_source"] == "default_prior"
+
+
+@pytest.mark.parametrize("encoder", [ENCODER, "NousResearch/Hermes-3-Llama-3.2-3B"])
+def test_shipped_turkish_measurement_is_consumed_without_replacing_english_units(monkeypatch, encoder):
+    monkeypatch.setenv("PITCHCHECK_ROI_INSILICO_TUNING", "1")
+    data = engine.roi_reference(encoder, "tr")
+    assert data["language"] == "tr" and data["atlas_sha256"] == roi.load_roi_assets()[4]
+    floors = roi.roi_noise_floors(encoder, language="tr")
+    assert floors["floor_source"] == "paraphrase_noise_floor_tr"
+    for key in (KEY, GUARD):
+        quantity = data["quantities"][f"roi:{key}"]
+        assert quantity["n_paraphrase_families"] == 30 and quantity["n_reference"] == 150
+        noise = quantity["noise"]
+        assert floors[key] == noise["min_detectable_delta"] == pytest.approx(1.96 * math.sqrt(2) * noise["sigma_within"])
+    assert roi.roi_calibration(encoder)["n_cases"] == 300
+    monkeypatch.setenv("PITCHCHECK_ROI_INSILICO_TUNING", "0")
+    assert roi.roi_noise_floors(encoder, language="tr")["floor_source"] == "default_prior"
 
 
 def test_disabled_golden_parity_and_legacy_shadow(monkeypatch):

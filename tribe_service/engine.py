@@ -555,12 +555,13 @@ TRIBE_HEMODYNAMIC_LAG_SECONDS = 5.0
 TRIBE_RESPONSE_KIND = "tribe_predicted_fmri_analogue"
 
 
-@functools.lru_cache(maxsize=4)
-def roi_reference(encoder: str | None) -> dict | None:
-    """Load encoder-specific WS08 scale data; missing or incompatible data is optional."""
-    if not isinstance(encoder, str) or not encoder or "\\" in encoder or ".." in encoder:
+@functools.lru_cache(maxsize=8)
+def roi_reference(encoder: str | None, language: str = "en") -> dict | None:
+    """Load encoder/language-specific WS08 scale data; incompatible data is optional."""
+    if not isinstance(encoder, str) or not encoder or "\\" in encoder or ".." in encoder or language not in {"en", "tr"}:
         return None
-    item = Path(__file__).with_name("roi_assets") / f"roi_reference_{encoder.replace('/', '__')}.json"
+    suffix = "_tr" if language == "tr" else ""
+    item = Path(__file__).with_name("roi_assets") / f"roi_reference_{encoder.replace('/', '__')}{suffix}.json"
     try:
         data = json.loads(item.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -568,6 +569,7 @@ def roi_reference(encoder: str | None) -> dict | None:
     if not isinstance(data, dict) or not (
         type(data.get("schema_version")) is int and data["schema_version"] == 1 and data.get("kind") == "roi_reference"
         and data.get("encoder") == encoder and data.get("event_version") == DIRECT_TEXT_EVENT_VERSION
+        and data.get("language", "en") == language
         and data.get("text_input_mode") == TRIBE_TEXT_INPUT_MODE
         and isinstance(data.get("quantities"), dict) and isinstance(data.get("checks"), dict)
         and isinstance(data.get("policy"), dict) and isinstance(data.get("label"), str)

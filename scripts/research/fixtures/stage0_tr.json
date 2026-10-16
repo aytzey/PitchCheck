@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-16",
+  "benchmark_class": "scale / sanity",
+  "minimum_pairs": 16,
+  "target_pairs": 20,
+  "generation": {
+    "author": "OpenAI Codex, individually authored Turkish items",
+    "method": "Hand-written natural business and personal pitches; five full rewrites per family, no slot swaps or prose generator. Author reviewed facts, CTA, pronouns and lengths before inference.",
+    "model": "GPT-6",
+    "temperature": null
+  },
+  "manipulation_check": {
+    "blind_classifier": "not_run",
+    "owner_review": "not_run",
+    "author_review": "facts and requests checked across five forms before inference; not independent review"
+  },
+  "inference": {
+    "statistic": "signed minus_cortex paired differences",
+    "primary_test": "one-sided sign-flip; exact n<=16, Monte Carlo B=10000 otherwise",
+    "holm": "within pre-registered holm_group",
+    "reverse_test": "two-sided sign-flip, Holm within the same group",
+    "bootstrap": "paired percentile mean CI95, B=2000, seed=0",
+    "seed": 0,
+    "pass": "expected mean direction, p_holm<.05, abs(median_delta)>ROI mdd, parcel_rank>=.90",
+    "pass_broad": "same except parcel_rank<.90",
+    "reversed": "opposite mean direction and reverse_p_holm<.05",
+    "null": "remaining informative outcomes",
+    "positive_control": "S2 required for downstream informative statuses; never gates product features",
+    "effect_warning": "In-silico dz generalizes across authored stimuli, not human subjects."
+  },
+  "modality": {
+    "language": "Turkish",
+    "input": "direct synthetic read-aloud at 2.5 words/s, no punctuation pauses",
+    "primary": "whole-text signed time mean; bidirectional encoder",
+    "secondary_window": "cost sentence to end, expanded +/-1 segment, minimum 4 segments; descriptive only"
+  },
+  "run_status": "not_run",
+  "weight_policy": {
+    "pass": 1.0,
+    "pass_broad": 0.75,
+    "null": 0.5,
+    "reversed": 0.0,
+    "not_run": 1.0,
+    "uninformative": 1.0,
+    "low_stability": 0.5
+  },
+  "family": "stage0_tr",
+  "stimuli_file": "stage0_tr.jsonl",
+  "stimuli_sha256": "63dbea48549e03d6d96d5cecbb50115c75863a5fed9c86a43b840c4f0f352929",
+  "contrasts": [],
+  "encoders": [
+    "meta-llama/Llama-3.2-3B",
+    "NousResearch/Hermes-3-Llama-3.2-3B"
+  ],
+  "stage0": {
+    "counts": {
+      "paraphrases": 150
+    },
+    "length_buckets": [
+      "<=60",
+      "61-150",
+      "151-240"
+    ],
+    "scope": "0b only: 30 families x 5, 10 families/50 texts per length bucket, 2 families per channel/bucket; no 0a/0c/0d/0e claims",
+    "icc": "one-way random effects ICC(1); resample whole families for CI95",
+    "mdd": "1.96*sqrt(2)*sigma_within"
+  },
+  "source_keys": []
+}

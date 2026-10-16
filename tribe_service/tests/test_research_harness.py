@@ -77,6 +77,21 @@ def test_stage0_families_keep_facts_pronouns_cta_and_token_multisets():
                 1 if len(engine._WORD_RE.findall(r["text"])) <= 150 else 2 for r in independent} == {0, 1, 2}
 
 
+def test_turkish_0b_matches_english_families_channels_and_length_buckets():
+    from tribe_service.engine import _WORD_RE
+    _, english, _ = harness.load_fixtures("stage0")
+    sidecar, turkish, _ = harness.load_fixtures("stage0_tr")  # Includes the shared diversity guard.
+    def buckets(rows):
+        return Counter((r["channel"], 0 if len(_WORD_RE.findall(r["text"])) <= 60 else
+                        1 if len(_WORD_RE.findall(r["text"])) <= 150 else 2) for r in rows if r["role"] == "paraphrase")
+    assert buckets(turkish) == buckets(english)
+    assert len(turkish) == 150 and len({r["pair_id"] for r in turkish}) == 30
+    assert len({r["text"] for r in turkish}) == 150
+    assert set(Counter(r["pair_id"] for r in turkish).values()) == {5}
+    assert all(r["language"] == "tr" for r in turkish)
+    assert sidecar["manipulation_check"]["blind_classifier"] == "not_run"
+
+
 @pytest.mark.parametrize("family,conditions", [("S1", ["T", "U_you", "U"]),
                                                ("S2", ["Fact", "How", "Whygain", "Whyloss"])])
 def test_manipulations_keep_shared_sentences_and_cta(family, conditions):

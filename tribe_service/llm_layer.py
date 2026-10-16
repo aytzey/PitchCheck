@@ -1981,6 +1981,12 @@ def _runtime_signature(measurement: dict) -> tuple:
             measurement.get("temporal_trace_basis"), measurement["voxel_count"])
 
 
+def _roi_language_tag(floors):
+    if not floors.get("non_english"):
+        return ""
+    return ";measured_turkish_paraphrase_floor" if floors.get("floor_source") == "paraphrase_noise_floor_tr" else ";non_english_default_floor"
+
+
 def _roi_prior_term(row: dict, baseline: dict, floors: dict | None) -> dict:
     off = lambda reason: {"roi_term": 0.0, "roi_reason": reason}
     if ROI_PRIOR_POINTS <= 0:
@@ -1992,7 +1998,8 @@ def _roi_prior_term(row: dict, baseline: dict, floors: dict | None) -> dict:
     mismatch = baseline.get("text_feature_compatible") is not True
     floors = floors or {}
     non_english = floors.get("non_english", False)
-    enc = ROI_ENCODER_MISMATCH_FACTOR if mismatch or non_english else 1.0
+    turkish_measured = non_english and floors.get("floor_source") == "paraphrase_noise_floor_tr"
+    enc = ROI_ENCODER_MISMATCH_FACTOR if mismatch or (non_english and not turkish_measured) else 1.0
     if enc <= 0:
         return off("encoder_mismatch_disabled" if mismatch else "non_english_disabled")
     multiplier = roi_features.roi_multipliers(baseline.get("text_feature_model")).get(ROI_PRIOR_KEY, 1.0)
@@ -2009,7 +2016,7 @@ def _roi_prior_term(row: dict, baseline: dict, floors: dict | None) -> dict:
         return off("why_how_route_trade")
     quality = clamp(min(row["quality_weight"], baseline["quality_weight"]), 0, 1)
     provenance = "literature_prior_unvalidated" + (";encoder_mismatch" if mismatch else "")
-    suffix = ";non_english_default_floor" if non_english else ""
+    suffix = _roi_language_tag(floors)
     return {"roi_term": round(math.copysign(min(1.0, abs(z) - 1), z) * quality * enc * multiplier * ROI_PRIOR_POINTS, 6),
             "roi_multiplier": round(multiplier, 3), "roi_provenance": provenance + suffix,
             "roi_reason": ("applied_encoder_mismatch" if mismatch else "applied") + suffix}
@@ -2370,7 +2377,7 @@ def select_tribe_refinement(
                             "issues": issues})
     baseline = evaluations[0]
     non_english = _looks_turkish(message + persona)
-    floors = roi_features.roi_noise_floors(baseline.get("text_feature_model"), default_only=non_english)
+    floors = roi_features.roi_noise_floors(baseline.get("text_feature_model"), language="tr" if non_english else "en")
     if non_english:
         floors = {**floors, "non_english": True}
     for row in evaluations:
@@ -2410,7 +2417,7 @@ def select_tribe_refinement(
                                "source_keys": ["falk_2010_persuasion_change"], "floor_source": floors.get("floor_source"),
                                "floor_provenance": floors.get("provenance"),
                                "provenance": "literature_prior_unvalidated" + (";encoder_mismatch" if baseline.get("text_feature_compatible") is not True else "")
-                                             + (";non_english_default_floor" if non_english else ""),
+                                             + _roi_language_tag(floors),
                                "evidence": "construct reproduction only; no message-level outcome validation"}
     # Counterfactual for monitoring: what a context-fit-only ranking would have picked.
     semantic_only = max(acceptable, key=lambda item: item["semantic_score"]) if acceptable else baseline

@@ -272,7 +272,10 @@ def score(args):
         raise ValueError("Encoder is not pre-registered for this family")
     commit = committed_preregistration(paths, args.repo, args.git_sha)
     review = sidecar["manipulation_check"]
-    if (review.get("blind_classifier") != "passed" or not review.get("classifier_model")
+    if args.family == "stage0_tr":
+        if not review.get("author_review"):
+            raise ValueError("Turkish 0b needs documented pre-inference paraphrase review")
+    elif (review.get("blind_classifier") != "passed" or not review.get("classifier_model")
             or review.get("owner_sample_fraction", 0) < .2 or review.get("owner_review") != "passed"):
         raise ValueError("Complete and commit blind classification and the owner's 20% review before scoring")
     import torch
@@ -555,7 +558,7 @@ def analyze(args):
               "provenance": prov, "excluded_rows": metrics["excluded_rows"], "n_rows": len(rows),
               "atlas_sha256": assets[4] if assets else prov["atlas_sha256"],
               "analysis_harness_sha256": sha256(Path(__file__))}
-    if family == "stage0":
+    if family in {"stage0", "stage0_tr"}:
         quantities = {k: reference_quantity(rows, k) for k in sorted({k for r in rows for k in r["quantities"]})}
         quantities = {k: v for k, v in quantities.items() if v is not None}
         report.update(stage0_report(rows, args.run))
@@ -565,6 +568,9 @@ def analyze(args):
                      "tribev2_commit": prov["tribev2_commit"], "hf_snapshot": prov["hf_snapshot"],
                      "analysis_harness_sha256": report["analysis_harness_sha256"],
                      "label": LABEL, "quantities": quantities, "checks": {}, "policy": POLICY.copy()}
+        if family == "stage0_tr":
+            reference["language"] = "tr"
+            reference["label"] = "relative to 150 synthetic Turkish paraphrases (30 families), not real pitches"
         if assets:
             from tribe_service import roi_features
             from tribe_service.persuasion_features import ROI_PRIOR
@@ -615,7 +621,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     gpu = commands.add_parser("score")
-    gpu.add_argument("--family", choices=["stage0", "S2", "S4", "S1", "S3"], required=True)
+    gpu.add_argument("--family", choices=["stage0", "stage0_tr", "S2", "S4", "S1", "S3"], required=True)
     gpu.add_argument("--git-sha", required=True)
     gpu.add_argument("--repo", type=Path, default=ROOT)
     gpu.add_argument("--out", type=Path, required=True)

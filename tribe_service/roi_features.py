@@ -82,25 +82,28 @@ def roi_summary(matrix):
             "locations": {k: _stats(mm, i, mu, sd) for k, i in locations.items()}}
 
 
-def _reference(encoder):
+def _reference(encoder, language="en"):
     from tribe_service.engine import roi_reference  # Delayed: engine imports this overlay.
-    data = roi_reference(encoder)
+    data = roi_reference(encoder) if language == "en" else roi_reference(encoder, language)
     assets = load_roi_assets()
     return data if isinstance(data, dict) and assets and str(data.get("atlas_sha256", ""))[:16] == assets[4] else {}
 
 
-def roi_noise_floors(encoder, *, default_only=False):
+def roi_noise_floors(encoder, *, default_only=False, language="en"):
     """Signed minus-cortex units; Stage 0 wins over the provisional benchmark artifact."""
     keys = ("mpfc_falk2010", "ipl_ifg_how_gt_why_vezich2017_l")
     def positive(value):
         return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
     try:
-        quantities = _reference(encoder).get("quantities", {}) if not default_only else {}
+        measured = not default_only and (language == "en" or (
+            language == "tr" and os.getenv("PITCHCHECK_ROI_INSILICO_TUNING", "1").lower() not in {"0", "false", "off", "no"}))
+        reference = (_reference(encoder) if language == "en" else _reference(encoder, language)) if measured else {}
+        quantities = reference.get("quantities", {})
         floors = {key: quantities.get(f"roi:{key}", {}).get("noise", {}).get("min_detectable_delta") for key in keys}
     except (AttributeError, TypeError):
         floors = {}
     if floors and all(positive(value) for value in floors.values()):
-        return {**floors, "floor_source": "paraphrase_noise_floor"}
+        return {**floors, "floor_source": "paraphrase_noise_floor_tr" if language == "tr" else "paraphrase_noise_floor"}
     try:
         from tribe_service import engine
         data = json.loads((ROI_ASSET_DIR / "roi_default_floors.json").read_text())

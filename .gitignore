@@ -19,3 +19,4 @@ out/*
 graphify-out/
 validation_data/
 audit/insilico/
+scripts/research/out/

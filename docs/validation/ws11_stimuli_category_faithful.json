@@ -1,0 +1,365 @@
+{
+  "stimuli_set": "category_faithful",
+  "items": [
+    {
+      "id": "D_01",
+      "condition": "D",
+      "sha256": "860065f42c2613a7eb45189699d4efcde80d18cf66e3873de2acfd498581f876",
+      "n_words": 20
+    },
+    {
+      "id": "D_02",
+      "condition": "D",
+      "sha256": "f2fa3697abeab1f237b31300f8be5f3343ca530a921967ab0473e094c3743a83",
+      "n_words": 20
+    },
+    {
+      "id": "D_03",
+      "condition": "D",
+      "sha256": "b52ade129a4b8b55ab347b50adc9e53c4270a538da23e652475038a8639f17e4",
+      "n_words": 21
+    },
+    {
+      "id": "D_04",
+      "condition": "D",
+      "sha256": "cd3f4004199918ef7842c0828ba679af16e510a381ad8cc467b335c4a9bf4f23",
+      "n_words": 20
+    },
+    {
+      "id": "D_05",
+      "condition": "D",
+      "sha256": "99635dce134f34f330ec3e841c1df013451582cf7d28346e379189fb944e9d2d",
+      "n_words": 21
+    },
+    {
+      "id": "D_06",
+      "condition": "D",
+      "sha256": "bdae06b8d500947067c3c6dff74f19501d9b7d0a382b6426f0e61b106b4ba2e0",
+      "n_words": 20
+    },
+    {
+      "id": "D_07",
+      "condition": "D",
+      "sha256": "285fc134670b0345b1f5843442d4a5d2de3718e817873e20f0ebc53cab9f2f59",
+      "n_words": 21
+    },
+    {
+      "id": "D_08",
+      "condition": "D",
+      "sha256": "bb938d8b4fe790be4a1cb34023b658149aa4cc1fb07cf05586c36638699c1803",
+      "n_words": 21
+    },
+    {
+      "id": "D_09",
+      "condition": "D",
+      "sha256": "b7e1039c2b71a374c48f1ff9e2e41039bc88dc0b88933c929950a2828a67d40e",
+      "n_words": 21
+    },
+    {
+      "id": "D_10",
+      "condition": "D",
+      "sha256": "776a306dc6f116f9c3a84503376684b5e14e9063e504f59f9c5ce100b3f8faa9",
+      "n_words": 20
+    },
+    {
+      "id": "D_11",
+      "condition": "D",
+      "sha256": "cded160b128e9b1ec80b6b07804391b39f9aa3d2dd487cd0c1b3576e6947b6c8",
+      "n_words": 21
+    },
+    {
+      "id": "D_12",
+      "condition": "D",
+      "sha256": "ec81bc674548ff026de9fcbdd81a60926afb31eb78e843e52bb31b27095c621e",
+      "n_words": 19
+    },
+    {
+      "id": "D_13",
+      "condition": "D",
+      "sha256": "b5e5a6fba0a727e144efed185ee753b3421c468773a0575963633cfa2e1e7279",
+      "n_words": 21
+    },
+    {
+      "id": "D_14",
+      "condition": "D",
+      "sha256": "601f4293bf85aeb5ae23365fc8e91dfe8a8d90cbce7e56d14073b7adba8628f7",
+      "n_words": 22
+    },
+    {
+      "id": "D_15",
+      "condition": "D",
+      "sha256": "06611b963cb47fbaddf967c856ec2a4e040eab6caee697a577f2a636dfbcf98e",
+      "n_words": 23
+    },
+    {
+      "id": "S_01",
+      "condition": "S",
+      "sha256": "17a3dc152ea27ce4b8050b6a5dea4f7a752e3c01185612a9a2228d98d733f04d",
+      "n_words": 20
+    },
+    {
+      "id": "S_02",
+      "condition": "S",
+      "sha256": "384ae38c2117950c80165bf0aee533545248fe4211d061aabcf6226aa3b03a26",
+      "n_words": 19
+    },
+    {
+      "id": "S_03",
+      "condition": "S",
+      "sha256": "9c818a3b6ba255a970d27064bbe34249887a41ee3612725b31d7d870ad0f4173",
+      "n_words": 19
+    },
+    {
+      "id": "S_04",
+      "condition": "S",
+      "sha256": "0c7cdadedafbe6412f1ce3e89c7637e573257f0511cb3276d692e98e6d2b462c",
+      "n_words": 19
+    },
+    {
+      "id": "S_05",
+      "condition": "S",
+      "sha256": "807611e06d2b83a0b5eefa058f3da42341f5ab2e65116d5d3f7649bfab86fbc1",
+      "n_words": 19
+    },
+    {
+      "id": "S_06",
+      "condition": "S",
+      "sha256": "8aa95a2867055e2fe5ef22234160f2842130caab641450d243bd48a7efd19738",
+      "n_words": 20
+    },
+    {
+      "id": "S_07",
+      "condition": "S",
+      "sha256": "0dfec7a29a5e3e9ade84a02413ed8c4fe32b402ba9ef82d3fd33f93a55c3c325",
+      "n_words": 20
+    },
+    {
+      "id": "S_08",
+      "condition": "S",
+      "sha256": "d838a932d155197102fe39dc0742ee13a9d5d8d1e001e39c13e759ea5240718e",
+      "n_words": 17
+    },
+    {
+      "id": "S_09",
+      "condition": "S",
+      "sha256": "5efb5de05dd316dc7a0c999332b077641bd4f1d790cb65ed12ef9d83a231b79b",
+      "n_words": 19
+    },
+    {
+      "id": "S_10",
+      "condition": "S",
+      "sha256": "6ab11b26e148f958b228612982655e07eaf7047eee39c3cf9a6f967c5c5129bb",
+      "n_words": 19
+    },
+    {
+      "id": "S_11",
+      "condition": "S",
+      "sha256": "3014e7c69196b7292d07064aa6df18800f3cd1309f862be76470209d4d81bbd1",
+      "n_words": 21
+    },
+    {
+      "id": "S_12",
+      "condition": "S",
+      "sha256": "85a36d7aa36882ac7d5fe5a5d5f0a7bd2ac794fbf14b304cd81f4b7515852f78",
+      "n_words": 21
+    },
+    {
+      "id": "S_13",
+      "condition": "S",
+      "sha256": "814bf9e3fbc13a687d262b81b50e8788d5d238bee86499bae7dcf2c8e94e3e34",
+      "n_words": 20
+    },
+    {
+      "id": "S_14",
+      "condition": "S",
+      "sha256": "455def51fb0c4d5a0588de313f9e790bd5796d71ff1841a13bbec1691b577f63",
+      "n_words": 22
+    },
+    {
+      "id": "S_15",
+      "condition": "S",
+      "sha256": "c4c22c70772183f4e524cf0386885182b69403498eb01de369f07e53e96490fc",
+      "n_words": 21
+    },
+    {
+      "id": "long_01",
+      "condition": "long",
+      "sha256": "1e9284cc62667c23a6f26363974b29148d2695ecc3fb3ab18125bd74c00f169b",
+      "n_words": 27
+    },
+    {
+      "id": "long_02",
+      "condition": "long",
+      "sha256": "00d0a6e814dbf27a119acfd4714042477c9074f4e39320cec9de66b22eb9556d",
+      "n_words": 26
+    },
+    {
+      "id": "long_03",
+      "condition": "long",
+      "sha256": "50e213a7dfb14bfb36925ecd1af3baab2a3efac1d476865c023f2e865ea63778",
+      "n_words": 27
+    },
+    {
+      "id": "long_04",
+      "condition": "long",
+      "sha256": "a3080b306eab9e775b75900ad9ba3a4465b97c28098d7519f007d545f407dff4",
+      "n_words": 27
+    },
+    {
+      "id": "long_05",
+      "condition": "long",
+      "sha256": "3da67bec02b4d5a5ad55126b613bd70ec0afedbf47c7537b705c1aa08bfeb51b",
+      "n_words": 27
+    },
+    {
+      "id": "long_06",
+      "condition": "long",
+      "sha256": "2bbb8f5a047a0876021b026c43d87fab33112c9033aa94a85772c07018670051",
+      "n_words": 27
+    },
+    {
+      "id": "long_07",
+      "condition": "long",
+      "sha256": "b70fc1c444461fc915ed0064b9a4c5f2e831a4eb8879c8cfb6105dbf336fe92b",
+      "n_words": 27
+    },
+    {
+      "id": "long_08",
+      "condition": "long",
+      "sha256": "c97c405777255b67bc73036066b1d0133a2d1fff27b981317c4cb1ff8da03ca3",
+      "n_words": 27
+    },
+    {
+      "id": "long_09",
+      "condition": "long",
+      "sha256": "bfa7014acdabc4e851374e36f0dce026cb73b05459ce82edd2111d642bd52d45",
+      "n_words": 27
+    },
+    {
+      "id": "long_10",
+      "condition": "long",
+      "sha256": "8474de190f4b1e3f6d7d73d49247ba189e68a845be71de0dc26a54fbb3029197",
+      "n_words": 27
+    },
+    {
+      "id": "long_11",
+      "condition": "long",
+      "sha256": "f887025990480fa3a1d920e6d8e3bb9354469ffd8fb878b8be3cfea88a239b5c",
+      "n_words": 28
+    },
+    {
+      "id": "long_12",
+      "condition": "long",
+      "sha256": "a988a42c8a032710f9a5dfbad08bdbaa460499aeadcfbd8f1fa81f4601c4006d",
+      "n_words": 27
+    },
+    {
+      "id": "long_13",
+      "condition": "long",
+      "sha256": "3ecab3fff57a83b798c4a4acc0efdeba5acf32bb45afd2dc2cdfef33320d41be",
+      "n_words": 28
+    },
+    {
+      "id": "long_14",
+      "condition": "long",
+      "sha256": "5d5a5712f161390e0dda3ff4da216c74a3891681a9b5720dca25864d5e1806d5",
+      "n_words": 28
+    },
+    {
+      "id": "long_15",
+      "condition": "long",
+      "sha256": "827535171d52515a20438d25b38d19d18d69905f1acc64766f3da05b9a19377a",
+      "n_words": 28
+    },
+    {
+      "id": "short_01",
+      "condition": "short",
+      "sha256": "3a69bb6cc27d92d839ad610c9c3b2767e0695ad5c38c0d5571a7f30c71278a91",
+      "n_words": 11
+    },
+    {
+      "id": "short_02",
+      "condition": "short",
+      "sha256": "3d20224e1a9f74b6e6854735dd46fe5c2ca80fce070b0f003d9149f397896c94",
+      "n_words": 11
+    },
+    {
+      "id": "short_03",
+      "condition": "short",
+      "sha256": "2fd90c85d60e5d8cd358f5ab61d8ef7c935d0a70492c5820a73baed61a6a24d1",
+      "n_words": 11
+    },
+    {
+      "id": "short_04",
+      "condition": "short",
+      "sha256": "e141e96a4d82c75af991dfb547ec7f6079cbe48c040b3213acd76aca70cf5d51",
+      "n_words": 11
+    },
+    {
+      "id": "short_05",
+      "condition": "short",
+      "sha256": "c6715954b5cbbf3489f1816a3dc2f575f7d64f05f6f293758f8489fc688b0150",
+      "n_words": 11
+    },
+    {
+      "id": "short_06",
+      "condition": "short",
+      "sha256": "475b93010e9426a7f093979c81675529eb4288a8a0aab7d3d9cda7fca3bdc1ad",
+      "n_words": 11
+    },
+    {
+      "id": "short_07",
+      "condition": "short",
+      "sha256": "acb21468f794b36eee3c5bf1c10f1445494bdb1978a03bbfc0f36c5065673151",
+      "n_words": 12
+    },
+    {
+      "id": "short_08",
+      "condition": "short",
+      "sha256": "778d770e6940458a593df761559a2664278b4a74c5967dc1ed7d1b3210115d48",
+      "n_words": 11
+    },
+    {
+      "id": "short_09",
+      "condition": "short",
+      "sha256": "fb27a4fa4380f11fb7bb05e424db7a200dc2aeaa0eb040ea84d60dbc69e731f2",
+      "n_words": 12
+    },
+    {
+      "id": "short_10",
+      "condition": "short",
+      "sha256": "5644a85eb70362dc7c501b14d433e6aec9758cbe2ed9923c618c88d493f0f031",
+      "n_words": 11
+    },
+    {
+      "id": "short_11",
+      "condition": "short",
+      "sha256": "c27eac8ab3061cbcbf97abea1ddc7d322059ce2e4fd35b3fc6cf28c0a91a34e1",
+      "n_words": 12
+    },
+    {
+      "id": "short_12",
+      "condition": "short",
+      "sha256": "7c6a95d09db414a976e249c494243c9f63066b8765d543f731b9c23303e21279",
+      "n_words": 11
+    },
+    {
+      "id": "short_13",
+      "condition": "short",
+      "sha256": "4578e0be9cd524da286b53fe49b624a0dbeac04c79c095c9d9e336d95890c2f8",
+      "n_words": 12
+    },
+    {
+      "id": "short_14",
+      "condition": "short",
+      "sha256": "ca2989a54a41350ec8a7fc058a529b6e84b8608f7a1d2c94d9ba22b32aa9830d",
+      "n_words": 11
+    },
+    {
+      "id": "short_15",
+      "condition": "short",
+      "sha256": "db9ffd1094b2e946261e5178af1ef74843cb199a778e2bb3c87f918dfb4fbdc3",
+      "n_words": 11
+    }
+  ]
+}

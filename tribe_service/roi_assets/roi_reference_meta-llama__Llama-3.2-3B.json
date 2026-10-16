@@ -1637,14 +1637,40 @@
   },
   "checks": {
     "vmpfc_frontopolar": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "vmpfc_frontopolar",
+      "contrast": "excessive<reasonable",
+      "n": 20,
+      "alternative": "less",
+      "primary": true,
+      "holm_group": "cost",
+      "d_z": 0.18022018487863667,
+      "mean_delta": 0.00037849999999999977,
+      "median_delta": -0.0002999999999999999,
+      "ci95": [
+        -0.0004960125000000006,
+        0.0013970749999999996
+      ],
+      "p": 0.7836216378362164,
+      "reverse_p": 0.43455654434556545,
+      "parcel_rank": 0.435,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": 0.00037849999999999977,
+        "ci95": [
+          -0.0004960125000000006,
+          0.0013970749999999996
+        ],
+        "p": 0.7836216378362164,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 0.7836216378362164,
+      "reverse_p_holm": 0.43455654434556545,
+      "status": "uninformative",
+      "reason": "manipulation_or_reference_or_S2_positive_control",
+      "weight_multiplier": 1.0,
+      "family": "S3",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T03:14:52.392773+00:00"
     },
     "mofc": {
       "family": null,
@@ -1727,14 +1753,40 @@
       "weight_multiplier": 1.0
     },
     "dmpfc_chua2011": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "dmpfc_chua2011",
+      "contrast": "T>U_you",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "primary",
+      "d_z": 0.08796863587511634,
+      "mean_delta": 0.0015370000000000002,
+      "median_delta": -0.0013150000000000106,
+      "ci95": [
+        -0.005649737499999993,
+        0.0090818125
+      ],
+      "p": 0.34206579342065796,
+      "reverse_p": 0.6938306169383062,
+      "parcel_rank": 0.605,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": 0.0018100000000000004,
+        "ci95": [
+          -0.005475487499999999,
+          0.009379924999999999
+        ],
+        "p": 0.31566843315668436,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 0.34206579342065796,
+      "reverse_p_holm": 0.6938306169383062,
+      "status": "uninformative",
+      "reason": "manipulation_or_reference_or_S2_positive_control",
+      "weight_multiplier": 1.0,
+      "family": "S1",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T03:04:15.014538+00:00"
     },
     "falk2010jocn_core": {
       "family": null,
@@ -1777,44 +1829,146 @@
       "weight_multiplier": 1.0
     },
     "mpfc_falk2010": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "mpfc_falk2010",
+      "contrast": "Whygain>Fact",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "primary",
+      "d_z": -0.4025511332300145,
+      "mean_delta": -0.0034990000000000012,
+      "median_delta": -0.004535000000000001,
+      "ci95": [
+        -0.007369024999999999,
+        0.00019588749999999535
+      ],
+      "p": 0.9564043595640436,
+      "reverse_p": 0.0866913308669133,
+      "parcel_rank": 0.22,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": -0.0034990000000000012,
+        "ci95": [
+          -0.007369024999999999,
+          0.00019588749999999535
+        ],
+        "p": 0.9564043595640436,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 1.0,
+      "reverse_p_holm": 0.1733826617338266,
+      "status": "uninformative",
+      "reason": "manipulation_or_reference_or_S2_positive_control",
+      "weight_multiplier": 1.0,
+      "family": "S4",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T03:04:03.770941+00:00"
     },
     "pifg_vezich2017": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "pifg_vezich2017",
+      "contrast": "sunscreen:How>Fact",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "sunscreen",
+      "d_z": -1.0704949131057067,
+      "mean_delta": -0.0233015,
+      "median_delta": -0.023505000000000005,
+      "ci95": [
+        -0.0326936375,
+        -0.014019687500000003
+      ],
+      "p": 0.9999000099990001,
+      "reverse_p": 0.00019998000199980003,
+      "parcel_rank": 0.1875,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": -0.05027410000000002,
+        "ci95": [
+          -0.05777329987500003,
+          -0.04307175337500004
+        ],
+        "p": 1.0,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 1.0,
+      "reverse_p_holm": 0.00039996000399960006,
+      "status": "reversed",
+      "weight_multiplier": 0.0,
+      "family": "S2",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T02:18:53.660617+00:00"
     },
     "precuneus_chua2011": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "precuneus_chua2011",
+      "contrast": "T>U_you",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "primary",
+      "d_z": 0.6100374495571967,
+      "mean_delta": 0.009411000000000003,
+      "median_delta": 0.010235000000000001,
+      "ci95": [
+        0.00293085,
+        0.01582605
+      ],
+      "p": 0.0065993400659934,
+      "reverse_p": 0.013598640135986401,
+      "parcel_rank": 0.99,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": 0.009381052631578948,
+        "ci95": [
+          0.0029009026315789475,
+          0.015796091447368425
+        ],
+        "p": 0.006899310068993101,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 0.0131986801319868,
+      "reverse_p_holm": 0.027197280271972803,
+      "status": "uninformative",
+      "reason": "manipulation_or_reference_or_S2_positive_control",
+      "weight_multiplier": 1.0,
+      "family": "S1",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T03:04:15.014538+00:00"
     },
     "ripl_vezich2017": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "ripl_vezich2017",
+      "contrast": "b2b:How>Fact",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "b2b",
+      "d_z": -0.5709416754375164,
+      "mean_delta": -0.004918999999999999,
+      "median_delta": -0.0021150000000000006,
+      "ci95": [
+        -0.009070250000000004,
+        -0.0013493875
+      ],
+      "p": 0.9951004899510049,
+      "reverse_p": 0.010198980101989802,
+      "parcel_rank": 0.3075,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": -0.006195428571428572,
+        "ci95": [
+          -0.010265794642857142,
+          -0.0027654107142857146
+        ],
+        "p": 0.9997000299970003,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 1.0,
+      "reverse_p_holm": 0.04079592040795921,
+      "status": "reversed",
+      "weight_multiplier": 0.0,
+      "family": "S2",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T02:18:53.660617+00:00"
     },
     "rmpfc_chua2009": {
       "family": null,

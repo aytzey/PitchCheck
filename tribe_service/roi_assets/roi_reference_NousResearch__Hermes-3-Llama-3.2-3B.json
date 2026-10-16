@@ -1789,14 +1789,39 @@
       "weight_multiplier": 1.0
     },
     "pifg_vezich2017": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "pifg_vezich2017",
+      "contrast": "sunscreen:How>Fact",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "sunscreen",
+      "d_z": -0.9213109681100412,
+      "mean_delta": -0.014672999999999997,
+      "median_delta": -0.014850000000000002,
+      "ci95": [
+        -0.021509587499999993,
+        -0.007622250000000006
+      ],
+      "p": 0.9996000399960004,
+      "reverse_p": 0.0005999400059994001,
+      "parcel_rank": 0.1875,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": -0.029505300000000005,
+        "ci95": [
+          -0.03546442356250001,
+          -0.0232355594375
+        ],
+        "p": 1.0,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 1.0,
+      "reverse_p_holm": 0.0011998800119988001,
+      "status": "reversed",
+      "weight_multiplier": 0.0,
+      "family": "S2",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T02:41:25.956979+00:00"
     },
     "precuneus_chua2011": {
       "family": null,
@@ -1809,14 +1834,39 @@
       "weight_multiplier": 1.0
     },
     "ripl_vezich2017": {
-      "family": null,
-      "status": "not_run",
-      "d_z": null,
-      "p_holm": null,
-      "parcel_rank": null,
-      "date": null,
+      "roi": "ripl_vezich2017",
+      "contrast": "sunscreen:How>Fact",
+      "n": 20,
+      "alternative": "greater",
+      "primary": true,
+      "holm_group": "sunscreen",
+      "d_z": 1.643258165967016,
+      "mean_delta": 0.018597000000000002,
+      "median_delta": 0.01938,
+      "ci95": [
+        0.013859099999999997,
+        0.023543025000000002
+      ],
+      "p": 9.999000099990002e-05,
+      "reverse_p": 9.999000099990002e-05,
+      "parcel_rank": 0.96,
+      "lexical_residualized": {
+        "identifiable": true,
+        "adjusted_delta": 0.0185442,
+        "ci95": [
+          0.013847312999999997,
+          0.023462456
+        ],
+        "p": 9.999000099990002e-05,
+        "note": "Descriptive covariate adjustment; primary inference uses the pre-registered raw paired difference."
+      },
+      "p_holm": 0.00039996000399960006,
+      "reverse_p_holm": 0.00039996000399960006,
+      "status": "null",
+      "weight_multiplier": 0.5,
+      "family": "S2",
       "weight_basis": "literature_prior",
-      "weight_multiplier": 1.0
+      "date": "2026-10-16T02:41:25.956979+00:00"
     },
     "rmpfc_chua2009": {
       "family": null,

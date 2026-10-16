@@ -1,6 +1,6 @@
 # WS08 local GPU execution — 2026-10-16
 
-Stage 0 is complete for both encoders. Core suites and WS11 follow in the specified order.
+Stage 0 and all four core suites are complete. WS11 follows the specified order.
 
 ## Stage 0: measured results
 
@@ -48,3 +48,42 @@ Adapter versions actually used are retained outside git: v1 SHA `7ef53a9073d6771
 ## Checks at the Stage 0 boundary
 
 Python: 568 passed, 4 skipped, 1 existing Starlette/httpx deprecation warning. Five initial failures were tests assuming measured references were absent; their provisional-fallback setup is now explicit, while the added tests exercise actual shipped references. No product source logic changed. Full cross-language verification will run again after suites and WS11. Existing workers need a restart to clear reference caches; no service was restarted or deployed.
+
+
+## Core suites
+
+The frozen sequence ran S2 Llama → S2 Hermes → S4 Llama → S1 Llama → S3 Llama. All rows were retained: S2 200 per encoder, S4 100, S1 80 and S3 80. S4 used 100/100 SHA-verified cached float32 S2 predictions; its audit rows explicitly identify offline reuse. No repeated GPU inference was needed for S4. There were no retries, fallback runs or exclusions.
+
+S2 Llama: two primary passes, four nulls, two reversals. S2 Hermes: one primary pass_broad, six nulls, one reversal. Neither passes the full positive-control criterion. Therefore S4/S1/S3 are **uninformative**, retaining multiplier1 rather than converting their raw statistical results into null/reversed penalties. All effects, expected-direction and reverse Holm p values are still reported.
+
+| Encoder / family | Contrast | ROI | d_z | p Holm | Reverse p Holm | Verdict | Multiplier |
+|---|---|---|---:|---:|---:|---|---:|
+| meta-llama / S2 | sunscreen:How>Why | pifg_vezich2017 | -0.175333 | 1.00000000 | 0.44035596 | null | 0.5 |
+| meta-llama / S2 | sunscreen:How>Why | ripl_vezich2017 | 1.899365 | 0.00039996 | 0.00039996 | pass | 1.0 |
+| meta-llama / S2 | sunscreen:How>Fact | pifg_vezich2017 | -1.070495 | 1.00000000 | 0.00039996 | reversed | 0.0 |
+| meta-llama / S2 | sunscreen:How>Fact | ripl_vezich2017 | 1.847196 | 0.00039996 | 0.00039996 | pass | 1.0 |
+| meta-llama / S2 | b2b:How>Why | pifg_vezich2017 | 0.127869 | 1.00000000 | 0.80071993 | null | 0.5 |
+| meta-llama / S2 | b2b:How>Why | ripl_vezich2017 | -0.192435 | 1.00000000 | 0.80071993 | null | 0.5 |
+| meta-llama / S2 | b2b:How>Fact | pifg_vezich2017 | -0.555697 | 1.00000000 | 0.06929307 | null | 0.5 |
+| meta-llama / S2 | b2b:How>Fact | ripl_vezich2017 | -0.570942 | 1.00000000 | 0.04079592 | reversed | 0.0 |
+| NousResearch / S2 | sunscreen:How>Why | pifg_vezich2017 | -0.357277 | 1.00000000 | 0.12858714 | null | 0.5 |
+| NousResearch / S2 | sunscreen:How>Why | ripl_vezich2017 | 1.724046 | 0.00039996 | 0.00039996 | pass_broad | 0.75 |
+| NousResearch / S2 | sunscreen:How>Fact | pifg_vezich2017 | -0.921311 | 1.00000000 | 0.00119988 | reversed | 0.0 |
+| NousResearch / S2 | sunscreen:How>Fact | ripl_vezich2017 | 1.643258 | 0.00039996 | 0.00039996 | null | 0.5 |
+| NousResearch / S2 | b2b:How>Why | pifg_vezich2017 | -0.096145 | 1.00000000 | 1.00000000 | null | 0.5 |
+| NousResearch / S2 | b2b:How>Why | ripl_vezich2017 | -0.081995 | 1.00000000 | 1.00000000 | null | 0.5 |
+| NousResearch / S2 | b2b:How>Fact | pifg_vezich2017 | -0.617839 | 1.00000000 | 0.05599440 | null | 0.5 |
+| NousResearch / S2 | b2b:How>Fact | ripl_vezich2017 | -0.357337 | 1.00000000 | 0.36926307 | null | 0.5 |
+| meta-llama / S4 | Whygain>Fact | mpfc_falk2010 | -0.402551 | 1.00000000 | 0.17338266 | uninformative | 1.0 |
+| meta-llama / S4 | Whygain>Fact_you | mpfc_falk2010 | -0.298233 | 1.00000000 | 0.21187881 | uninformative | 1.0 |
+| meta-llama / S1 | T>U_you | dmpfc_chua2011 | 0.087969 | 0.34206579 | 0.69383062 | uninformative | 1.0 |
+| meta-llama / S1 | T>U_you | precuneus_chua2011 | 0.610037 | 0.01319868 | 0.02719728 | uninformative | 1.0 |
+| meta-llama / S3 | excessive<reasonable | vmpfc_frontopolar | 0.180220 | 0.78362164 | 0.43455654 | uninformative | 1.0 |
+
+The two Llama S2 location multipliers are zero (worst primary contrast reversed for each ROI). Hermes pIFG is zero; rostral IPL is .5 (null). The other primary suite checks are uninformative/unity. These are `m_insilico` in the reference files, consumed by the shared product multiplier function; the fixed K4 denominator and separate K8 factor are unchanged. pIFG and rostral IPL are literature-location keys, not a remapping to other parcel unions.
+
+S1’s significant precuneus expected-direction p does not override failed S2. S3’s right-insula result is secondary and does not update weights; its number-only vmPFC control has d_z=-.0548013, p_Holm=.40245975. Neither is treated as evidence of recipient valuation or emotion. The per-suite Markdown/JSON reports retain all secondary tests, lexical adjustments, parcel ranks, medians, confidence intervals and descriptive windows.
+
+Total GPU-process wall through WS08 is 200.29 minutes, below the 240-minute cap; the watchdog remains active for WS11.
+
+The WS11 category-faithful ID/hash lock and independent review are committed at this boundary, before any WS11 TRIBE prediction. Texts remain outside git. The original WS11 analysis pre-registration is unchanged.

@@ -199,6 +199,10 @@ def test_measured_stage0_reference_is_used_by_product(encoder, monkeypatch):
                                    encoder=encoder, word_count=60)
     assert prior["unit_calibration_provenance"].startswith("unit_calibration:stage0:")
     assert prior["provenance"].startswith("literature_prior_unvalidated")
+    assert prior["weight"] == (0.15 if encoder.startswith("meta-llama/") else 0.075)
+    monkeypatch.setenv("PITCHCHECK_ROI_INSILICO_TUNING", "0")
+    assert all(value == 1.0 for value in roi.roi_multipliers(encoder).values())
+    assert roi.roi_calibration(encoder) == calibration
 
 
 def test_stage0_length_units_floors_and_multipliers_share_loader(monkeypatch, tmp_path):

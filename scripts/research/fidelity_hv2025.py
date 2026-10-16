@@ -12,9 +12,11 @@ import re
 import numpy as np
 
 try:
+    from . import parcel_spin
     from .fidelity_lib import PREREG, N_VERTICES, fsavg5, load_atlas, outside_repo, sha256, write_json
     from .tribe_predict import check_registration, load_manifest
 except ImportError:
+    import parcel_spin
     from fidelity_lib import PREREG, N_VERTICES, fsavg5, load_atlas, outside_repo, sha256, write_json
     from tribe_predict import check_registration, load_manifest
 
@@ -48,7 +50,7 @@ def length_adjusted_t(maps, is_d, words):
 
 
 def correlations(pred, target, masks):
-    from scipy.stats import rankdata
+    rankdata = parcel_spin.rankdata
     result = {}
     for name, mask in masks.items():
         p, t = pred[mask].astype(float), target[mask].astype(float)
@@ -69,7 +71,7 @@ def anchored_template(pred, target, labels):
 
 
 def auc(is_d, scores):
-    from scipy.stats import rankdata
+    rankdata = parcel_spin.rankdata
     n = int(is_d.sum())
     return float((rankdata(scores)[is_d].sum() - n * (n + 1) / 2) / (n * (~is_d).sum()))
 
@@ -136,7 +138,7 @@ def validate_items(manifest):
     return ds
 
 
-def analyze(manifest, maps, target, labels, names, *, n_permutations=10000):
+def analyze(manifest, maps, target, labels, names, *, n_permutations=10000, spins=None):
     """Small permutation counts are for synthetic tests only; CLI fixes the registration."""
     ds = validate_items(manifest)
     ds_idx = [i for i, row in enumerate(manifest["items"]) if row["condition"] in {"D", "S"}]
@@ -178,6 +180,12 @@ def analyze(manifest, maps, target, labels, names, *, n_permutations=10000):
               "template_written": bool(r > 0), "scope": SCOPE}
     if manifest["stimuli_set"] == "category_faithful":
         result["interpretation"] = "Conceptual replication; a fail is uninformative about TRIBE fidelity."
+    if spins is not None:
+        contrasts = {"D-S Welch T": t, "D-S raw mean": x[is_d].mean(0) - x[~is_d].mean(0),
+                     "length-adjusted D T": adjusted, "long-short T": welch_t(long, short)}
+        result["parcel_spin"] = {"scope": "Additional robustness only; original primary verdict unchanged",
+            "maps": {key: parcel_spin.correlation_null(value, target, labels, masks, spins)
+                     for key, value in contrasts.items() if value is not None}}
     return result, anchored_template(t, target, labels).astype(np.float16) if r > 0 else None
 
 
@@ -206,6 +214,14 @@ def render_report(result):
     if "metrics" in result:
         body += ["| Mask | N | Spearman r | Pearson r |", "|---|---:|---:|---:|"]
         body += [f"| {key} | {v['n']} | {v['spearman_r']:.6f} | {v['pearson_r']:.6f} |" for key, v in result["metrics"].items()]
+    if "parcel_spin" in result:
+        body += ["", f"Original primary label-null p: {result['p']:.8f}; verdict: {result['verdict']}.",
+                 "Additional parcel spins (1000, seed 0), no primary decision change:", "",
+                 "| Map | Mask | Parcels | Spearman r | Spin p | Pearson r | Spin p |",
+                 "|---|---|---:|---:|---:|---:|---:|"]
+        for name, masks in result["parcel_spin"]["maps"].items():
+            for mask, row in masks.items():
+                body.append(f"| {name} | {mask} | {row['n_parcels']} | {row['spearman_r']:.8f} | {row['spearman_spin_p']:.8f} | {row['pearson_r']:.8f} | {row['pearson_spin_p']:.8f} |")
     body += ["", "Full metrics, nulls, hashes, length control and provenance are in the adjacent JSON.", ""]
     return "\n".join(body)
 
@@ -254,12 +270,15 @@ def main():
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--lock", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--spins", type=Path, help="Optional 1000-spin seed-0 NPZ; additional robustness only")
     args = parser.parse_args()
     if args.selftest:
         selftest()
         return
     if not (args.surfaces and args.inverse and args.output):
         parser.error("--surfaces LEFT RIGHT, --inverse LEFT RIGHT and --output are required")
+    if args.spins and not args.manifest:
+        parser.error("--spins requires --manifest predictions")
     output = outside_repo(args.output)
     surfaces = [outside_repo(p) for p in args.surfaces]
     inverse = [outside_repo(p) for p in args.inverse]
@@ -286,8 +305,11 @@ def main():
             if pred.ndim != 2 or pred.shape[0] < 1 or pred.shape[1] != N_VERTICES or not np.isfinite(pred).all():
                 raise ValueError("Invalid signed vertex prediction matrix")
             maps.append(pred.mean(0, dtype=np.float64))
-        analysis, template = analyze(manifest, np.array(maps), target, labels, names)
+        spins, spin_metadata = parcel_spin.load(outside_repo(args.spins), result["atlas"]["atlas_sha256"]) if args.spins else (None, None)
+        analysis, template = analyze(manifest, np.array(maps), target, labels, names, spins=spins)
         result.update(analysis, provenance=provenance, stimulus_lock_sha256=sha256(args.lock))
+        if spins is not None:
+            result["parcel_spin"].update(provenance=spin_metadata, cache_sha256=sha256(args.spins))
         if template is not None:
             if not np.isfinite(template).all():
                 raise ValueError("Template exceeds float16 range")

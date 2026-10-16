@@ -610,6 +610,13 @@ def analyze(args):
         if reference:
             reference["checks"].update(report["checks"])
             report["reference"] = reference
+    if getattr(args, "spins", None) and family not in {"stage0", "stage0_tr"}:
+        from scripts.research import parcel_spin
+        if assets is None:
+            raise ValueError("Parcel spins require the WS07 atlas")
+        assignments, metadata = parcel_spin.load(args.spins, assets[4])
+        report["parcel_spin"] = {"provenance": metadata, "cache_sha256": sha256(args.spins),
+                                 "tests": parcel_spin.suite_null(rows, metrics["sidecar"], assets, assignments)}
     write_json(args.output or args.run / "analysis.json", report)
     if args.reference_out:
         if "reference" not in report:
@@ -631,6 +638,7 @@ def main():
     cpu.add_argument("--positive-control", type=Path)
     cpu.add_argument("--reference-out", type=Path)
     cpu.add_argument("--output", type=Path)
+    cpu.add_argument("--spins", type=Path, help="Optional 1000-spin seed-0 NPZ; additional robustness only")
     args = parser.parse_args()
     try:
         (score if args.command == "score" else analyze)(args)

@@ -231,3 +231,35 @@ reference falls back to the committed WS07 encoder unit artifact; WS09 retains
 its separate `default_prior` noise floors. Measured Stage-0 files are now supplied for both encoders; the product prefers
 them over the provisional WS07 calibration and WS09 default floors. No synthetic
 test reference is installed for runtime.
+
+## Additional parcel spin robustness — 2026-10-16
+
+[All 38 suite tests and 12 HV2025 map/mask correlations](2026-10-16-spins.md)
+now have 1,000-spin, seed-0 spatial robustness values. Primary Holm/label tests,
+verdicts, product weights and fidelity/template decisions remain unchanged.
+The suite tables show the new column; the full report distinguishes observed
+parcel approximations from the original vertex ROI effects. Sphere files came
+from the locally installed nilearn fsaverage5 bundle. Statistics use NumPy only.
+
+Prepare the cache once in the offline nilearn/nibabel research environment:
+
+```sh
+python scripts/research/parcel_spin.py --prepare "$DATA/parcel-spins.npz"
+python scripts/research/parcel_spin.py --selftest
+python scripts/research/run_contrasts.py analyze --run "$DATA/S2-llama" \
+  --reference tribe_service/roi_assets/roi_reference_meta-llama__Llama-3.2-3B.json \
+  --spins "$DATA/parcel-spins.npz" --output "$DATA/S2-llama-spins.json"
+python scripts/research/fidelity_hv2025.py \
+  --surfaces "$DATA/886850.L.func.gii" "$DATA/886850.R.func.gii" \
+  --inverse "$DATA/886851.L.func.gii" "$DATA/886851.R.func.gii" \
+  --manifest "$DATA/predictions.json" --lock "$DATA/input-lock.json" \
+  --spins "$DATA/parcel-spins.npz" --output "$DATA/hv-spins"
+```
+
+The existing pre-registration/provenance preflights still apply. For downstream
+WS08 suites retain the matching `--positive-control` argument. `--spins` adds
+only a `parcel_spin` report field and never modifies reference checks. HV retains
+its original 10,000 label nulls; NumPy average tied ranks exactly match the former
+SciPy ranks (14 exact-array checks including primary-mask sizes). The new pytest
+also verifies identical HV primary metrics/verdict/template with spins on/off;
+real S2 replay preserved every test/check exactly. NPZ caches stay outside Git.

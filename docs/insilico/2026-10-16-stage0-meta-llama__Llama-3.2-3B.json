@@ -65,6 +65,7 @@
   "excluded_rows": 0,
   "n_rows": 405,
   "atlas_sha256": "c5ca6bb873d2e0d1",
+  "analysis_harness_sha256": "364a9935e54aca5dd787035c9d8252dc9c0b555e880dc6e4d6522a8a518173a7",
   "retest_relative_l2": [
     0.0,
     0.0,
@@ -122,10 +123,10 @@
       ]
     },
     "evidence_score_with_roi": {
-      "mean_delta": 6.2435333333333345,
+      "mean_delta": 9.672033333333333,
       "ci95": [
-        3.8545583333333333,
-        8.704039166666666
+        7.237733333333334,
+        12.06251083333333
       ]
     },
     "neural_score_from_signals": {
@@ -408,7 +409,7 @@
   },
   "shadow_comparison": {
     "status": "measured",
-    "spearman": 0.9806167412022041,
+    "spearman": 0.7912427203161813,
     "baseline_noise": {
       "sigma_within": 3.4306437923515167,
       "icc1": 0.72404740366851,
@@ -419,65 +420,65 @@
       "min_detectable_delta": 9.509259438476583
     },
     "roi_noise": {
-      "sigma_within": 3.4390367798750474,
-      "icc1": 0.7203385514597832,
+      "sigma_within": 3.7041348684049473,
+      "icc1": 0.7601729823352038,
       "icc1_ci95": [
-        0.5242627871659897,
-        0.8151703781200101
+        0.5979427487326037,
+        0.8443506451769077
       ],
-      "min_detectable_delta": 9.532523612974408
+      "min_detectable_delta": 10.267338024804419
     },
-    "rank_change_rate": 0.056666666666666664,
+    "rank_change_rate": 0.11666666666666667,
     "recommend_half_weight": false
   },
   "neutral_rows": 30,
   "pitch_minus_neutral": {
-    "roi:dmpfc_chua2011": 0.09193533333333333,
-    "roi:l_angular_chua2011": 0.053164300000000005,
-    "roi:ripl_vezich2017": -0.028570066666666664,
-    "response_shape:half:continuity": -0.09534599333333327,
-    "response_shape:half:closing": -0.0647832433333334,
-    "signal:memorability": 7.546634367945078,
-    "response_shape:quarter:continuity": -0.06513488,
-    "roi:l_ifg": -0.04553390000000003,
-    "roi:precuneus_chua2011": 0.12307333333333334,
-    "roi:tp_l": 0.05533123333333333,
-    "signal:personal_relevance": 1.6325561289438824,
-    "signal:emotional_engagement": 5.0164473982153694,
-    "axis:processing_fluency": 3.853666666666669,
-    "roi:insula": -0.02538080000000001,
-    "response_shape:quarter:closing": -0.13225544999999994,
-    "roi:ipl_ifg_how_gt_why_vezich2017_l": -0.04956780000000001,
-    "roi:r_tpj": 0.036057833333333324,
-    "roi:insula_right": -0.009559968746006425,
-    "roi:r_ifg_ai": 0.015512733333333334,
-    "axis:social_sharing": 4.033000000000005,
-    "axis:encoding_attention": 6.2209999999999965,
-    "response_shape:quarter:opening": 0.057431189999999854,
-    "signal:cognitive_friction": -3.1748221392281053,
-    "axis:reward_affect": 4.864999999999998,
-    "roi:vmpfc_frontopolar": 0.023998,
-    "roi:pcc_precuneus": 0.1135692,
-    "quality_weight": 0.0,
-    "roi:dmpfc": 0.06365433333333333,
-    "evidence_score_with_roi": 5.732510000000005,
-    "roi:mofc": 0.03208406666666666,
-    "response_shape:quarter:max_relative_drop": 0.06513488000000002,
     "roi:lateral_temporal": 0.005615566666666627,
-    "response_shape:half:max_relative_drop": 0.09534599333333331,
-    "roi:pifg_vezich2017": -0.07122543333333331,
-    "roi:vmpfc_chua2009": 0.02290293333333332,
-    "roi:falk2010jocn_core": 0.05187749999999999,
-    "roi:mpfc_falk2010": 0.032475566666666664,
-    "roi:rmpfc_chua2009": 0.054618799999999995,
-    "evidence_score": 4.330513333333336,
+    "roi:l_angular_chua2011": 0.053164300000000005,
     "signal:attention_capture": 5.97100520271281,
-    "response_shape:half:opening": 0.06395859999999975,
+    "roi:vmpfc_frontopolar": 0.023998,
+    "signal:cognitive_friction": -3.1748221392281053,
+    "roi:r_tpj": 0.036057833333333324,
     "roi:ifg47_l_chua2011": 0.020016366666666674,
-    "roi:tp_r": 0.05041116666666662,
     "axis:self_value": 3.3063333333333276,
+    "roi:insula_right": -0.009559968746006425,
+    "roi:ripl_vezich2017": -0.028570066666666664,
+    "roi:falk2010jocn_core": 0.05187749999999999,
+    "signal:emotional_engagement": 5.0164473982153694,
+    "roi:vmpfc_chua2009": 0.02290293333333332,
+    "neural_score_from_signals": 4.415181463682032,
+    "evidence_score_with_roi": 10.580559999999998,
+    "response_shape:quarter:closing": -0.13225544999999994,
+    "roi:dmpfc": 0.06365433333333333,
+    "axis:processing_fluency": 3.853666666666669,
+    "axis:encoding_attention": 6.2209999999999965,
+    "roi:tp_r": 0.05041116666666662,
+    "response_shape:quarter:continuity": -0.06513488,
+    "signal:personal_relevance": 1.6325561289438824,
+    "roi:mpfc_falk2010": 0.032475566666666664,
+    "roi:dmpfc_chua2011": 0.09193533333333333,
+    "roi:mofc": 0.03208406666666666,
+    "roi:r_ifg_ai": 0.015512733333333334,
+    "quality_weight": 0.0,
+    "roi:rmpfc_chua2009": 0.054618799999999995,
+    "signal:memorability": 7.546634367945078,
+    "axis:reward_affect": 4.864999999999998,
+    "response_shape:half:max_relative_drop": 0.09534599333333331,
+    "roi:pcc_precuneus": 0.1135692,
+    "roi:insula": -0.02538080000000001,
+    "roi:l_ifg": -0.04553390000000003,
     "signal:social_proof_potential": 3.601881427026221,
-    "neural_score_from_signals": 4.415181463682032
+    "response_shape:quarter:opening": 0.057431189999999854,
+    "response_shape:half:continuity": -0.09534599333333327,
+    "roi:pifg_vezich2017": -0.07122543333333331,
+    "axis:social_sharing": 4.033000000000005,
+    "roi:ipl_ifg_how_gt_why_vezich2017_l": -0.04956780000000001,
+    "response_shape:half:opening": 0.06395859999999975,
+    "response_shape:quarter:max_relative_drop": 0.06513488000000002,
+    "roi:precuneus_chua2011": 0.12307333333333334,
+    "response_shape:half:closing": -0.0647832433333334,
+    "roi:tp_l": 0.05533123333333333,
+    "evidence_score": 4.330513333333336
   },
   "reference": {
     "schema_version": 1,
@@ -489,6 +490,7 @@
     "harness_git_sha": "05f42df417bf3e92dfc467d67c72cda19125153f",
     "tribev2_commit": "af58661791a351a448a489042a28f6c37e1c14b7",
     "hf_snapshot": "13afe5124825b4f3751f836b40dafda64c1ed062",
+    "analysis_harness_sha256": "364a9935e54aca5dd787035c9d8252dc9c0b555e880dc6e4d6522a8a518173a7",
     "label": "relative to a synthetic reference set (n≈300), not real pitches",
     "quantities": {
       "axis:encoding_attention": {
@@ -707,32 +709,32 @@
         "n_reference": 300,
         "n_paraphrase_families": 30,
         "noise": {
-          "sigma_within": 3.4390367798750474,
-          "icc1": 0.7203385514597832,
+          "sigma_within": 3.7041348684049473,
+          "icc1": 0.7601729823352038,
           "icc1_ci95": [
-            0.5242627871659897,
-            0.8151703781200101
+            0.5979427487326037,
+            0.8443506451769077
           ],
-          "min_detectable_delta": 9.532523612974408
+          "min_detectable_delta": 10.267338024804419
         },
         "length_model": {
-          "a": 13.304886074163141,
-          "b_log_words": 6.528423340854873
+          "a": 12.581766169769349,
+          "b_log_words": 6.291364923835542
         },
-        "resid_sd": 4.746041325095502,
+        "resid_sd": 6.482517310286014,
         "resid_q": {
-          "p05": -7.804658487383275,
-          "p25": -2.865157189047686,
-          "p50": 0.09246240714399434,
-          "p75": 2.9493420854762267,
-          "p95": 8.696424457810446
+          "p05": -10.835122514845004,
+          "p25": -4.765912657061508,
+          "p50": 0.15299014057268323,
+          "p75": 4.545438496349885,
+          "p95": 10.486111852293512
         },
         "confound_r2": {
-          "log_words": 0.396011738352286,
-          "sentences": 0.37713390002434577,
-          "mean_word_length": 0.021880407266745783,
-          "global_mean_abs": 0.22864894349807352,
-          "joint": 0.509977870442963
+          "log_words": 0.24607030450491296,
+          "sentences": 0.17684521498818306,
+          "mean_word_length": 0.07886859878097441,
+          "global_mean_abs": 0.23520260255721726,
+          "joint": 0.4504793015830023
         },
         "flags": [
           "stable"

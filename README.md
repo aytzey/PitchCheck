@@ -72,7 +72,7 @@ No audio synthesis, no image generation — the `direct` text input mode skips g
 
 ROI weights are literature priors; agreement of TRIBE's text-only predictions with measured fMRI is being benchmarked offline ([docs/validation/ws11_*](docs/validation/ws11_prereg.md)) and is not yet established for short written English pitches.
 
-WS11's offline commands and pending verdict are documented in [the fidelity runbook](docs/validation/ws11_runbook.md). `PITCHCHECK_ROI_FIDELITY_SCALING=on` applies a bounded [0.25, 1] factor only with a compatible measured asset; `shadow`/`off` retain the original weights. Without the WS07 atlas or fidelity asset, scoring is unchanged.
+The [2026-10-16 registered HV2025 check](docs/validation/ws11_hv2025_2026-10-16.md) used authored English health messages as a category-faithful conceptual replication: primary Spearman r=-0.0170, label-null p=0.5453, verdict `uninformative`. No C2 template was generated. [Lebel 11.2 was skipped](docs/validation/ws11_lebel_2026-10-16.md) because an already usable coordinate-matched response bundle was not obtained. [The runbook](docs/validation/ws11_runbook.md) records reproduction and data requirements. `PITCHCHECK_ROI_FIDELITY_SCALING=on` applies a bounded [0.25, 1] factor only with a compatible measured Lebel asset; `shadow`/`off` retain the original weights. With no such asset, WS11 fidelity scaling leaves weights unchanged.
 
 Ten raw features get extracted from the prediction matrix:
 

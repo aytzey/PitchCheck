@@ -20,7 +20,7 @@ Retest relative L2 maximum: 0; sanity: True.
 | axis:self_value | 0.469937 | 4.26558 | 11.8236 | 0.095905 | 5.38607 |
 | axis:social_sharing | 0.753405 | 3.25907 | 9.03369 | 0.40806 | 4.68483 |
 | evidence_score | 0.724047 | 3.43064 | 9.50926 | 0.404623 | 4.68614 |
-| evidence_score_with_roi | 0.720339 | 3.43904 | 9.53252 | 0.396012 | 4.74604 |
+| evidence_score_with_roi | 0.760173 | 3.70413 | 10.2673 | 0.24607 | 6.48252 |
 | neural_score_from_signals | 0.740273 | 3.38356 | 9.37876 | 0.419141 | 4.69611 |
 | quality_weight | 0 | 0 | 0 | 0 | 1.66771e-16 |
 | response_shape:half:closing | 0.813102 | 0.0428135 | 0.118673 | 0.571346 | 0.0611744 |
@@ -72,7 +72,7 @@ Retest relative L2 maximum: 0; sanity: True.
 | roi:tp_r | 0.0712247 | [0.05551838333333334, 0.08879704166666665] |
 
 0e: current versus ROI-augmented evidence score, recomputed from saved float16 matrices after installing the measured reference (no GPU rerun).
-Spearman ρ: 0.980617; ICC current: 0.724047; ICC with ROI: 0.720339; paraphrase rank-change rate: 0.0566667; half-weight recommendation: False.
+Spearman ρ: 0.791243; ICC current: 0.724047; ICC with ROI: 0.760173; paraphrase rank-change rate: 0.116667; half-weight recommendation: False.
 
 vmPFC/proxy correlations: `{'axis:self_value': 0.11881450431714717, 'signal:personal_relevance': 0.41372888824288645}`.
 

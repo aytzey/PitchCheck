@@ -34,6 +34,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import numpy as np
 
@@ -526,6 +527,7 @@ def analyze(args):
         raise ValueError("Cannot analyze an incomplete scoring run")
     rows = [json.loads(line) for line in (args.run / "rows.jsonl").read_text(encoding="utf-8").splitlines()]
     rows = [r for r in rows if not r["excluded"]]
+    prov = metrics["provenance"]
     assets = load_assets()
     for row in rows:
         item = (args.run / row["prediction_file"]).resolve()
@@ -534,19 +536,25 @@ def analyze(args):
         if assets is not None:
             pred = np.load(item, allow_pickle=False)
             check_prediction(row["text"], pred)
-            from tribe_service import roi_features
+            from tribe_service import engine, roi_features
             row["roi_summary"] = roi_features.roi_summary(pred)
-            measured = measure(row["text"], pred, row.get("channel", "general"), assets,
-                               metrics["provenance"]["text_feature_compatible"])
+            # Offline replay has no loaded model; retain the recorded encoder for scale lookup.
+            with patch.object(engine, "_text_feature_metadata", return_value={
+                "text_feature_model": prov["encoder"],
+                "expected_text_feature_model": prov.get("runtime", {}).get("expected_text_feature_model", engine.TRIBE_CHECKPOINT_TEXT_MODEL),
+                "text_feature_compatible": prov["text_feature_compatible"],
+            }):
+                measured = measure(row["text"], pred, row.get("channel", "general"), assets,
+                                   prov["text_feature_compatible"])
             row["quantities"].update({k: v for k, v in measured["quantities"].items()
                                       if k.startswith("roi:") or k == "evidence_score_with_roi"})
             row["parcels"] = measured["parcels"]
             row["secondary_window"] = secondary_window(row, pred, assets)
-    prov = metrics["provenance"]
     family = metrics["family"]
     report = {"family": family, "encoder": prov["encoder"], "date": metrics["date"],
               "provenance": prov, "excluded_rows": metrics["excluded_rows"], "n_rows": len(rows),
-              "atlas_sha256": assets[4] if assets else prov["atlas_sha256"]}
+              "atlas_sha256": assets[4] if assets else prov["atlas_sha256"],
+              "analysis_harness_sha256": sha256(Path(__file__))}
     if family == "stage0":
         quantities = {k: reference_quantity(rows, k) for k in sorted({k for r in rows for k in r["quantities"]})}
         quantities = {k: v for k, v in quantities.items() if v is not None}
@@ -555,6 +563,7 @@ def analyze(args):
                      "event_version": prov["event_version"], "text_input_mode": prov["text_input_mode"],
                      "atlas_sha256": report["atlas_sha256"], "harness_git_sha": prov["git_sha"],
                      "tribev2_commit": prov["tribev2_commit"], "hf_snapshot": prov["hf_snapshot"],
+                     "analysis_harness_sha256": report["analysis_harness_sha256"],
                      "label": LABEL, "quantities": quantities, "checks": {}, "policy": POLICY.copy()}
         if assets:
             from tribe_service import roi_features

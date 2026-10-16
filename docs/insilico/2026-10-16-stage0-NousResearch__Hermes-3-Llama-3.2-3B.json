@@ -65,6 +65,7 @@
   "excluded_rows": 0,
   "n_rows": 405,
   "atlas_sha256": "c5ca6bb873d2e0d1",
+  "analysis_harness_sha256": "364a9935e54aca5dd787035c9d8252dc9c0b555e880dc6e4d6522a8a518173a7",
   "retest_relative_l2": [
     0.0,
     0.0,
@@ -122,10 +123,10 @@
       ]
     },
     "evidence_score_with_roi": {
-      "mean_delta": 5.359466666666666,
+      "mean_delta": 7.123133333333334,
       "ci95": [
-        2.488997500000001,
-        8.258960833333333
+        4.569494999999999,
+        9.739406666666664
       ]
     },
     "neural_score_from_signals": {
@@ -408,7 +409,7 @@
   },
   "shadow_comparison": {
     "status": "measured",
-    "spearman": 0.9943636189486325,
+    "spearman": 0.9064849108155997,
     "baseline_noise": {
       "sigma_within": 3.1582121535239946,
       "icc1": 0.7791757447331353,
@@ -419,65 +420,65 @@
       "min_detectable_delta": 8.754117462315739
     },
     "roi_noise": {
-      "sigma_within": 3.159058360756678,
-      "icc1": 0.7711791529507059,
+      "sigma_within": 3.1954717492101232,
+      "icc1": 0.7570384434938451,
       "icc1_ci95": [
-        0.6230174574763249,
-        0.84488892980416
+        0.6007583336091499,
+        0.8414789498497164
       ],
-      "min_detectable_delta": 8.756463029096015
+      "min_detectable_delta": 8.857395792389546
     },
-    "rank_change_rate": 0.02666666666666667,
+    "rank_change_rate": 0.08,
     "recommend_half_weight": false
   },
   "neutral_rows": 30,
   "pitch_minus_neutral": {
-    "axis:social_sharing": 4.291333333333338,
-    "roi:r_tpj": 0.035701966666666654,
-    "response_shape:quarter:closing": -0.11641655666666684,
-    "axis:reward_affect": 4.959666666666664,
-    "response_shape:half:closing": -0.056993876666666776,
+    "axis:self_value": 3.8243333333333283,
+    "response_shape:quarter:continuity": -0.05579293666666674,
+    "roi:ripl_vezich2017": -0.023764833333333332,
+    "neural_score_from_signals": 4.634711662803227,
+    "axis:processing_fluency": 4.199666666666673,
+    "response_shape:half:opening": 0.05595812666666655,
+    "roi:lateral_temporal": 0.006858533333333361,
+    "roi:r_ifg_ai": 0.014669966666666659,
+    "signal:cognitive_friction": -3.6528742658183404,
     "roi:rmpfc_chua2009": 0.0492803,
-    "roi:insula_right": -0.012248757203934882,
+    "response_shape:quarter:closing": -0.11641655666666684,
+    "roi:mpfc_falk2010": 0.02795946666666667,
+    "roi:l_angular_chua2011": 0.048016100000000006,
+    "response_shape:half:max_relative_drop": 0.09418187666666666,
+    "signal:personal_relevance": 2.4482790940263612,
+    "response_shape:half:closing": -0.056993876666666776,
+    "axis:encoding_attention": 6.098999999999997,
     "roi:pcc_precuneus": 0.10123770000000001,
-    "roi:tp_l": 0.052354099999999994,
-    "signal:memorability": 7.515235077346276,
+    "roi:mofc": 0.027450499999999975,
+    "roi:dmpfc": 0.060215000000000005,
+    "roi:l_ifg": -0.03918703333333333,
+    "roi:ifg47_l_chua2011": 0.020192566666666665,
+    "roi:precuneus_chua2011": 0.10964890000000002,
+    "axis:social_sharing": 4.291333333333338,
+    "signal:attention_capture": 5.50186023468315,
+    "quality_weight": 0.0,
+    "roi:tp_r": 0.048354166666666656,
+    "evidence_score_with_roi": 7.583923333333324,
+    "roi:ipl_ifg_how_gt_why_vezich2017_l": -0.04258396666666665,
+    "response_shape:quarter:opening": 0.05066146666666649,
+    "signal:social_proof_potential": 3.8961356020742173,
+    "response_shape:quarter:max_relative_drop": 0.05579293666666668,
+    "roi:dmpfc_chua2011": 0.08748320000000001,
+    "signal:emotional_engagement": 5.0589842067055315,
     "roi:insula": -0.02790356666666667,
     "roi:falk2010jocn_core": 0.048831200000000005,
-    "roi:dmpfc": 0.060215000000000005,
-    "roi:r_ifg_ai": 0.014669966666666659,
-    "roi:lateral_temporal": 0.006858533333333361,
-    "roi:ifg47_l_chua2011": 0.020192566666666665,
-    "signal:cognitive_friction": -3.6528742658183404,
-    "response_shape:quarter:opening": 0.05066146666666649,
-    "roi:ipl_ifg_how_gt_why_vezich2017_l": -0.04258396666666665,
-    "roi:dmpfc_chua2011": 0.08748320000000001,
-    "roi:precuneus_chua2011": 0.10964890000000002,
-    "roi:mpfc_falk2010": 0.02795946666666667,
-    "neural_score_from_signals": 4.634711662803227,
-    "evidence_score_with_roi": 5.238266666666661,
-    "axis:self_value": 3.8243333333333283,
-    "signal:personal_relevance": 2.4482790940263612,
-    "signal:emotional_engagement": 5.0589842067055315,
-    "response_shape:half:max_relative_drop": 0.09418187666666666,
-    "quality_weight": 0.0,
-    "axis:encoding_attention": 6.098999999999997,
-    "roi:vmpfc_frontopolar": 0.020487833333333334,
     "evidence_score": 4.578373333333339,
-    "roi:ripl_vezich2017": -0.023764833333333332,
-    "response_shape:half:opening": 0.05595812666666655,
-    "roi:l_ifg": -0.03918703333333333,
-    "signal:social_proof_potential": 3.8961356020742173,
-    "signal:attention_capture": 5.50186023468315,
-    "axis:processing_fluency": 4.199666666666673,
-    "response_shape:quarter:continuity": -0.05579293666666674,
     "response_shape:half:continuity": -0.09418187666666689,
-    "roi:vmpfc_chua2009": 0.01960999999999999,
-    "roi:tp_r": 0.048354166666666656,
-    "roi:l_angular_chua2011": 0.048016100000000006,
-    "roi:mofc": 0.027450499999999975,
+    "roi:vmpfc_frontopolar": 0.020487833333333334,
     "roi:pifg_vezich2017": -0.06319996666666668,
-    "response_shape:quarter:max_relative_drop": 0.05579293666666668
+    "signal:memorability": 7.515235077346276,
+    "axis:reward_affect": 4.959666666666664,
+    "roi:tp_l": 0.052354099999999994,
+    "roi:r_tpj": 0.035701966666666654,
+    "roi:vmpfc_chua2009": 0.01960999999999999,
+    "roi:insula_right": -0.012248757203934882
   },
   "reference": {
     "schema_version": 1,
@@ -489,6 +490,7 @@
     "harness_git_sha": "05f42df417bf3e92dfc467d67c72cda19125153f",
     "tribev2_commit": "af58661791a351a448a489042a28f6c37e1c14b7",
     "hf_snapshot": "7f1a6bec8cdce6551014fd5bbeb4cd8c0f1fbeab",
+    "analysis_harness_sha256": "364a9935e54aca5dd787035c9d8252dc9c0b555e880dc6e4d6522a8a518173a7",
     "label": "relative to a synthetic reference set (n≈300), not real pitches",
     "quantities": {
       "axis:encoding_attention": {
@@ -708,36 +710,35 @@
         "n_reference": 300,
         "n_paraphrase_families": 30,
         "noise": {
-          "sigma_within": 3.159058360756678,
-          "icc1": 0.7711791529507059,
+          "sigma_within": 3.1954717492101232,
+          "icc1": 0.7570384434938451,
           "icc1_ci95": [
-            0.6230174574763249,
-            0.84488892980416
+            0.6007583336091499,
+            0.8414789498497164
           ],
-          "min_detectable_delta": 8.756463029096015
+          "min_detectable_delta": 8.857395792389546
         },
         "length_model": {
-          "a": 7.23550797290647,
-          "b_log_words": 7.533455609235904
+          "a": 6.801392196638819,
+          "b_log_words": 7.440689288654194
         },
-        "resid_sd": 4.391298034111988,
+        "resid_sd": 4.5573298963193185,
         "resid_q": {
-          "p05": -7.201918248803153,
-          "p25": -2.768682233293772,
-          "p50": -0.1121372186257048,
-          "p75": 2.8428045558790807,
-          "p95": 7.50292071108752
+          "p05": -7.605136618506951,
+          "p25": -2.7330786435759666,
+          "p50": 0.09890341320565099,
+          "p75": 3.0942634173671504,
+          "p95": 7.448644109402765
         },
         "confound_r2": {
-          "log_words": 0.5049093073722407,
-          "sentences": 0.5202066915359522,
-          "mean_word_length": 0.018863862596682268,
-          "global_mean_abs": 0.19518242105456451,
-          "joint": 0.598875312932285
+          "log_words": 0.4801686751484011,
+          "sentences": 0.43993649104796695,
+          "mean_word_length": 0.04474989954623454,
+          "global_mean_abs": 0.212510093073637,
+          "joint": 0.5837534650767355
         },
         "flags": [
-          "stable",
-          "length_confounded"
+          "stable"
         ]
       },
       "neural_score_from_signals": {

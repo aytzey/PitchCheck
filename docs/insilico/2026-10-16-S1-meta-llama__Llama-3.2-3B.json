@@ -65,6 +65,7 @@
   "excluded_rows": 0,
   "n_rows": 80,
   "atlas_sha256": "c5ca6bb873d2e0d1",
+  "analysis_harness_sha256": "364a9935e54aca5dd787035c9d8252dc9c0b555e880dc6e4d6522a8a518173a7",
   "tests": [
     {
       "roi": "dmpfc_chua2011",
@@ -516,6 +517,7 @@
     "harness_git_sha": "05f42df417bf3e92dfc467d67c72cda19125153f",
     "tribev2_commit": "af58661791a351a448a489042a28f6c37e1c14b7",
     "hf_snapshot": "13afe5124825b4f3751f836b40dafda64c1ed062",
+    "analysis_harness_sha256": "364a9935e54aca5dd787035c9d8252dc9c0b555e880dc6e4d6522a8a518173a7",
     "label": "relative to a synthetic reference set (n≈300), not real pitches",
     "quantities": {
       "axis:encoding_attention": {
@@ -734,32 +736,32 @@
         "n_reference": 300,
         "n_paraphrase_families": 30,
         "noise": {
-          "sigma_within": 3.4390367798750474,
-          "icc1": 0.7203385514597832,
+          "sigma_within": 3.7041348684049473,
+          "icc1": 0.7601729823352038,
           "icc1_ci95": [
-            0.5242627871659897,
-            0.8151703781200101
+            0.5979427487326037,
+            0.8443506451769077
           ],
-          "min_detectable_delta": 9.532523612974408
+          "min_detectable_delta": 10.267338024804419
         },
         "length_model": {
-          "a": 13.304886074163141,
-          "b_log_words": 6.528423340854873
+          "a": 12.581766169769349,
+          "b_log_words": 6.291364923835542
         },
-        "resid_sd": 4.746041325095502,
+        "resid_sd": 6.482517310286014,
         "resid_q": {
-          "p05": -7.804658487383275,
-          "p25": -2.865157189047686,
-          "p50": 0.09246240714399434,
-          "p75": 2.9493420854762267,
-          "p95": 8.696424457810446
+          "p05": -10.835122514845004,
+          "p25": -4.765912657061508,
+          "p50": 0.15299014057268323,
+          "p75": 4.545438496349885,
+          "p95": 10.486111852293512
         },
         "confound_r2": {
-          "log_words": 0.396011738352286,
-          "sentences": 0.37713390002434577,
-          "mean_word_length": 0.021880407266745783,
-          "global_mean_abs": 0.22864894349807352,
-          "joint": 0.509977870442963
+          "log_words": 0.24607030450491296,
+          "sentences": 0.17684521498818306,
+          "mean_word_length": 0.07886859878097441,
+          "global_mean_abs": 0.23520260255721726,
+          "joint": 0.4504793015830023
         },
         "flags": [
           "stable"

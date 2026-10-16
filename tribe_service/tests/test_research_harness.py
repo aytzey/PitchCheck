@@ -304,7 +304,9 @@ def test_gpu_score_mocked_io_excludes_fallback_and_retry(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("with_atlas", [False, True])
-def test_cpu_analysis_exports_reference_consumable_by_product(monkeypatch, tmp_path, with_atlas):
+@pytest.mark.parametrize("encoder,compatible", [("meta-llama/Llama-3.2-3B", True),
+                                                ("NousResearch/Hermes-3-Llama-3.2-3B", False)])
+def test_cpu_analysis_exports_reference_consumable_by_product(monkeypatch, tmp_path, with_atlas, encoder, compatible):
     from tribe_service import engine, roi_features
     assets = roi_features.load_roi_assets() if with_atlas else None
     rng = np.random.default_rng(2)
@@ -320,16 +322,25 @@ def test_cpu_analysis_exports_reference_consumable_by_product(monkeypatch, tmp_p
                          "quantities": {"evidence_score": 50 + i + rng.normal(0, .1)},
                          "lexical": {"words": 3, "sentences": 1, "mean_word_length": 3, "global_mean_abs": 1},
                          "excluded": False, "prediction_file": pred.name, "prediction_sha256": harness.sha256(pred)})
-    prov = {"encoder": "meta-llama/Llama-3.2-3B", "event_version": "direct_v1", "text_input_mode": "direct",
-            "atlas_sha256": assets[4] if assets else None, "text_feature_compatible": True,
+    prov = {"encoder": encoder, "event_version": "direct_v1", "text_input_mode": "direct",
+            "atlas_sha256": assets[4] if assets else None, "text_feature_compatible": compatible,
             "git_sha": "synthetic", "tribev2_commit": "synthetic", "hf_snapshot": "synthetic"}
     harness.write_json(run / "metrics.json", {"complete": True, "family": "stage0", "date": "2026-10-16",
                                               "provenance": prov, "excluded_rows": 0})
     (run / "rows.jsonl").write_text(''.join(json.dumps(row)+'\n' for row in rows))
     monkeypatch.setattr(harness, "load_assets", lambda: assets)
+    original_measure = harness.measure
+    before = engine._text_feature_metadata()
+    def check_encoder(*args, **kwargs):
+        metadata = engine._text_feature_metadata()
+        assert metadata["text_feature_model"] == encoder
+        assert metadata["text_feature_compatible"] is compatible
+        return original_measure(*args, **kwargs)
+    monkeypatch.setattr(harness, "measure", check_encoder)
     monkeypatch.setattr(engine, "__file__", str(tmp_path / "engine.py"))
-    destination = tmp_path / "roi_assets/roi_reference_meta-llama__Llama-3.2-3B.json"
+    destination = tmp_path / f"roi_assets/roi_reference_{encoder.replace('/', '__')}.json"
     harness.analyze(SimpleNamespace(run=run, output=None, reference_out=destination))
+    assert engine._text_feature_metadata() == before
     report = json.loads((run / "analysis.json").read_text())
     engine.roi_reference.cache_clear()
     try:

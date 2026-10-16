@@ -1,12 +1,27 @@
 # WS11 offline runbook
 
-This checkout has no WS07 atlas or measured fidelity asset. WS11 is a parallel
-research track, not a release gate. The [registration](ws11_prereg.md) and
-[report/verdict template](ws11_hv2025_template.md) are ready for review; no
-measured prediction agreement is claimed.
+The [2026-10-16 measured HV report](ws11_hv2025_2026-10-16.md) is complete:
+primary Spearman r=-0.01700766, p=.54534547, category-faithful verdict
+`uninformative`. All 10,000 label permutations and full LOO rebuilds ran. The
+positive-r template condition failed, so no C2 template was installed.
 
-The [2026-10-16 target check](ws11_hv2025_2026-10-16.md) reproduced the inverse
-sign and coverage counts without running TRIBE.
+WS07 is merged. The current run uses its shared 17-network atlas (primary mask
+12,443 vertices), not the historical scratch 7-network fallback (11,503).
+The [analysis registration](ws11_prereg.md) is unchanged. The
+[reviewed ID/hash lock](ws11_stimuli_category_faithful.json) was committed in
+`9b5a8f78afb40c812d0f210f2052c67bdc5a6b8e` before the first prediction.
+Inputs were the existing public NeuroVault cache with reverified hashes;
+managed-browser refresh downloads timed out. Predictions used local RTX 3070,
+checkpoint-aligned Llama, native venv-gpu, and direct product timing. The local
+adapter replaces git-command checks with exact committed-blob checks and records
+its hash; no container image digest is invented. Raw inputs, NPZ caches,
+predictions and result JSON remain in the authorized scratchpad's `gpu/runs/`.
+
+[Lebel 11.2 is skipped](ws11_lebel_2026-10-16.md) under this job's approximately
+one-hour usable-input condition. Public custom HDF5 derivatives exist, but no
+ready run-wise MNI/fsaverage5 bundle was obtained. There is no measured
+`roi_fidelity.json`; runtime factors remain unity and labels not_benchmarked.
+This track monitors literature priors and never gates their release.
 
 ## CPU target preparation (no inference)
 
@@ -40,8 +55,7 @@ An inverse-sign failure stops the analysis.
 Recover Appendix 1 if available. Otherwise author the category-faithful set
 described in the registration; independently review its category/outcome clauses.
 Use WS08 S9's tone pairs as a separate secondary manifest when available.
-There is no WS08 runner in this checkout's history, so `tribe_predict.py` supplies
-the product inference path. No production host or paid API is contacted.
+WS08 is merged; `tribe_predict.py` supplies this track's product inference path. No production host or paid API is contacted.
 
 An external manifest is JSON with `stimuli_set` and `items`. Each item has a
 safe unique `id`, `condition` (`D`, `S`, `long`, `short`), `sha256`, `n_words`,
@@ -53,7 +67,7 @@ hashed exactly, including any trailing newline. English tokenization matches
 
 Commit the registration and the stripped ID/hash lock described in the protocol
 **before** inference. Both GPU inference and measured analysis verify the exact
-committed files. This implementation deliberately does not commit them itself.
+committed files. The 2026-10-16 run committed the reviewed lock before inference; later runs must do the same.
 
 ```sh
 TRIBE_ALLOW_MOCK=0 TRIBE_TEXT_INPUT_MODE=direct \
@@ -97,21 +111,20 @@ test while retaining the plan's intended scope disclaimer.
 
 ## 11.2 and runtime
 
-11.2 is **pre-registered, not executed**. Its data preparation/projector/analysis
-script is deferred until the required runs, GPU and WS07 reducer exist. Follow
-the fixed protocol before collecting the ~80 selected runs; do not substitute
-the training repeated story as the fidelity target. No fake `roi_fidelity.json`
-is shipped. Full acceptance of measured reports remains pending actual data.
+11.2 remains **pre-registered, not executed**. Its input-format and timing gaps
+are detailed in the dated availability report. Do not substitute native masked
+HDF5 aggregates or the training repeated story for the registered run-wise
+MNI/surface validation data. The deferred analysis runner and measured asset
+were not fabricated around incompatible inputs.
 
-Because WS07 merges separately, its stdlib scaling functions live in
+The integrated fidelity overlay's stdlib scaling functions live in
 `tribe_service/roi_fidelity.py`, not a replacement `roi_features.py`.
 `_augment_persuasion_evidence` calls `annotate_fidelity` before shared scoring
 and refinement consumers; it binds WS07's existing same-module
 `fidelity_factor` hook. `roi_features.roi_multipliers` then multiplies WS08 ×
 WS11 once, including locations. K4's denominator and K8's separate encoder
-factor remain WS07's responsibility. After merging WS07, verify real WS09/WS12
-consumption tests as well as the reserved-hook contract test. No WS07 code or
-asset is copied from the other branch.
+factor remain WS07's responsibility. Integrated WS09/WS12 consumption tests and the reserved-hook contract check
+cover this merged implementation.
 
 Missing atlas/asset or rejected metadata => unity scaling, `not_benchmarked`,
 unchanged scores. Missing rows also use unity; measurable rows use
@@ -126,8 +139,8 @@ without one the current methodology is unchanged.
 `FmriOutput.roi_summary` is optional so additive row annotations survive Pydantic.
 Robustness includes mode, asset presence/hash and encoder match; shadow values
 are report-only. Prompt additions contain categorical fidelity and applied
-weights, never raw ROI/r/ceiling values. The WS07 UI/normalizers do not exist in
-this checkout; badge wiring waits for that merge. No Rust, TS or mobile changes.
+weights, never raw ROI/r/ceiling values. The WS07 UI/normalizers are merged. This execution adds no Rust, TS or mobile
+behavior; no measured Lebel labels are available for badges.
 
 For a measured asset PR, run all Python tests (the optional shipped-asset schema
 check becomes mandatory automatically), review on/shadow median and p95 score

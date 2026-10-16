@@ -1,30 +1,13 @@
 # WS08 in-silico track
 
-Prepared 2026-10-16. No GPU inference or live runtime check has been run for
-this track. The frozen blind-classification and delegated sample-review records
-are described below. This track measures sensitivity
-of TRIBE's average-subject text prediction to authored linguistic forms. It never
-gates shipping literature priors and does not establish persuasion effectiveness,
-reader-specific states, or human replication.
+Measured locally on 2026-10-16 using the RTX 3070, one GPU process at a time. Llama is primary; Hermes has its own Stage 0 and S2 robustness runs. Frozen stimuli and sidecars are unchanged. These are in-silico measurements, not human persuasion validation. Literature priors remain shipping features.
 
-| Family | Class | Encoder | Date | Status | Key numbers / outstanding measurements |
+| Family | Class | Encoder | Date | Status | Key numbers / report |
 |---|---|---|---|---|---|
-| Stage 0 | Scale / sanity | Llama-3.2-3B | 2026-10-16 | not_run | 405 stimuli; 300 reference pitches; ICC(1), sigma_within, mdd, length R², 0d structure and 0e shadow comparison pending |
-| Stage 0 | Scale / sanity | Hermes-3-Llama-3.2-3B | 2026-10-16 | not_run | Same fixture; independent encoder-specific ICC(1), mdd, R², structure and shadow measurements pending |
-| S2 | A; positive control | Llama / Hermes separately | 2026-10-16 | not_run | 20 sunscreen + 20 B2B frames; How>Why and How>Fact, 2 location ROIs; 4 co-primary hypotheses per cohort |
-| S4 | A; related ROI definition | Llama | 2026-10-16 | not_run | 20 B2B frames shared with S2; Whygain>Fact and Whygain>Fact_you |
-| S1 | A | Llama | 2026-10-16 | not_run | 20 topics; T>U_you in dmPFC and precuneus locations; vmPFC report only |
-| S3 | A price-period prior / B valuation limit | Llama | 2026-10-16 | not_run | 20 offers, 20 number-only control pairs; vmPFC primary decrease, right insula secondary increase |
+| Stage 0 | Scale / sanity | meta-llama/Llama-3.2-3B | 2026-10-16 | measured | evidence ICC 0.724047; σw 3.43064; MDD 9.50926; length R² 0.404623; structure Δ 4.43493; shadow ρ 0.980617; [report](2026-10-16-stage0-meta-llama__Llama-3.2-3B.md) |
+| Stage 0 | Scale / sanity | NousResearch/Hermes-3-Llama-3.2-3B | 2026-10-16 | measured | evidence ICC 0.779176; σw 3.15821; MDD 8.75412; length R² 0.501914; structure Δ 4.50913; shadow ρ 0.994364; [report](2026-10-16-stage0-NousResearch__Hermes-3-Llama-3.2-3B.md) |
 
-These rows are a dated work ledger, not measured null results. Actual runs add
-`<date>-<family>-<encoder-slug>.json` reports here and update this table, including
-nulls and exclusions. No synthetic test output is installed as a product reference.
-
-The fixtures and pre-registrations are committed on `research/integrated`.
-The frozen sidecars record passed blind classification and a delegated supervisor
-review of 20% of the sample; they identify that delegation explicitly. §9.3's
-measured Stage 0 reference files and S2 results remain pending GPU execution;
-neither acceptance item is claimed complete.
+The dated reports include every measured quantity, exclusions and nulls. Product references are `tribe_service/roi_assets/roi_reference_<encoder-slug>.json`; NPZ caches, audit matrices and raw logs stay outside git under the authorized scratchpad. See [local execution notes](2026-10-16-local-runs.md) for bookkeeping and runtime deviations.
 
 ## Frozen inputs and review
 
@@ -225,5 +208,6 @@ reducer takes each ROI's median and the fixed-denominator composite SD, tagged
 `unit_calibration:stage0:<date>:<revision>`. Runtime scoring and synthesis pass the
 engine token count and consume the same units. Missing length data or a missing
 reference falls back to the committed WS07 encoder unit artifact; WS09 retains
-its separate `default_prior` noise floors. No measured Stage-0 file is supplied
-by this integration, and no synthetic test reference is installed for runtime.
+its separate `default_prior` noise floors. Measured Stage-0 files are now supplied for both encoders; the product prefers
+them over the provisional WS07 calibration and WS09 default floors. No synthetic
+test reference is installed for runtime.

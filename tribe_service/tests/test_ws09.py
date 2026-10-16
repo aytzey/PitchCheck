@@ -193,7 +193,7 @@ def reference(**kwargs):
 
 def test_committed_floors_and_reference_precedence(monkeypatch, tmp_path):
     for encoder in (ENCODER, "NousResearch/Hermes-3-Llama-3.2-3B"):
-        floors = roi.roi_noise_floors(encoder)
+        floors = roi.roi_noise_floors(encoder, default_only=True)
         assert floors["floor_source"] == "default_prior" and floors[KEY] > 0 and floors[GUARD] > 0
         assert "retest_not_preserved" in floors["provenance"]
     assert roi.roi_noise_floors("unknown") == {}
@@ -218,7 +218,7 @@ def test_committed_floors_and_reference_precedence(monkeypatch, tmp_path):
 def test_malformed_default_floors_are_unavailable(monkeypatch, tmp_path, broken):
     monkeypatch.setattr(roi, "ROI_ASSET_DIR", tmp_path)
     (tmp_path / "roi_default_floors.json").write_text(json.dumps(broken))
-    assert roi.roi_noise_floors(ENCODER) == {}
+    assert roi.roi_noise_floors(ENCODER, default_only=True) == {}
 
 
 @pytest.mark.parametrize("quantity", [None, [], {"noise": []}, {"noise": {"min_detectable_delta": True}},
@@ -236,6 +236,7 @@ def hypothesis_fmri(z=-0.67):
 
 
 def test_hypothesis_provisional_signed_guard_order_and_rollback(monkeypatch):
+    monkeypatch.setattr(roi, "roi_reference_p25", lambda *args: None)
     axes = {k: {"score": v} for k, v in (("self_value", 75), ("processing_fluency", 40))}
     fmri = hypothesis_fmri()
     items = build_tribe_synthesis("A short draft", axes, fmri)["items"]

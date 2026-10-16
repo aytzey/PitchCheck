@@ -13,9 +13,11 @@ LOCATION_KEYS = {"mpfc_falk2010", "falk2010jocn_core", "tp_l", "tp_r", "ipl_ifg_
 
 @pytest.fixture(autouse=True)
 def clear_caches():
+    engine.roi_reference.cache_clear()
     roi.load_roi_assets.cache_clear()
     roi.roi_calibration.cache_clear()
     yield
+    engine.roi_reference.cache_clear()
     roi.load_roi_assets.cache_clear()
     roi.roi_calibration.cache_clear()
 
@@ -158,7 +160,7 @@ def test_committed_gpu_unit_calibration_loads_for_matching_encoder(encoder, weig
     from pathlib import Path
     from tribe_service.persuasion_features import ROI_PRIOR, roi_prior_from_summary
 
-    data = roi.roi_calibration(encoder)
+    data = roi.roi_calibration(encoder, default_only=True)
     corpus = Path(__file__).parents[2] / "scripts/fixtures/roi-unit-calibration.json"
     assert data["encoder"] == encoder and data["n_cases"] == len(json.loads(corpus.read_text())) == 64
     assert data["atlas_sha256"] == roi.load_roi_assets()[4]
@@ -169,6 +171,33 @@ def test_committed_gpu_unit_calibration_loads_for_matching_encoder(encoder, weig
     prior = roi_prior_from_summary(summary, encoder.startswith("meta-llama/"), encoder=encoder)
     assert prior["score"] == 50 and prior["weight"] == weight
     assert prior["unit_calibration_provenance"] == data["provenance"]
+    assert prior["provenance"].startswith("literature_prior_unvalidated")
+
+
+@pytest.mark.parametrize("encoder", ["meta-llama/Llama-3.2-3B", "NousResearch/Hermes-3-Llama-3.2-3B"])
+def test_measured_stage0_reference_is_used_by_product(encoder, monkeypatch):
+    from tribe_service.persuasion_features import ROI_PRIOR, roi_prior_from_summary
+
+    monkeypatch.setattr(engine, "TRIBE_TEXT_INPUT_MODE", "direct")
+    monkeypatch.setenv("PITCHCHECK_ROI_INSILICO_TUNING", "1")
+    monkeypatch.setattr(roi, "fidelity_factor", lambda key: (1.0, 1.0), raising=False)
+    reference = engine.roi_reference(encoder)
+    assert reference is not None
+    assert reference["atlas_sha256"] == roi.load_roi_assets()[4]
+    for key in ("evidence_score", *(f"roi:{key}" for key in ROI_PRIOR)):
+        quantity = reference["quantities"][key]
+        assert quantity["n_reference"] == 300 and quantity["n_paraphrase_families"] == 30
+        assert quantity["noise"]["min_detectable_delta"] == pytest.approx(
+            1.96 * np.sqrt(2) * quantity["noise"]["sigma_within"])
+    assert roi.roi_noise_floors(encoder)["floor_source"] == "paraphrase_noise_floor"
+    multipliers = roi.roi_multipliers(encoder)
+    assert all(multipliers[key] == row["weight_multiplier"] for key, row in reference["checks"].items())
+    calibration = roi.roi_calibration(encoder)
+    assert calibration["basis"] == "length_model_z" and calibration["n_cases"] == 300
+    summary = roi.roi_summary(np.random.default_rng(0).normal(size=(4, 20484)))
+    prior = roi_prior_from_summary(summary, encoder.startswith("meta-llama/"),
+                                   encoder=encoder, word_count=60)
+    assert prior["unit_calibration_provenance"].startswith("unit_calibration:stage0:")
     assert prior["provenance"].startswith("literature_prior_unvalidated")
 
 
